@@ -1,24 +1,14 @@
 import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { useOrders } from '../../hooks/useOrders';
 import { useCartStore } from '../../store/cartStore';
 import { supabase } from '../../lib/supabaseClient';
-import type { OrderStatus } from '../../types';
 
 interface Props {
   mini: boolean;
   onToggleMini: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
-}
-
-const ACTIVE_STATUSES: OrderStatus[] = ['pending', 'processing', 'requires_action', 'shipped'];
-
-function dot(status: OrderStatus) {
-  if (status === 'shipped') return 'shipped';
-  if (status === 'processing' || status === 'requires_action') return 'processing';
-  return 'pending';
 }
 
 function NavItem({
@@ -54,7 +44,6 @@ function NavItem({
 
 export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props) {
   const { isAuthenticated, profile, user } = useAuth();
-  const { data: orders = [] } = useOrders();
   const cartCount = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
   const navigate = useNavigate();
   const location = useLocation();
@@ -65,7 +54,6 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  const activeOrders = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
   const initial = profile?.full_name?.[0]?.toUpperCase()
     ?? profile?.email?.[0]?.toUpperCase()
     ?? user?.email?.[0]?.toUpperCase()
