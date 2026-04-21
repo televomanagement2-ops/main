@@ -3,9 +3,10 @@ import type { Product } from '../../../types';
 
 interface Props {
   product: Product;
+  showActionButton?: boolean;
 }
 
-export function ProductCard({ product }: Props) {
+export function ProductCard({ product, showActionButton = true }: Props) {
   const primaryImage = product.product_images?.find((img) => img.is_primary);
 
   const isOutOfStock = product.stock_quantity === 0;
@@ -44,21 +45,23 @@ export function ProductCard({ product }: Props) {
         </div>
       </div>
 
-      <div className="product-card__footer">
-        {isLowStock ? (
-          <span className="product-card__stock-warn">Only {product.stock_quantity} left</span>
-        ) : (
-          <span />
-        )}
-        <Link
-          to={`/products/${product.slug}`}
-          className={`btn btn-primary btn-sm${isOutOfStock ? ' btn-disabled' : ''}`}
-          aria-label={`View ${product.name}`}
-          style={isOutOfStock ? { pointerEvents: 'none', opacity: 0.42 } : {}}
-        >
-          {isOutOfStock ? 'Sold out' : (isClothing && hasVariants ? 'Choose size' : '+ Add')}
-        </Link>
-      </div>
+      {showActionButton && (
+        <div className="product-card__footer">
+          {isLowStock ? (
+            <span className="product-card__stock-warn">Only {product.stock_quantity} left</span>
+          ) : (
+            <span />
+          )}
+          <Link
+            to={`/products/${product.slug}`}
+            className={`btn btn-primary btn-sm${isOutOfStock ? ' btn-disabled' : ''}`}
+            aria-label={`View ${product.name}`}
+            style={isOutOfStock ? { pointerEvents: 'none', opacity: 0.42 } : {}}
+          >
+            {isOutOfStock ? 'Sold out' : (isClothing && hasVariants ? 'Choose size' : '+ Add')}
+          </Link>
+        </div>
+      )}
     </article>
   );
 }

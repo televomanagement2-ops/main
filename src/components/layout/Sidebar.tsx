@@ -53,7 +53,10 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
     if (mobileOpen) onCloseMobile();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9524ea1 (Refactor homepage visuals and navigation UX)
   const initial = profile?.full_name?.[0]?.toUpperCase()
     ?? profile?.email?.[0]?.toUpperCase()
     ?? user?.email?.[0]?.toUpperCase()

@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { Topbar } from './Topbar';
+import { DesktopNavBar } from './DesktopNavBar';
+import { BottomNavBar } from './BottomNavBar';
 import { useAuthListener } from '../../hooks/useAuth';
 
 export function RootLayout() {
@@ -43,11 +44,13 @@ export function RootLayout() {
 
       {/* Main area */}
       <div className={`main-area${mini ? ' main-area--mini' : ''}`}>
-        <Topbar onMenuClick={handleHamburger} />
+        <DesktopNavBar onMenuClick={handleHamburger} />
         <main className="page-content">
           <Outlet />
         </main>
       </div>
+
+      <BottomNavBar onMenuClick={handleHamburger} />
     </div>
   );
 }
