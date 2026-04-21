@@ -21,8 +21,10 @@ export function ProductListPage() {
   const pageSize   = filters.pageSize ?? 12;
   const totalPages = Math.ceil(total / pageSize);
 
-  const update = (partial: Partial<ProductFilters>) =>
+  const update = (partial: Partial<ProductFilters>) => {
     setFilters((prev) => ({ ...prev, ...partial }));
+    if (partial.page !== undefined) window.scrollTo({ top: 0, behavior: 'instant' });
+  };
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
@@ -43,6 +45,7 @@ export function ProductListPage() {
         isLoading={isLoading}
         error={error as Error | null}
         skeletonCount={12}
+        staggered
       />
 
       {totalPages > 1 && (

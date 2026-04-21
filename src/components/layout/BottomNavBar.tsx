@@ -15,7 +15,7 @@ export function BottomNavBar({ onMenuClick }: Props) {
       <Link to="/" className="bottom-nav__item" aria-label="Home">
         <IconHome />
       </Link>
-      <Link to={isAuthenticated ? '/orders' : '/login'} className="bottom-nav__item" aria-label="Account">
+      <Link to={isAuthenticated ? '/profile' : '/login'} className="bottom-nav__item" aria-label="Account">
         <IconUser />
       </Link>
       <Link to="/cart" className="bottom-nav__item" aria-label={`Cart, ${cartCount} item${cartCount === 1 ? '' : 's'}`}>

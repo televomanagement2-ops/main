@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useOrder, useCancelOrder } from '../../../hooks/useOrders';
 import { Spinner } from '../../../components/ui/Spinner';
 import { Badge } from '../../../components/ui/Badge';
+import { BackButton } from '../../../components/ui/BackButton';
 import type { OrderStatus } from '../../../types';
 
 type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
@@ -69,17 +70,7 @@ export function OrderDetailPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)', maxWidth: 720 }}>
-      {/* Back link */}
-      <Link
-        to="/orders"
-        className="btn btn-ghost btn-sm"
-        style={{ marginBottom: 'var(--sp-6)', paddingLeft: 0 }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        Back to orders
-      </Link>
+      <BackButton to="/orders" label="Back to orders" />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-4)', marginBottom: 'var(--sp-8)' }}>

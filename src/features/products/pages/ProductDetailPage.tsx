@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useProduct } from '../../../hooks/useProducts';
 import { useReviews, useSubmitReview } from '../../../hooks/useReviews';
 import { useCartStore } from '../../../store/cartStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { Spinner } from '../../../components/ui/Spinner';
+import { BackButton } from '../../../components/ui/BackButton';
 import type { ProductImage, ProductVariant } from '../../../types';
 
 function StarRating({
@@ -174,6 +175,7 @@ export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, error } = useProduct(slug ?? '');
   const addItem = useCartStore((s) => s.addItem);
+  const navigate = useNavigate();
 
   const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -225,6 +227,15 @@ export function ProductDetailPage() {
     setTimeout(() => setAddedFeedback(false), 2500);
   };
 
+  const handleBuyNow = () => {
+    if (isClothing && hasVariants && !selectedSize) {
+      setSizeError(true);
+      return;
+    }
+    addItem(product, quantity, selectedSize);
+    navigate('/checkout');
+  };
+
   const handleSizeSelect = (size: string) => {
     setSelectedSize(size);
     setSizeError(false);
@@ -232,6 +243,7 @@ export function ProductDetailPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-6)', paddingBottom: 'var(--sp-20)' }}>
+      <BackButton to="/products" label="Back to products" />
       {/* Breadcrumb */}
       <nav className="breadcrumb" aria-label="Breadcrumb">
         <Link to="/">Home</Link>
@@ -372,6 +384,16 @@ export function ProductDetailPage() {
                 {addedFeedback ? '✓ Added to cart' : 'Add to cart'}
               </button>
             </div>
+          )}
+
+          {!isOutOfStock && (
+            <button
+              onClick={handleBuyNow}
+              className="btn btn-secondary btn-lg btn-full"
+              style={{ marginTop: 'var(--sp-2)' }}
+            >
+              Buy now
+            </button>
           )}
 
           {isOutOfStock && (

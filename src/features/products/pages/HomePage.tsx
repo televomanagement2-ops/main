@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
 import { Link, useNavigate } from 'react-router-dom';
 import { useFeaturedProducts } from '../../../hooks/useProducts';
 import { useCategories } from '../../../hooks/useCategories';
+import { Footer } from '../../../components/layout/Footer';
 import { ProductCard } from '../components/ProductCard';
 import { SkeletonCard } from '../../../components/ui/SkeletonCard';
 
@@ -101,6 +102,7 @@ export function HomePage() {
   const [reduceMotion, setReduceMotion] = useState(false);
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Array<HTMLElement | null>>([]);
+
   const categoryChips = categories
     .filter((category) => Boolean(category.slug) && Boolean(category.name))
     .sort((a, b) => {
@@ -195,8 +197,8 @@ export function HomePage() {
           <form className="showcase-search" role="search" onSubmit={handleSearch}>
             <span className="showcase-search__icon" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </span>
             <input
@@ -235,6 +237,15 @@ export function HomePage() {
             onTouchStart={() => setIsPaused(true)}
             onTouchEnd={() => setIsPaused(false)}
           >
+            <button
+              type="button"
+              className="promo-arrow promo-arrow--prev"
+              aria-label="Slide precedente"
+              onClick={() => scrollToSlide((activeSlide - 1 + PROMO_SLIDES.length) % PROMO_SLIDES.length, 'smooth')}
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+
             <div className="promo-carousel__track" ref={carouselRef}>
               {PROMO_SLIDES.map((slide, index) => {
                 const delta = index - activeSlide;
@@ -259,6 +270,15 @@ export function HomePage() {
               })}
             </div>
 
+            <button
+              type="button"
+              className="promo-arrow promo-arrow--next"
+              aria-label="Prossima slide"
+              onClick={() => scrollToSlide((activeSlide + 1) % PROMO_SLIDES.length, 'smooth')}
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+
             <div className="promo-pagination" aria-label="Navigazione carosello promozioni">
               {PROMO_SLIDES.map((slide, index) => (
                 <button
@@ -274,74 +294,34 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* ── Featured products ─────────────────────────────────── */}
-      <section className="section section--bordered home-feed">
-        <div className="container">
-          <div className="section-header">
-            <div>
-              <span className="section-eyebrow">Editor selection</span>
-              <h2 className="heading-1" style={{ marginBottom: 'var(--sp-2)' }}>Curated products for your next order</h2>
-              <p className="home-feed__subtitle">Una selezione professionale aggiornata ogni giorno con i prodotti piu rilevanti del catalogo.</p>
-            </div>
-            <Link to="/products" className="btn btn-ghost btn-sm">
-              View all →
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <div className="product-grid home-feed__grid">
-              {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
-            </div>
-          ) : (
-            <div className="product-grid home-feed__grid">
-              {products.map((p) => <ProductCard key={p.id} product={p} showActionButton={false} />)}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ── Premium CTA ──────────────────────────────────────── */}
-      <section style={{ padding: 'var(--sp-24) 0', borderTop: '1px solid var(--color-border)', background: 'var(--gray-25)' }}>
-        <div className="container">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 'var(--sp-10)', alignItems: 'center' }}>
-            <div style={{ maxWidth: 560 }}>
-              <span className="section-eyebrow">Why ShopBase</span>
-              <h2 className="display-2" style={{ marginBottom: 'var(--sp-5)' }}>
-                Every product, carefully selected.
-              </h2>
-              <p className="body-lg" style={{ marginBottom: 'var(--sp-8)' }}>
-                We stock only what we'd use ourselves — tested, thoughtfully chosen,
-                and fairly priced. No inflated "original" prices, no cheap alternatives.
-              </p>
-              <Link to="/products" className="btn btn-primary btn-lg">
-                Explore the catalogue
+      <div className="home-feed-layer">
+        <section className="section section--bordered home-feed">
+          <div className="container">
+            <div className="section-header">
+              <div>
+                <span className="section-eyebrow">Editor selection</span>
+                <h2 className="heading-1" style={{ marginBottom: 'var(--sp-2)' }}>Curated products for your next order</h2>
+                <p className="home-feed__subtitle">Una selezione professionale aggiornata ogni giorno con i prodotti piu rilevanti del catalogo.</p>
+              </div>
+              <Link to="/products" className="btn btn-ghost btn-sm">
+                View all →
               </Link>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-5)' }}>
-              {[
-                { icon: '✦', label: 'Curated catalog', desc: 'Only what earns its place' },
-                { icon: '◎', label: 'Real reviews',    desc: 'From verified buyers' },
-                { icon: '⟳', label: 'Easy returns',    desc: 'No questions asked' },
-              ].map((item) => (
-                <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)' }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 'var(--r-lg)',
-                    background: 'var(--accent-subtle)', border: '1px solid var(--accent-border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 18, flexShrink: 0,
-                  }}>
-                    {item.icon}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{item.label}</p>
-                    <p style={{ fontSize: 13, color: 'var(--color-text-3)' }}>{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+
+            {isLoading ? (
+              <div className="product-grid home-feed__grid product-grid--staggered">
+                {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : (
+              <div className="product-grid home-feed__grid product-grid--staggered">
+                {products.map((p) => <ProductCard key={p.id} product={p} showActionButton={false} />)}
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+
+        <Footer />
+      </div>
     </div>
   );
 }

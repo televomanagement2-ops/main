@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { BackButton } from '../../../components/ui/BackButton';
 import { useCartStore } from '../../../store/cartStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { useAddresses } from '../../../hooks/useAddresses';
@@ -339,6 +340,7 @@ export function CheckoutPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
+      <BackButton to="/cart" label="Back to cart" />
       <div style={{ marginBottom: 'var(--sp-8)' }}>
         <span className="section-eyebrow">Secure payment</span>
         <h1 className="heading-1" style={{ marginBottom: 0 }}>Checkout</h1>

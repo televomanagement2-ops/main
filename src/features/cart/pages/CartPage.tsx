@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useCartStore } from '../../../store/cartStore';
 import { CartItemRow } from '../components/CartItemRow';
+import { BackButton } from '../../../components/ui/BackButton';
 
 const TAX_RATE = 0.1;
 
@@ -34,6 +35,7 @@ export function CartPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
+      <BackButton />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--sp-8)' }}>
         <h1 className="heading-1" style={{ marginBottom: 0 }}>Your Cart</h1>
         <button

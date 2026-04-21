@@ -104,8 +104,8 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
         {isAuthenticated && (
           <div className="sidebar-section">
             <p className="sidebar-section__label">Account</p>
+            <NavItem to="/profile" icon={<IconProfile />} label="Profile" mini={mini} />
             <NavItem to="/orders" icon={<IconOrders />} label="My Orders" mini={mini} />
-
           </div>
         )}
 
@@ -210,6 +210,14 @@ function IconSignOut() {
       <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
       <polyline points="16 17 21 12 16 7"/>
       <line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+  );
+}
+function IconProfile() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 21a8 8 0 0116 0"/>
     </svg>
   );
 }

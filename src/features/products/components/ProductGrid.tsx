@@ -7,12 +7,15 @@ interface Props {
   isLoading: boolean;
   error: Error | null;
   skeletonCount?: number;
+  staggered?: boolean;
 }
 
-export function ProductGrid({ products, isLoading, error, skeletonCount = 8 }: Props) {
+export function ProductGrid({ products, isLoading, error, skeletonCount = 8, staggered = false }: Props) {
+  const gridClassName = `product-grid${staggered ? ' product-grid--staggered' : ''}`;
+
   if (isLoading) {
     return (
-      <div className="product-grid">
+      <div className={gridClassName}>
         {Array.from({ length: skeletonCount }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
@@ -22,7 +25,7 @@ export function ProductGrid({ products, isLoading, error, skeletonCount = 8 }: P
 
   if (error) {
     return (
-      <div className="product-grid">
+      <div className={gridClassName}>
         <div className="product-grid-empty">
           <svg className="product-grid-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="12" cy="12" r="10"/>
@@ -36,7 +39,7 @@ export function ProductGrid({ products, isLoading, error, skeletonCount = 8 }: P
   }
 
   return (
-    <div className="product-grid">
+    <div className={gridClassName}>
       {products.length === 0 ? (
         <div className="product-grid-empty">
           <svg className="product-grid-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

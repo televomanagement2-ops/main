@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useOrders } from '../../../hooks/useOrders';
 import { Spinner } from '../../../components/ui/Spinner';
 import { Badge } from '../../../components/ui/Badge';
+import { BackButton } from '../../../components/ui/BackButton';
 import type { Order, OrderStatus } from '../../../types';
 
 type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
@@ -46,6 +47,7 @@ export function OrdersPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
+      <BackButton />
       <div style={{ marginBottom: 'var(--sp-10)' }}>
         <span className="section-eyebrow">Account</span>
         <h1 className="heading-1" style={{ marginBottom: 0 }}>My Orders</h1>

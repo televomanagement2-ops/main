@@ -11,6 +11,7 @@ import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
 import { CheckoutPage } from '../features/checkout/pages/CheckoutPage';
 import { CheckoutSuccessPage } from '../features/checkout/pages/CheckoutSuccessPage';
 import { CheckoutCancelPage } from '../features/checkout/pages/CheckoutCancelPage';
+import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { ProtectedRoute } from './ProtectedRoute';
 
 const router = createBrowserRouter([
@@ -68,6 +69,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <OrderDetailPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'profile',
+        element: (
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         ),
       },
