@@ -147,11 +147,17 @@ export interface Order {
   shipping_method_name: string | null;
   stripe_payment_intent_id: string | null;
   stripe_session_id: string | null;
+  tracking_id?: string | null;
+  tracking_updated_at?: string | null;
+  refunded_at?: string | null;
+  refund_id?: string | null;
+  refund_amount?: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
   // joined
   order_items?: OrderItem[];
+  profiles?: Pick<Profile, 'full_name' | 'email' | 'phone'>;
 }
 
 export interface CartItem {
@@ -197,4 +203,12 @@ export interface ProductFilters {
   featured?: boolean;
   page?: number;
   pageSize?: number;
+}
+
+export interface AdminAnalytics {
+  grossRevenue: number;
+  orders24h: number;
+  orders7d: number;
+  bestSeller: { productId: string; productName: string; quantity: number } | null;
+  statusCounts: Record<OrderStatus, number>;
 }

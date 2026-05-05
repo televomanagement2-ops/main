@@ -71,7 +71,8 @@ Run the SQL files in Supabase Dashboard → SQL Editor in this order:
 3. `supabase/migrations/001_fixes.sql`
 4. `supabase/migrations/002_rls_hardening.sql`
 5. `supabase/migrations/003_payment_hardening.sql`
-6. `supabase/seeds/002_mock_products.sql`
+6. `supabase/migrations/004_variants_reviews_shipping.sql`
+7. `supabase/seeds/002_mock_products.sql`
 
 That gives you the base schema, the RLS policies, the payment hardening layer, and the initial mock catalog.
 
@@ -84,9 +85,17 @@ Set these in Supabase Dashboard → Project Settings → Edge Functions → Secr
 ```bash
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+SUPABASE_ANON_KEY=eyJ...
 ```
 
 The Supabase runtime injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically for Edge Functions.
+
+`create-checkout-session` requires all of these at runtime:
+
+- `STRIPE_SECRET_KEY`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_URL` (runtime injected)
+- `SUPABASE_SERVICE_ROLE_KEY` (runtime injected)
 
 ## Deploy Backend Functions
 
@@ -100,6 +109,31 @@ npx supabase functions deploy stripe-webhook
 ```
 
 If you run the functions locally, use the Supabase CLI and an env file that contains the edge-function secrets.
+
+## Pre-Deploy Checkout Schema Checklist
+
+Before testing checkout in production, verify that required migrations were applied:
+
+- `supabase/migrations/001_fixes.sql` (adds `orders.stripe_session_id`)
+- `supabase/migrations/004_variants_reviews_shipping.sql` (adds `order_items.selected_size`, `orders.shipping_method_id`, `orders.shipping_method_name`)
+
+Recommended verification queries:
+
+```sql
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'orders'
+  and column_name in ('stripe_session_id', 'shipping_method_id', 'shipping_method_name')
+order by column_name;
+
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'order_items'
+  and column_name in ('selected_size')
+order by column_name;
+```
 
 ## Stripe Webhook Configuration
 
@@ -244,3 +278,7 @@ When the site is updated, confirm these flows manually:
 
 - This project uses Supabase for the real data model, so database changes should always be reflected in the SQL files, the generated types, and the README.
 - If you change auth, orders, or payment logic, re-test the complete flow end to end before deployment.
+
+
+//OPZIONE ANNULLA ORDINE DA IMPLEMENTARE dove c'è la parte tipo nel profilo con i miei ordini, e poi da computer, i miei ordini devono comparire anche nella sezione apposita della sidebar: My orders. 
+//Implementare sezione lingue, aiuto e privacy su mobile

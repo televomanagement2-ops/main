@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { useProducts } from '../../../hooks/useProducts';
 import { ProductGrid } from '../components/ProductGrid';
 import { ProductFiltersBar } from '../components/ProductFiltersBar';
+import { useI18n } from '../../../lib/i18n';
 import type { ProductFilters } from '../../../types';
 
 export function ProductListPage() {
+  const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState<ProductFilters>({
     page: 1,
@@ -29,8 +31,8 @@ export function ProductListPage() {
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
       <div style={{ marginBottom: 'var(--sp-8)' }}>
-        <span className="section-eyebrow">Catalogue</span>
-        <h1 className="heading-1" style={{ marginBottom: 0 }}>All Products</h1>
+        <span className="section-eyebrow">{t('products.catalogEyebrow')}</span>
+        <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('products.catalogTitle')}</h1>
       </div>
 
       <ProductFiltersBar
@@ -49,13 +51,13 @@ export function ProductListPage() {
       />
 
       {totalPages > 1 && (
-        <nav className="pagination" aria-label="Pagination">
+        <nav className="pagination" aria-label={t('products.paginationLabel')}>
           <button
             onClick={() => update({ page: page - 1 })}
             disabled={page <= 1}
             className="btn btn-secondary btn-sm"
           >
-            ← Previous
+            ← {t('products.prevPage')}
           </button>
           <span className="pagination-info">{page} / {totalPages}</span>
           <button
@@ -63,7 +65,7 @@ export function ProductListPage() {
             disabled={page >= totalPages}
             className="btn btn-secondary btn-sm"
           >
-            Next →
+            {t('products.nextPage')} →
           </button>
         </nav>
       )}

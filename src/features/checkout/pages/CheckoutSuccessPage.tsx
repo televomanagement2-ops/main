@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabaseClient';
 import { useCartStore } from '../../../store/cartStore';
 import { Spinner } from '../../../components/ui/Spinner';
+import { useI18n } from '../../../lib/i18n';
 import type { Order } from '../../../types';
 
 async function fetchOrderBySession(sessionId: string): Promise<Order | null> {
@@ -18,6 +19,7 @@ async function fetchOrderBySession(sessionId: string): Promise<Order | null> {
 }
 
 export function CheckoutSuccessPage() {
+  const { t, formatCurrency } = useI18n();
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const cartCleared = useRef(false);
@@ -45,10 +47,10 @@ export function CheckoutSuccessPage() {
     return (
       <div className="container">
         <div className="result-state result-state--error">
-          <h1 className="result-state__title">Invalid link</h1>
-          <p className="result-state__sub">No payment session found in the URL.</p>
+          <h1 className="result-state__title">{t('checkoutSuccess.invalidLink')}</h1>
+          <p className="result-state__sub">{t('checkoutSuccess.invalidLinkSub')}</p>
           <div className="result-state__actions">
-            <Link to="/products" className="btn btn-primary btn-lg">Browse products</Link>
+            <Link to="/products" className="btn btn-primary btn-lg">{t('checkoutSuccess.browseProducts')}</Link>
           </div>
         </div>
       </div>
@@ -61,7 +63,7 @@ export function CheckoutSuccessPage() {
         <div className="result-state">
           <Spinner />
           <p className="result-state__sub" style={{ marginTop: 'var(--sp-4)' }}>
-            Confirming your payment…
+            {t('checkoutSuccess.confirmingPayment')}
           </p>
         </div>
       </div>
@@ -72,14 +74,11 @@ export function CheckoutSuccessPage() {
     return (
       <div className="container">
         <div className="result-state result-state--warning">
-          <h1 className="result-state__title">Payment received</h1>
-          <p className="result-state__sub">
-            Your payment was processed but we couldn't load your order details yet.
-            Check <Link to="/orders">My Orders</Link> in a moment.
-          </p>
+          <h1 className="result-state__title">{t('checkoutSuccess.paymentReceived')}</h1>
+          <p className="result-state__sub">{t('checkoutSuccess.paymentReceivedSub')}</p>
           <div className="result-state__actions">
-            <Link to="/orders" className="btn btn-primary btn-lg">View my orders</Link>
-            <Link to="/products" className="btn btn-ghost btn-lg">Continue shopping</Link>
+            <Link to="/orders" className="btn btn-primary btn-lg">{t('checkoutSuccess.viewOrders')}</Link>
+            <Link to="/products" className="btn btn-ghost btn-lg">{t('checkoutSuccess.continueShopping')}</Link>
           </div>
         </div>
       </div>
@@ -108,15 +107,19 @@ export function CheckoutSuccessPage() {
         </div>
 
         <h1 className="result-state__title">
-          {isPaid ? 'Order confirmed!' : requiresAction ? 'Action required' : 'Order received'}
+          {isPaid
+            ? t('checkoutSuccess.orderConfirmed')
+            : requiresAction
+            ? t('checkoutSuccess.actionRequired')
+            : t('checkoutSuccess.orderReceived')}
         </h1>
 
         <p className="result-state__sub">
           {isPaid
-            ? "Thank you for your purchase. You'll receive a confirmation email shortly."
+            ? t('checkoutSuccess.paidSub')
             : requiresAction
-            ? 'Your payment requires additional verification. Please check your email.'
-            : 'Your order is being processed.'}
+            ? t('checkoutSuccess.requiresActionSub')
+            : t('checkoutSuccess.processingSub')}
         </p>
 
         {/* Order summary */}
@@ -130,23 +133,23 @@ export function CheckoutSuccessPage() {
           width: '100%',
         }}>
           <p style={{ fontSize: 13, color: 'var(--color-text-3)', marginBottom: 'var(--sp-3)' }}>
-            Order #{order.id.slice(0, 8).toUpperCase()}
+            {t('checkoutSuccess.orderLabel')} #{order.id.slice(0, 8).toUpperCase()}
           </p>
           {order.order_items?.map((item) => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: 'var(--sp-1) 0' }}>
               <span>{item.product_name} × {item.quantity}</span>
-              <span>${item.total_price.toFixed(2)}</span>
+              <span>{formatCurrency(item.total_price)}</span>
             </div>
           ))}
           <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 'var(--sp-3)', paddingTop: 'var(--sp-3)', display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
-            <span>Total</span>
-            <span>${order.total.toFixed(2)}</span>
+            <span>{t('checkoutSuccess.total')}</span>
+            <span>{formatCurrency(order.total)}</span>
           </div>
         </div>
 
         <div className="result-state__actions">
-          <Link to="/orders" className="btn btn-primary btn-lg">View my orders</Link>
-          <Link to="/products" className="btn btn-ghost btn-lg">Continue shopping</Link>
+          <Link to="/orders" className="btn btn-primary btn-lg">{t('checkoutSuccess.viewOrders')}</Link>
+          <Link to="/products" className="btn btn-ghost btn-lg">{t('checkoutSuccess.continueShopping')}</Link>
         </div>
       </div>
     </div>

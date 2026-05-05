@@ -6,6 +6,7 @@ import { useCartStore } from '../../../store/cartStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { Spinner } from '../../../components/ui/Spinner';
 import { BackButton } from '../../../components/ui/BackButton';
+import { useI18n } from '../../../lib/i18n';
 import type { ProductImage, ProductVariant } from '../../../types';
 
 function StarRating({
@@ -17,12 +18,13 @@ function StarRating({
   onChange?: (v: number) => void;
   readonly?: boolean;
 }) {
+  const { t } = useI18n();
   const [hovered, setHovered] = useState(0);
   const display = readonly ? value : (hovered || value);
   return (
     <div
       className="star-rating"
-      aria-label={`${value} out of 5 stars`}
+      aria-label={t('product.ratingAria', { value })}
       style={{ display: 'flex', gap: 2, cursor: readonly ? 'default' : 'pointer' }}
     >
       {[1, 2, 3, 4, 5].map((n) => (
@@ -50,6 +52,7 @@ function ReviewsSection({ productId }: { productId: string }) {
   const { user } = useAuth();
   const { data: reviews = [], isLoading } = useReviews(productId);
   const { mutate: submit, isPending, error: submitError } = useSubmitReview(productId);
+  const { t, tCount, formatDate } = useI18n();
 
   const [rating, setRating] = useState(5);
   const [body, setBody] = useState('');
@@ -75,17 +78,17 @@ function ReviewsSection({ productId }: { productId: string }) {
   };
 
   return (
-    <section className="reviews-section" aria-label="Customer reviews">
+    <section className="reviews-section" aria-label={t('product.reviews.ariaLabel')}>
       <div className="reviews-header">
         <div>
           <h2 className="heading-2" style={{ marginBottom: 4 }}>
-            Customer reviews
+            {t('product.reviews.title')}
           </h2>
           {reviews.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <StarRating value={Math.round(avgRating)} readonly />
               <span style={{ fontSize: 14, color: 'var(--color-text-2)' }}>
-                {avgRating} · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
+                {avgRating} · {tCount('product.reviews.count', reviews.length)}
               </span>
             </div>
           )}
@@ -95,15 +98,15 @@ function ReviewsSection({ productId }: { productId: string }) {
       {user ? (
         <form onSubmit={handleSubmit} className="review-form">
           <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            {submitted ? 'Review updated — thank you!' : 'Write a review'}
+            {submitted ? t('product.reviews.updated') : t('product.reviews.write')}
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <span style={{ fontSize: 13, color: 'var(--color-text-2)' }}>Your rating:</span>
+            <span style={{ fontSize: 13, color: 'var(--color-text-2)' }}>{t('product.reviews.yourRating')}</span>
             <StarRating value={rating} onChange={setRating} />
           </div>
           <textarea
             className="review-textarea"
-            placeholder="Share your thoughts about this product…"
+            placeholder={t('product.reviews.placeholder')}
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={3}
@@ -119,13 +122,13 @@ function ReviewsSection({ productId }: { productId: string }) {
             style={{ marginTop: 10, alignSelf: 'flex-start' }}
             disabled={isPending}
           >
-            {isPending ? 'Submitting…' : 'Publish review'}
+            {isPending ? t('product.reviews.submitting') : t('product.reviews.publish')}
           </button>
         </form>
       ) : (
         <div className="review-login-prompt">
-          <Link to="/login" className="link-btn">Sign in</Link>
-          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}> to leave a review.</span>
+          <Link to="/login" className="link-btn">{t('auth.signIn')}</Link>
+          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}>{t('product.reviews.signInPrompt')}</span>
         </div>
       )}
 
@@ -135,12 +138,12 @@ function ReviewsSection({ productId }: { productId: string }) {
         </div>
       ) : reviews.length === 0 ? (
         <p style={{ fontSize: 14, color: 'var(--color-text-3)', paddingTop: 16 }}>
-          No reviews yet — be the first!
+          {t('product.reviews.empty')}
         </p>
       ) : (
         <div className="reviews-list">
           {reviews.map((r) => {
-            const author = r.profiles?.full_name || r.profiles?.email || 'Anonymous';
+            const author = r.profiles?.full_name || r.profiles?.email || t('product.reviews.anonymous');
             return (
               <div key={r.id} className="review-card">
                 <div className="review-card__head">
@@ -151,11 +154,7 @@ function ReviewsSection({ productId }: { productId: string }) {
                     <div>
                       <p className="review-card__name">{author}</p>
                       <p className="review-card__date">
-                        {new Date(r.created_at).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+                        {formatDate(new Date(r.created_at))}
                       </p>
                     </div>
                   </div>
@@ -172,6 +171,7 @@ function ReviewsSection({ productId }: { productId: string }) {
 }
 
 export function ProductDetailPage() {
+  const { t, formatCurrency } = useI18n();
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading, error } = useProduct(slug ?? '');
   const addItem = useCartStore((s) => s.addItem);
@@ -191,12 +191,12 @@ export function ProductDetailPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--sp-4)', padding: 'var(--sp-32) var(--sp-8)', textAlign: 'center' }}>
         <p style={{ fontSize: 44, lineHeight: 1 }}>🔍</p>
-        <h1 className="heading-1">Product not found</h1>
+        <h1 className="heading-1">{t('product.notFoundTitle')}</h1>
         <p className="body" style={{ maxWidth: 360 }}>
-          This product may have been removed or the link is incorrect.
+          {t('product.notFoundSubtitle')}
         </p>
         <Link to="/products" className="btn btn-primary btn-lg" style={{ marginTop: 'var(--sp-2)' }}>
-          Back to products
+          {t('product.backToProducts')}
         </Link>
       </div>
     );
@@ -243,12 +243,12 @@ export function ProductDetailPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-6)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton to="/products" label="Back to products" />
+      <BackButton to="/products" label={t('product.backToProducts')} />
       {/* Breadcrumb */}
-      <nav className="breadcrumb" aria-label="Breadcrumb">
-        <Link to="/">Home</Link>
+      <nav className="breadcrumb" aria-label={t('product.breadcrumbLabel')}>
+        <Link to="/">{t('sidebar.home')}</Link>
         <span className="breadcrumb-sep">›</span>
-        <Link to="/products">Products</Link>
+        <Link to="/products">{t('sidebar.products')}</Link>
         {product.categories && (
           <>
             <span className="breadcrumb-sep">›</span>
@@ -277,7 +277,7 @@ export function ProductDetailPage() {
                   key={img!.id}
                   className={`gallery__thumb${displayImage?.id === img!.id ? ' gallery__thumb--active' : ''}`}
                   onClick={() => setActiveImage(img!)}
-                  aria-label={img!.alt_text ?? 'Product image'}
+                  aria-label={img!.alt_text ?? t('product.imageAlt')}
                 >
                   <img src={img!.url} alt={img!.alt_text ?? ''} />
                 </button>
@@ -307,7 +307,7 @@ export function ProductDetailPage() {
           <h1 className="product-info__name">{product.name}</h1>
 
           <div className="product-info__pricing">
-            <span className="product-info__price">${product.price.toFixed(2)}</span>
+            <span className="product-info__price">{formatCurrency(product.price)}</span>
           </div>
 
           {product.description && (
@@ -320,7 +320,7 @@ export function ProductDetailPage() {
           {isClothing && hasVariants && (
             <div className="size-selector">
               <div className="size-selector__label">
-                Size
+                {t('cart.size')}
                 {selectedSize && <span className="size-selector__chosen"> — {selectedSize}</span>}
               </div>
               <div className="size-selector__grid">
@@ -333,7 +333,7 @@ export function ProductDetailPage() {
                       onClick={() => !outOfSize && handleSizeSelect(v.size)}
                       disabled={outOfSize}
                       aria-pressed={selectedSize === v.size}
-                      title={outOfSize ? 'Out of stock' : v.size}
+                      title={outOfSize ? t('product.stockOut') : v.size}
                     >
                       {v.size}
                     </button>
@@ -341,38 +341,38 @@ export function ProductDetailPage() {
                 })}
               </div>
               {sizeError && (
-                <p className="size-error">Please select a size before adding to cart.</p>
+                <p className="size-error">{t('product.sizeError')}</p>
               )}
             </div>
           )}
 
           {/* Stock indicator */}
           {isOutOfStock ? (
-            <span className="stock-status stock-status--out">Out of stock</span>
+            <span className="stock-status stock-status--out">{t('product.stockOut')}</span>
           ) : isLowStock ? (
             <span className="stock-status stock-status--low">
-              Only {product.stock_quantity} left in stock
+              {t('product.stockLow', { count: product.stock_quantity })}
             </span>
           ) : (
-            <span className="stock-status stock-status--in">In stock</span>
+            <span className="stock-status stock-status--in">{t('product.stockIn')}</span>
           )}
 
           {/* Actions */}
           {!isOutOfStock && (
             <div className="product-info__actions">
-              <div className="qty-control" aria-label="Quantity">
+              <div className="qty-control" aria-label={t('cart.quantity')}>
                 <button
                   className="qty-btn"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   disabled={quantity <= 1}
-                  aria-label="Decrease quantity"
+                  aria-label={t('cart.decrease')}
                 >−</button>
                 <span className="qty-value" aria-live="polite">{quantity}</span>
                 <button
                   className="qty-btn"
                   onClick={() => setQuantity((q) => Math.min(q + 1, product.stock_quantity))}
                   disabled={quantity >= product.stock_quantity}
-                  aria-label="Increase quantity"
+                  aria-label={t('cart.increase')}
                 >+</button>
               </div>
 
@@ -381,7 +381,7 @@ export function ProductDetailPage() {
                 className={`btn btn-lg${addedFeedback ? ' btn-secondary' : ' btn-primary'}`}
                 style={{ flex: 1 }}
               >
-                {addedFeedback ? '✓ Added to cart' : 'Add to cart'}
+                {addedFeedback ? t('product.addedToCart') : t('product.addToCart')}
               </button>
             </div>
           )}
@@ -392,19 +392,19 @@ export function ProductDetailPage() {
               className="btn btn-secondary btn-lg btn-full"
               style={{ marginTop: 'var(--sp-2)' }}
             >
-              Buy now
+              {t('product.buyNow')}
             </button>
           )}
 
           {isOutOfStock && (
             <button disabled className="btn btn-secondary btn-lg btn-full">
-              Out of stock
+              {t('product.stockOut')}
             </button>
           )}
 
           {product.weight_grams && (
             <p style={{ fontSize: 12.5, color: 'var(--color-text-3)', marginTop: 'var(--sp-2)' }}>
-              Weight: {product.weight_grams}g
+              {t('product.weight', { grams: product.weight_grams })}
             </p>
           )}
         </div>

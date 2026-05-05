@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCartStore } from '../../store/cartStore';
+import { useI18n } from '../../lib/i18n';
 
 interface Props {
   onMenuClick: () => void;
@@ -9,22 +10,24 @@ interface Props {
 export function BottomNavBar({ onMenuClick }: Props) {
   const cartCount = useCartStore((s) => s.items.reduce((n, item) => n + item.quantity, 0));
   const { isAuthenticated } = useAuth();
+  const { t, tCount } = useI18n();
+  const cartAria = `${t('nav.cart')}, ${tCount('orders.items', cartCount)}`;
 
   return (
-    <nav className="bottom-nav" aria-label="Mobile navigation">
-      <Link to="/" className="bottom-nav__item" aria-label="Home">
+    <nav className="bottom-nav" aria-label={t('nav.mobileNavigation')}>
+      <Link to="/" className="bottom-nav__item" aria-label={t('sidebar.home')}>
         <IconHome />
       </Link>
-      <Link to={isAuthenticated ? '/profile' : '/login'} className="bottom-nav__item" aria-label="Account">
+      <Link to={isAuthenticated ? '/profile' : '/login'} className="bottom-nav__item" aria-label={t('nav.account')}>
         <IconUser />
       </Link>
-      <Link to="/cart" className="bottom-nav__item" aria-label={`Cart, ${cartCount} item${cartCount === 1 ? '' : 's'}`}>
+      <Link to="/cart" className="bottom-nav__item" aria-label={cartAria}>
         <span className="bottom-nav__cart-wrap">
           <IconCart />
           {cartCount > 0 && <span className="bottom-nav__badge">{cartCount > 99 ? '99+' : cartCount}</span>}
         </span>
       </Link>
-      <button className="bottom-nav__item" onClick={onMenuClick} aria-label="Menu">
+      <button className="bottom-nav__item" onClick={onMenuClick} aria-label={t('nav.menu')}>
         <IconMenu />
       </button>
     </nav>

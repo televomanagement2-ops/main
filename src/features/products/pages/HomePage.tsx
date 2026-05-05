@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useFeaturedProducts } from '../../../hooks/useProducts';
 import { useCategories } from '../../../hooks/useCategories';
 import { Footer } from '../../../components/layout/Footer';
 import { ProductCard } from '../components/ProductCard';
 import { SkeletonCard } from '../../../components/ui/SkeletonCard';
+import { useI18n } from '../../../lib/i18n';
 
 type PromoTheme = 'delivery' | 'deals' | 'tech' | 'one-euro';
 
@@ -15,41 +16,16 @@ interface PromoSlide {
   kicker: string;
 }
 
-const PROMO_SLIDES: PromoSlide[] = [
-  {
-    id: 'delivery',
-    kicker: 'Spedizioni',
-    title: 'Prima consegna gratuita',
-    subtitle: 'Clicca qui per maggiori informazioni',
-  },
-  {
-    id: 'deals',
-    kicker: 'Offerte',
-    title: 'Offerte in scadenza',
-    subtitle: 'Sconti fino al 35% su categorie selezionate',
-  },
-  {
-    id: 'tech',
-    kicker: 'Tech Hub',
-    title: 'Hub tecnologico',
-    subtitle: 'Apri nuove possibilita',
-  },
-  {
-    id: 'one-euro',
-    kicker: 'Amazon Haul',
-    title: 'Tutto a meno di 1 euro',
-    subtitle: 'Prezzi mini su accessori di ogni giorno',
-  },
-];
-
 function PromoCardArt({ theme }: { theme: PromoTheme }) {
+  const { t } = useI18n();
+
   if (theme === 'deals') {
     return (
       <div className="promo-art promo-art--deals" aria-hidden="true">
         {[35, 28, 19, 6].map((discount) => (
           <div key={discount} className="promo-deal-tile">
             <div className="promo-deal-thumb" />
-            <span className="promo-deal-badge">{discount}% di sconto</span>
+            <span className="promo-deal-badge">{t('home.promo.deals.badge', { discount })}</span>
           </div>
         ))}
       </div>
@@ -93,6 +69,7 @@ function PromoCardArt({ theme }: { theme: PromoTheme }) {
 }
 
 export function HomePage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const { data: products = [], isLoading } = useFeaturedProducts();
   const { data: categories = [] } = useCategories();
@@ -102,6 +79,33 @@ export function HomePage() {
   const [reduceMotion, setReduceMotion] = useState(false);
   const carouselRef = useRef<HTMLDivElement | null>(null);
   const cardRefs = useRef<Array<HTMLElement | null>>([]);
+
+  const promoSlides = useMemo<PromoSlide[]>(() => [
+    {
+      id: 'delivery',
+      kicker: t('home.promo.delivery.kicker'),
+      title: t('home.promo.delivery.title'),
+      subtitle: t('home.promo.delivery.subtitle'),
+    },
+    {
+      id: 'deals',
+      kicker: t('home.promo.deals.kicker'),
+      title: t('home.promo.deals.title'),
+      subtitle: t('home.promo.deals.subtitle'),
+    },
+    {
+      id: 'tech',
+      kicker: t('home.promo.tech.kicker'),
+      title: t('home.promo.tech.title'),
+      subtitle: t('home.promo.tech.subtitle'),
+    },
+    {
+      id: 'one-euro',
+      kicker: t('home.promo.oneEuro.kicker'),
+      title: t('home.promo.oneEuro.title'),
+      subtitle: t('home.promo.oneEuro.subtitle'),
+    },
+  ], [t]);
 
   const categoryChips = categories
     .filter((category) => Boolean(category.slug) && Boolean(category.name))
@@ -113,7 +117,7 @@ export function HomePage() {
     })
     .slice(0, 15);
 
-  const activeTheme = PROMO_SLIDES[activeSlide]?.id ?? 'delivery';
+  const activeTheme = promoSlides[activeSlide]?.id ?? 'delivery';
 
   useEffect(() => {
     const resetScrollTop = () => {
@@ -176,11 +180,11 @@ export function HomePage() {
   useEffect(() => {
     if (isPaused || reduceMotion) return;
     const timer = window.setInterval(() => {
-      const next = (activeSlide + 1) % PROMO_SLIDES.length;
+      const next = (activeSlide + 1) % promoSlides.length;
       scrollToSlide(next, 'smooth');
     }, 4400);
     return () => window.clearInterval(timer);
-  }, [activeSlide, isPaused, reduceMotion]);
+  }, [activeSlide, isPaused, promoSlides.length, reduceMotion]);
 
   const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -206,22 +210,22 @@ export function HomePage() {
               className="showcase-search__input"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cerca su ShopBase"
-              aria-label="Cerca su ShopBase"
+              placeholder={t('home.searchPlaceholder')}
+              aria-label={t('home.searchAria')}
             />
-            <button type="submit" className="showcase-search__submit" aria-label="Avvia ricerca">
-              Vai
+            <button type="submit" className="showcase-search__submit" aria-label={t('home.searchSubmitAria')}>
+              {t('home.searchSubmit')}
             </button>
           </form>
 
-          <div className="trend-chips" role="list" aria-label="Categorie in evidenza">
+          <div className="trend-chips" role="list" aria-label={t('home.trendingAria')}>
             {categoryChips.map((category) => (
               <Link
                 key={category.id}
                 to={`/products?category=${category.slug}`}
                 className="trend-chip"
                 role="listitem"
-                aria-label={`Apri categoria ${category.name}`}
+                aria-label={t('home.trendingCategory', { name: category.name })}
               >
                 {category.name}
               </Link>
@@ -240,14 +244,14 @@ export function HomePage() {
             <button
               type="button"
               className="promo-arrow promo-arrow--prev"
-              aria-label="Slide precedente"
-              onClick={() => scrollToSlide((activeSlide - 1 + PROMO_SLIDES.length) % PROMO_SLIDES.length, 'smooth')}
+              aria-label={t('home.carouselPrev')}
+                onClick={() => scrollToSlide((activeSlide - 1 + promoSlides.length) % promoSlides.length, 'smooth')}
             >
               <span aria-hidden="true">‹</span>
             </button>
 
             <div className="promo-carousel__track" ref={carouselRef}>
-              {PROMO_SLIDES.map((slide, index) => {
+                {promoSlides.map((slide, index) => {
                 const delta = index - activeSlide;
                 const normalizedDelta = Math.max(-1, Math.min(1, delta));
                 return (
@@ -273,20 +277,20 @@ export function HomePage() {
             <button
               type="button"
               className="promo-arrow promo-arrow--next"
-              aria-label="Prossima slide"
-              onClick={() => scrollToSlide((activeSlide + 1) % PROMO_SLIDES.length, 'smooth')}
+              aria-label={t('home.carouselNext')}
+                onClick={() => scrollToSlide((activeSlide + 1) % promoSlides.length, 'smooth')}
             >
               <span aria-hidden="true">›</span>
             </button>
 
-            <div className="promo-pagination" aria-label="Navigazione carosello promozioni">
-              {PROMO_SLIDES.map((slide, index) => (
+            <div className="promo-pagination" aria-label={t('home.carouselNav')}>
+                {promoSlides.map((slide, index) => (
                 <button
                   key={slide.id}
                   type="button"
                   className={`promo-dot ${index === activeSlide ? 'is-active' : ''}`}
                   onClick={() => scrollToSlide(index, reduceMotion ? 'auto' : 'smooth')}
-                  aria-label={`Vai alla slide ${index + 1}`}
+                    aria-label={t('home.carouselGoTo', { index: index + 1 })}
                 />
               ))}
             </div>
@@ -299,12 +303,12 @@ export function HomePage() {
           <div className="container">
             <div className="section-header">
               <div>
-                <span className="section-eyebrow">Editor selection</span>
-                <h2 className="heading-1" style={{ marginBottom: 'var(--sp-2)' }}>Curated products for your next order</h2>
-                <p className="home-feed__subtitle">Una selezione professionale aggiornata ogni giorno con i prodotti piu rilevanti del catalogo.</p>
+                <span className="section-eyebrow">{t('home.editorEyebrow')}</span>
+                <h2 className="heading-1" style={{ marginBottom: 'var(--sp-2)' }}>{t('home.editorTitle')}</h2>
+                <p className="home-feed__subtitle">{t('home.editorSubtitle')}</p>
               </div>
               <Link to="/products" className="btn btn-ghost btn-sm">
-                View all →
+                {t('home.viewAll')} →
               </Link>
             </div>
 

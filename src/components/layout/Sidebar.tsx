@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useCartStore } from '../../store/cartStore';
 import { supabase } from '../../lib/supabaseClient';
+import { useI18n } from '../../lib/i18n';
 
 interface Props {
   mini: boolean;
@@ -43,10 +44,11 @@ function NavItem({
 }
 
 export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props) {
-  const { isAuthenticated, profile, user } = useAuth();
+  const { isAuthenticated, isAdmin, profile, user } = useAuth();
   const cartCount = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useI18n();
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -70,7 +72,7 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
   ].filter(Boolean).join(' ');
 
   return (
-    <aside className={sidebarClass} aria-label="Main navigation">
+    <aside className={sidebarClass} aria-label={t('nav.mainNavigation')}>
       {/* Brand — only shown when sidebar is expanded */}
       {!mini && (
         <div className="sidebar-brand">
@@ -80,8 +82,8 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
           <button
             className="sidebar-brand__toggle"
             onClick={onToggleMini}
-            aria-label="Collapse sidebar"
-            title="Collapse"
+            aria-label={t('nav.toggleNavigation')}
+            title={t('nav.toggleNavigation')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <path d="M15 18l-6-6 6-6"/>
@@ -94,18 +96,25 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
       <div className="sidebar-scroll">
         {/* Main nav */}
         <div className="sidebar-section">
-          <p className="sidebar-section__label">Store</p>
-          <NavItem to="/" end icon={<IconHome />} label="Home" mini={mini} />
-          <NavItem to="/products" icon={<IconGrid />} label="Products" mini={mini} />
-          <NavItem to="/cart" icon={<IconCart />} label="Cart" badge={cartCount} mini={mini} />
+          <p className="sidebar-section__label">{t('sidebar.store')}</p>
+          <NavItem to="/" end icon={<IconHome />} label={t('sidebar.home')} mini={mini} />
+          <NavItem to="/products" icon={<IconGrid />} label={t('sidebar.products')} mini={mini} />
+          <NavItem to="/cart" icon={<IconCart />} label={t('sidebar.cart')} badge={cartCount} mini={mini} />
         </div>
 
         {/* Account nav */}
         {isAuthenticated && (
           <div className="sidebar-section">
-            <p className="sidebar-section__label">Account</p>
-            <NavItem to="/profile" icon={<IconProfile />} label="Profile" mini={mini} />
-            <NavItem to="/orders" icon={<IconOrders />} label="My Orders" mini={mini} />
+            <p className="sidebar-section__label">{t('sidebar.account')}</p>
+            <NavItem to="/profile" icon={<IconProfile />} label={t('sidebar.profile')} mini={mini} />
+            <NavItem to="/orders" icon={<IconOrders />} label={t('sidebar.myOrders')} mini={mini} />
+          </div>
+        )}
+
+        {isAdmin && (
+          <div className="sidebar-section">
+            <p className="sidebar-section__label">{t('sidebar.admin')}</p>
+            <NavItem to="/admin" icon={<IconDashboard />} label={t('sidebar.dashboard')} mini={mini} />
           </div>
         )}
 
@@ -113,14 +122,14 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
         {!isAuthenticated && (
           <div className="sidebar-section">
             {mini ? (
-              <NavItem to="/login" icon={<IconSignIn />} label="Sign in" mini={mini} />
+              <NavItem to="/login" icon={<IconSignIn />} label={t('nav.signIn')} mini={mini} />
             ) : (
               <div style={{ padding: 'var(--sp-3) var(--sp-4)' }}>
                 <p style={{ fontSize: 12, color: 'var(--color-text-3)', lineHeight: 1.5, marginBottom: 'var(--sp-3)' }}>
-                  Sign in to track orders and sync your cart.
+                  {t('sidebar.signInPrompt')}
                 </p>
                 <Link to="/login" className="btn btn-primary btn-sm btn-full">
-                  Sign in
+                  {t('nav.signIn')}
                 </Link>
               </div>
             )}
@@ -157,10 +166,10 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
             onClick={handleSignOut}
             className="sidebar-item"
             style={{ width: '100%', border: 'none', textAlign: 'left', color: 'var(--color-text-2)' }}
-            title={mini ? 'Sign out' : undefined}
+            title={mini ? t('nav.signOut') : undefined}
           >
             <span className="sidebar-item__icon"><IconSignOut /></span>
-            <span className="sidebar-item__label">Sign out</span>
+            <span className="sidebar-item__label">{t('nav.signOut')}</span>
           </button>
         </div>
       )}
@@ -227,6 +236,16 @@ function IconSignIn() {
       <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/>
       <polyline points="10 17 15 12 10 7"/>
       <line x1="15" y1="12" x2="3" y2="12"/>
+    </svg>
+  );
+}
+function IconDashboard() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 13a8 8 0 0118 0" />
+      <path d="M12 3v9" />
+      <circle cx="12" cy="14" r="2" />
+      <path d="M4 21h16" />
     </svg>
   );
 }

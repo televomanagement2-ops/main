@@ -66,6 +66,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 2. Dashboard → Developers → API keys
    - Copy **Publishable key** (for future Stripe Elements if needed)
    - Copy **Secret key** → add as `STRIPE_SECRET_KEY` in Supabase secrets
+   - Add `SUPABASE_ANON_KEY` in Supabase Edge Function secrets (required by `create-checkout-session` auth validation)
 3. Deploy Edge Functions (step 5 first)
 4. Dashboard → Developers → Webhooks → Add endpoint
    - URL: `https://<project-ref>.supabase.co/functions/v1/stripe-webhook`
@@ -98,6 +99,29 @@ supabase functions serve create-checkout-session --env-file .env.local
 ---
 
 ## 6. Test the Full Flow
+
+Before running checkout E2E, confirm production schema includes required checkout columns:
+
+```sql
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+   and table_name = 'orders'
+   and column_name in ('stripe_session_id', 'shipping_method_id', 'shipping_method_name')
+order by column_name;
+
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+   and table_name = 'order_items'
+   and column_name in ('selected_size')
+order by column_name;
+```
+
+If any column is missing, apply at least:
+
+- `supabase/migrations/001_fixes.sql`
+- `supabase/migrations/004_variants_reviews_shipping.sql`
 
 1. Sign up → check profiles table has a row
 2. Add products to cart → verify cart persists on refresh

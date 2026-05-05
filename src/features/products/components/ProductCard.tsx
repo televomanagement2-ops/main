@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useI18n } from '../../../lib/i18n';
 import type { Product } from '../../../types';
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function ProductCard({ product, showActionButton = true }: Props) {
+  const { t, formatCurrency } = useI18n();
   const primaryImage = product.product_images?.find((img) => img.is_primary);
 
   const isOutOfStock = product.stock_quantity === 0;
@@ -29,7 +31,7 @@ export function ProductCard({ product, showActionButton = true }: Props) {
           loading="lazy"
         />
         {isClothing && hasVariants && (
-          <span className="product-card__variant-hint">Select size</span>
+          <span className="product-card__variant-hint">{t('products.card.selectSize')}</span>
         )}
       </Link>
 
@@ -41,24 +43,28 @@ export function ProductCard({ product, showActionButton = true }: Props) {
           {product.name}
         </Link>
         <div className="product-card__pricing">
-          <span className="product-card__price">${product.price.toFixed(2)}</span>
+          <span className="product-card__price">{formatCurrency(product.price)}</span>
         </div>
       </div>
 
       {showActionButton && (
         <div className="product-card__footer">
           {isLowStock ? (
-            <span className="product-card__stock-warn">Only {product.stock_quantity} left</span>
+            <span className="product-card__stock-warn">
+              {t('products.card.onlyLeft', { count: product.stock_quantity })}
+            </span>
           ) : (
             <span />
           )}
           <Link
             to={`/products/${product.slug}`}
             className={`btn btn-primary btn-sm${isOutOfStock ? ' btn-disabled' : ''}`}
-            aria-label={`View ${product.name}`}
+            aria-label={t('products.card.viewProduct', { name: product.name })}
             style={isOutOfStock ? { pointerEvents: 'none', opacity: 0.42 } : {}}
           >
-            {isOutOfStock ? 'Sold out' : (isClothing && hasVariants ? 'Choose size' : '+ Add')}
+            {isOutOfStock
+              ? t('products.card.soldOut')
+              : (isClothing && hasVariants ? t('products.card.chooseSize') : t('products.card.add'))}
           </Link>
         </div>
       )}

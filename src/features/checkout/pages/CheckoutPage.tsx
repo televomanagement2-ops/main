@@ -6,6 +6,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useAddresses } from '../../../hooks/useAddresses';
 import { useShippingMethods } from '../../../hooks/useShippingMethods';
 import { supabase } from '../../../lib/supabaseClient';
+import { useI18n } from '../../../lib/i18n';
 import type { Address, ShippingMethod } from '../../../types';
 
 type CheckoutBody = {
@@ -35,9 +36,11 @@ type CheckoutBody = {
   shipping_cost: number;
 };
 
-async function resolveCheckoutError(err: unknown): Promise<string> {
-  const fallback = 'Checkout failed. Please try again.';
+async function resolveCheckoutError(err: unknown, fallback: string): Promise<string> {
   if (!err || typeof err !== 'object') return fallback;
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
   const e = err as { message?: string; context?: Response };
   if (e.context instanceof Response) {
     const status = e.context.status;
@@ -93,10 +96,12 @@ function AddressCard({
   address,
   selected,
   onSelect,
+  defaultLabel,
 }: {
   address: Address;
   selected: boolean;
   onSelect: () => void;
+  defaultLabel: string;
 }) {
   return (
     <button
@@ -115,7 +120,7 @@ function AddressCard({
         <p className="address-card__line">{address.country}</p>
       </div>
       {address.is_default && (
-        <span className="badge badge-accent" style={{ marginLeft: 'auto', flexShrink: 0 }}>Default</span>
+        <span className="badge badge-accent" style={{ marginLeft: 'auto', flexShrink: 0 }}>{defaultLabel}</span>
       )}
     </button>
   );
@@ -125,17 +130,20 @@ function ShippingMethodCard({
   method,
   selected,
   onSelect,
+  estimatedLabel,
+  freeLabel,
+  formatCurrency,
+  formatDays,
 }: {
   method: ShippingMethod;
   selected: boolean;
   onSelect: () => void;
+  estimatedLabel: string;
+  freeLabel: string;
+  formatCurrency: (value: number) => string;
+  formatDays: (min: number | null, max: number | null) => string | null;
 }) {
-  const days =
-    method.estimated_days_min != null && method.estimated_days_max != null
-      ? method.estimated_days_min === method.estimated_days_max
-        ? `${method.estimated_days_min} day${method.estimated_days_min !== 1 ? 's' : ''}`
-        : `${method.estimated_days_min}–${method.estimated_days_max} days`
-      : null;
+  const days = formatDays(method.estimated_days_min ?? null, method.estimated_days_max ?? null);
 
   return (
     <button
@@ -152,19 +160,43 @@ function ShippingMethodCard({
         {method.description && (
           <p className="shipping-card__desc">{method.description}</p>
         )}
-        {days && <p className="shipping-card__days">Estimated: {days}</p>}
+        {days && <p className="shipping-card__days">{estimatedLabel}: {days}</p>}
       </div>
       <span className="shipping-card__price">
-        {method.price === 0 ? 'Free' : `$${method.price.toFixed(2)}`}
+        {method.price === 0 ? freeLabel : formatCurrency(method.price)}
       </span>
     </button>
   );
 }
 
+type AddressFormLabels = {
+  fullName: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  phone: string;
+  useThisAddress: string;
+  placeholders: {
+    fullName: string;
+    addressLine1: string;
+    addressLine2: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+    phone: string;
+  };
+};
+
 function NewAddressForm({
   onSaved,
+  labels,
 }: {
   onSaved: (addr: Omit<Address, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'is_default'>) => void;
+  labels: AddressFormLabels;
 }) {
   const [form, setForm] = useState({
     full_name: '',
@@ -198,40 +230,87 @@ function NewAddressForm({
     <form onSubmit={handleSubmit} className="new-address-form">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
         <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="label">Full name *</label>
-          <input className="input" required value={form.full_name} onChange={set('full_name')} placeholder="Jane Doe" />
+          <label className="label">{labels.fullName} *</label>
+          <input
+            className="input"
+            required
+            value={form.full_name}
+            onChange={set('full_name')}
+            placeholder={labels.placeholders.fullName}
+          />
         </div>
         <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="label">Address line 1 *</label>
-          <input className="input" required value={form.line1} onChange={set('line1')} placeholder="123 Main St" />
+          <label className="label">{labels.addressLine1} *</label>
+          <input
+            className="input"
+            required
+            value={form.line1}
+            onChange={set('line1')}
+            placeholder={labels.placeholders.addressLine1}
+          />
         </div>
         <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="label">Address line 2</label>
-          <input className="input" value={form.line2} onChange={set('line2')} placeholder="Apt 4B (optional)" />
+          <label className="label">{labels.addressLine2}</label>
+          <input
+            className="input"
+            value={form.line2}
+            onChange={set('line2')}
+            placeholder={labels.placeholders.addressLine2}
+          />
         </div>
         <div className="form-group">
-          <label className="label">City *</label>
-          <input className="input" required value={form.city} onChange={set('city')} placeholder="New York" />
+          <label className="label">{labels.city} *</label>
+          <input
+            className="input"
+            required
+            value={form.city}
+            onChange={set('city')}
+            placeholder={labels.placeholders.city}
+          />
         </div>
         <div className="form-group">
-          <label className="label">State / Province *</label>
-          <input className="input" required value={form.state} onChange={set('state')} placeholder="NY" />
+          <label className="label">{labels.state} *</label>
+          <input
+            className="input"
+            required
+            value={form.state}
+            onChange={set('state')}
+            placeholder={labels.placeholders.state}
+          />
         </div>
         <div className="form-group">
-          <label className="label">Postal code *</label>
-          <input className="input" required value={form.postal_code} onChange={set('postal_code')} placeholder="10001" />
+          <label className="label">{labels.postalCode} *</label>
+          <input
+            className="input"
+            required
+            value={form.postal_code}
+            onChange={set('postal_code')}
+            placeholder={labels.placeholders.postalCode}
+          />
         </div>
         <div className="form-group">
-          <label className="label">Country *</label>
-          <input className="input" required value={form.country} onChange={set('country')} placeholder="US" />
+          <label className="label">{labels.country} *</label>
+          <input
+            className="input"
+            required
+            value={form.country}
+            onChange={set('country')}
+            placeholder={labels.placeholders.country}
+          />
         </div>
         <div className="form-group">
-          <label className="label">Phone</label>
-          <input className="input" value={form.phone} onChange={set('phone')} placeholder="+1 555 000 0000" type="tel" />
+          <label className="label">{labels.phone}</label>
+          <input
+            className="input"
+            value={form.phone}
+            onChange={set('phone')}
+            placeholder={labels.placeholders.phone}
+            type="tel"
+          />
         </div>
       </div>
       <button type="submit" className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--sp-3)' }}>
-        Use this address
+        {labels.useThisAddress}
       </button>
     </form>
   );
@@ -242,6 +321,7 @@ export function CheckoutPage() {
   const { user } = useAuth();
   const { data: savedAddresses = [], isLoading: addressesLoading } = useAddresses(user?.id);
   const { data: shippingMethods = [], isLoading: shippingLoading } = useShippingMethods();
+  const { t, tCount, formatCurrency } = useI18n();
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -267,6 +347,34 @@ export function CheckoutPage() {
   const tax = (subtotal + shippingCost) * 0.1;
   const total = subtotal + shippingCost + tax;
 
+  const formatDays = (min: number | null, max: number | null) => {
+    if (min == null || max == null) return null;
+    if (min === max) return tCount('checkout.days', min);
+    return t('checkout.daysRange', { min, max });
+  };
+
+  const addressLabels: AddressFormLabels = {
+    fullName: t('checkout.fullName'),
+    addressLine1: t('checkout.addressLine1'),
+    addressLine2: t('checkout.addressLine2'),
+    city: t('checkout.city'),
+    state: t('checkout.state'),
+    postalCode: t('checkout.postalCode'),
+    country: t('checkout.country'),
+    phone: t('checkout.phone'),
+    useThisAddress: t('checkout.useThisAddress'),
+    placeholders: {
+      fullName: t('checkout.fullNamePlaceholder'),
+      addressLine1: t('checkout.addressLine1Placeholder'),
+      addressLine2: t('checkout.addressLine2Placeholder'),
+      city: t('checkout.cityPlaceholder'),
+      state: t('checkout.statePlaceholder'),
+      postalCode: t('checkout.postalCodePlaceholder'),
+      country: t('checkout.countryPlaceholder'),
+      phone: t('checkout.phonePlaceholder'),
+    },
+  };
+
   const shippingAddressReady = effectiveAddressId === 'new' ? newAddress !== null : resolvedAddress !== null;
 
   const handleCheckout = async () => {
@@ -274,11 +382,11 @@ export function CheckoutPage() {
 
     const shippingAddr = effectiveAddressId === 'new' ? newAddress : resolvedAddress;
     if (!shippingAddr) {
-      setError('Please select or enter a shipping address.');
+      setError(t('checkout.selectAddressError'));
       return;
     }
     if (!selectedMethod && shippingMethods.length > 0) {
-      setError('Please select a shipping method.');
+      setError(t('checkout.selectShippingError'));
       return;
     }
 
@@ -288,16 +396,16 @@ export function CheckoutPage() {
     try {
       const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError || !refreshed.session) {
-        throw new Error('Your session has expired. Please sign out and sign in again to retry checkout.');
+        throw new Error(t('checkout.sessionExpired'));
       }
       const accessToken = refreshed.session.access_token;
 
       const { data: authCheck, error: authCheckError } = await supabase.auth.getUser(accessToken);
       if (authCheckError || !authCheck?.user) {
-        throw new Error('Your login session is invalid. Please sign out and sign in again.');
+        throw new Error(t('checkout.sessionInvalid'));
       }
 
-      const chosenMethod = selectedMethod ?? { id: '', name: 'Standard', price: 0 };
+      const chosenMethod = selectedMethod ?? { id: '', name: t('checkout.standard'), price: 0 };
 
       const body: CheckoutBody = {
         items: items.map((i) => ({
@@ -329,7 +437,7 @@ export function CheckoutPage() {
       const data = await invokeCheckoutSessionWithFallback(accessToken, body);
       window.location.href = data.url;
     } catch (err) {
-      setError(await resolveCheckoutError(err));
+      setError(await resolveCheckoutError(err, t('common.error')));
       setIsLoading(false);
     }
   };
@@ -340,21 +448,21 @@ export function CheckoutPage() {
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton to="/cart" label="Back to cart" />
+      <BackButton to="/cart" label={t('checkout.backToCart')} />
       <div style={{ marginBottom: 'var(--sp-8)' }}>
-        <span className="section-eyebrow">Secure payment</span>
-        <h1 className="heading-1" style={{ marginBottom: 0 }}>Checkout</h1>
+        <span className="section-eyebrow">{t('checkout.securePayment')}</span>
+        <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('checkout.title')}</h1>
       </div>
 
       <div className="checkout-layout">
         <div className="checkout-main">
           {/* ── Address section ── */}
           <section className="checkout-section">
-            <h2 className="checkout-section-title">Shipping address</h2>
+            <h2 className="checkout-section-title">{t('checkout.shippingAddress')}</h2>
 
             {addressesLoading ? (
               <div style={{ padding: 'var(--sp-4)', color: 'var(--color-text-3)', fontSize: 14 }}>
-                Loading addresses…
+                {t('checkout.loadingAddresses')}
               </div>
             ) : (
               <div className="address-list">
@@ -364,6 +472,7 @@ export function CheckoutPage() {
                     address={addr}
                     selected={effectiveAddressId === addr.id}
                     onSelect={() => setSelectedAddressId(addr.id)}
+                    defaultLabel={t('checkout.defaultBadge')}
                   />
                 ))}
                 <button
@@ -375,7 +484,9 @@ export function CheckoutPage() {
                     <div className={`address-card__dot${effectiveAddressId === 'new' ? ' address-card__dot--active' : ''}`} />
                   </div>
                   <span style={{ fontSize: 14, fontWeight: 500 }}>
-                    {savedAddresses.length === 0 ? 'Enter shipping address' : '+ Use a different address'}
+                    {savedAddresses.length === 0
+                      ? t('checkout.enterShippingAddress')
+                      : `+ ${t('checkout.useDifferentAddress')}`}
                   </span>
                 </button>
               </div>
@@ -383,10 +494,10 @@ export function CheckoutPage() {
 
             {effectiveAddressId === 'new' && (
               <div style={{ marginTop: 'var(--sp-4)' }}>
-                <NewAddressForm onSaved={(addr) => setNewAddress(addr)} />
+                <NewAddressForm onSaved={(addr) => setNewAddress(addr)} labels={addressLabels} />
                 {newAddress && (
                   <p style={{ fontSize: 13, color: 'var(--color-success)', marginTop: 8 }}>
-                    ✓ Address ready to use
+                    ✓ {t('checkout.addressReady')}
                   </p>
                 )}
               </div>
@@ -395,11 +506,11 @@ export function CheckoutPage() {
 
           {/* ── Shipping method section ── */}
           <section className="checkout-section" style={{ marginTop: 'var(--sp-8)' }}>
-            <h2 className="checkout-section-title">Shipping method</h2>
+            <h2 className="checkout-section-title">{t('checkout.shippingMethod')}</h2>
 
             {shippingLoading ? (
               <div style={{ padding: 'var(--sp-4)', color: 'var(--color-text-3)', fontSize: 14 }}>
-                Loading shipping options…
+                {t('checkout.loadingShipping')}
               </div>
             ) : (
               <div className="shipping-list">
@@ -411,6 +522,10 @@ export function CheckoutPage() {
                       method={method}
                       selected={isSelected}
                       onSelect={() => setSelectedMethodId(method.id)}
+                      estimatedLabel={t('checkout.estimated')}
+                      freeLabel={t('common.free')}
+                      formatCurrency={formatCurrency}
+                      formatDays={formatDays}
                     />
                   );
                 })}
@@ -420,7 +535,7 @@ export function CheckoutPage() {
 
           {/* ── Order review ── */}
           <section className="checkout-section" style={{ marginTop: 'var(--sp-8)' }}>
-            <h2 className="checkout-section-title">Order review</h2>
+            <h2 className="checkout-section-title">{t('checkout.orderReview')}</h2>
             {items.map((item) => (
               <div key={`${item.product.id}-${item.selectedSize ?? ''}`} className="checkout-item">
                 <div className="checkout-item__img-wrap">
@@ -439,13 +554,13 @@ export function CheckoutPage() {
                   <p className="checkout-item__name">{item.product.name}</p>
                   {item.selectedSize && (
                     <p className="checkout-item__unit" style={{ color: 'var(--color-text-2)' }}>
-                      Size: {item.selectedSize}
+                      {t('cart.size')}: {item.selectedSize}
                     </p>
                   )}
-                  <p className="checkout-item__unit">${item.product.price.toFixed(2)} each</p>
+                  <p className="checkout-item__unit">{formatCurrency(item.product.price)} {t('cart.each')}</p>
                 </div>
                 <p className="checkout-item__total">
-                  ${(item.product.price * item.quantity).toFixed(2)}
+                  {formatCurrency(item.product.price * item.quantity)}
                 </p>
               </div>
             ))}
@@ -453,25 +568,29 @@ export function CheckoutPage() {
         </div>
 
         <aside className="order-summary">
-          <h2 className="order-summary__title">Order summary</h2>
+          <h2 className="order-summary__title">{t('checkout.orderSummary')}</h2>
 
           <div className="summary-line">
-            <span>Subtotal</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>{t('cart.subtotal')}</span>
+            <span>{formatCurrency(subtotal)}</span>
           </div>
           <div className="summary-line">
-            <span>Shipping ({selectedMethod?.name ?? 'Standard'})</span>
+            <span>
+              {t('checkout.shippingWithMethod', {
+                method: selectedMethod?.name ?? t('checkout.standard'),
+              })}
+            </span>
             <span className={shippingCost === 0 ? 'summary-line--free' : ''}>
-              {shippingCost === 0 ? 'Free' : `$${shippingCost.toFixed(2)}`}
+              {shippingCost === 0 ? t('common.free') : formatCurrency(shippingCost)}
             </span>
           </div>
           <div className="summary-line">
-            <span>Tax (10%)</span>
-            <span>${tax.toFixed(2)}</span>
+            <span>{t('cart.tax')}</span>
+            <span>{formatCurrency(tax)}</span>
           </div>
           <div className="summary-line summary-line--total">
-            <span>Total</span>
-            <span>${total.toFixed(2)}</span>
+            <span>{t('cart.total')}</span>
+            <span>{formatCurrency(total)}</span>
           </div>
 
           {error && (
@@ -482,7 +601,7 @@ export function CheckoutPage() {
 
           {!shippingAddressReady && (
             <p style={{ fontSize: 12.5, color: 'var(--color-warning)', marginTop: 'var(--sp-4)', lineHeight: 1.5 }}>
-              Please complete your shipping address above.
+              {t('checkout.completeAddressWarning')}
             </p>
           )}
 
@@ -493,14 +612,14 @@ export function CheckoutPage() {
             style={{ marginTop: 'var(--sp-5)' }}
           >
             {isLoading ? (
-              <><span className="spinner spinner-sm" style={{ borderColor: 'rgba(255,255,255,.3)', borderTopColor: '#fff' }} /> Redirecting to payment…</>
+              <><span className="spinner spinner-sm" style={{ borderColor: 'rgba(255,255,255,.3)', borderTopColor: '#fff' }} /> {t('checkout.redirectingPayment')}</>
             ) : (
-              <>Pay ${total.toFixed(2)} with Stripe</>
+              <>{t('checkout.payWithStripe', { amount: formatCurrency(total) })}</>
             )}
           </button>
 
           <p style={{ fontSize: 12, color: 'var(--color-text-3)', textAlign: 'center', marginTop: 'var(--sp-3)' }}>
-            Secured by Stripe. We never store your card details.
+            {t('checkout.securedByStripe')}
           </p>
         </aside>
       </div>

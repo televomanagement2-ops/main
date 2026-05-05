@@ -1,5 +1,6 @@
 import { ProductCard } from './ProductCard';
 import { SkeletonCard } from '../../../components/ui/SkeletonCard';
+import { useI18n } from '../../../lib/i18n';
 import type { Product } from '../../../types';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function ProductGrid({ products, isLoading, error, skeletonCount = 8, staggered = false }: Props) {
+  const { t } = useI18n();
   const gridClassName = `product-grid${staggered ? ' product-grid--staggered' : ''}`;
 
   if (isLoading) {
@@ -32,7 +34,7 @@ export function ProductGrid({ products, isLoading, error, skeletonCount = 8, sta
             <line x1="12" y1="8" x2="12" y2="12"/>
             <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
-          <p>Failed to load products.</p>
+          <p>{t('products.loadError')}</p>
         </div>
       </div>
     );
@@ -46,7 +48,7 @@ export function ProductGrid({ products, isLoading, error, skeletonCount = 8, sta
             <path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
             <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/>
           </svg>
-          <p>No products found.</p>
+          <p>{t('products.empty')}</p>
         </div>
       ) : (
         products.map((p) => <ProductCard key={p.id} product={p} />)

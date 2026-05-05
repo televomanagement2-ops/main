@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from '../../../lib/supabaseClient';
+import { useI18n } from '../../../lib/i18n';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
+  const { t } = useI18n();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -35,7 +37,7 @@ export function LoginPage() {
           options: { data: { full_name: fullName } },
         });
         if (error) throw error;
-        setMessage('Check your email to confirm your account.');
+        setMessage(t('auth.checkEmail'));
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -74,12 +76,12 @@ export function LoginPage() {
           </div>
 
           <h1 className="auth-card__title">
-            {mode === 'login' ? 'Welcome back' : 'Create account'}
+            {mode === 'login' ? t('auth.welcomeBack') : t('auth.createAccount')}
           </h1>
           <p className="auth-card__sub">
             {mode === 'login'
-              ? 'Sign in to access your orders and cart.'
-              : 'Join thousands of happy shoppers.'}
+              ? t('auth.loginSub')
+              : t('auth.signupSub')}
           </p>
 
           {error   && <div className="alert alert-error">{error}</div>}
@@ -102,49 +104,49 @@ export function LoginPage() {
                 <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
               </svg>
             )}
-            Continue with Google
+            {t('auth.googleContinue')}
           </button>
 
-          <div className="auth-divider"><span>or</span></div>
+          <div className="auth-divider"><span>{t('auth.or')}</span></div>
 
           <form onSubmit={handleSubmit} className="auth-form">
             {mode === 'signup' && (
               <div className="form-group">
-                <label htmlFor="fullName" className="label">Full name</label>
+                <label htmlFor="fullName" className="label">{t('auth.fullName')}</label>
                 <input
                   id="fullName"
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="input"
-                  placeholder="Jane Smith"
+                  placeholder={t('auth.fullNamePlaceholder')}
                   required
                   autoComplete="name"
                 />
               </div>
             )}
             <div className="form-group">
-              <label htmlFor="email" className="label">Email</label>
+              <label htmlFor="email" className="label">{t('auth.email')}</label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
-                placeholder="you@example.com"
+                placeholder={t('auth.emailPlaceholder')}
                 required
                 autoComplete="email"
               />
             </div>
             <div className="form-group">
-              <label htmlFor="password" className="label">Password</label>
+              <label htmlFor="password" className="label">{t('auth.password')}</label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
-                placeholder={mode === 'signup' ? 'At least 8 characters' : '••••••••'}
+                placeholder={mode === 'signup' ? t('auth.passwordSignup') : t('auth.passwordLogin')}
                 required
                 minLength={8}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -158,26 +160,26 @@ export function LoginPage() {
               {isLoading ? (
                 <>
                   <span className="spinner spinner-sm" style={{ borderTopColor: '#fff', borderColor: 'rgba(255,255,255,.25)' }} />
-                  Please wait…
+                  {t('auth.pleaseWait')}
                 </>
-              ) : mode === 'login' ? 'Sign in' : 'Create account'}
+              ) : mode === 'login' ? t('auth.signIn') : t('auth.signUp')}
             </button>
           </form>
 
           <p className="auth-switch">
             {mode === 'login' ? (
-              <>Don't have an account?{' '}
-                <button onClick={() => switchMode('signup')} className="link-btn">Sign up</button>
+              <>{t('auth.noAccount')}{' '}
+                <button onClick={() => switchMode('signup')} className="link-btn">{t('auth.signUp')}</button>
               </>
             ) : (
-              <>Already have an account?{' '}
-                <button onClick={() => switchMode('login')} className="link-btn">Sign in</button>
+              <>{t('auth.haveAccount')}{' '}
+                <button onClick={() => switchMode('login')} className="link-btn">{t('auth.signIn')}</button>
               </>
             )}
           </p>
         </div>
 
-        <Link to="/" className="auth-guest-link">Continue as guest →</Link>
+        <Link to="/" className="auth-guest-link">{t('auth.continueGuest')}</Link>
       </div>
     </div>
   );

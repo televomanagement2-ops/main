@@ -1,228 +1,87 @@
--- 200 mock products across 4 categories
+-- 200 seeded products with stable image URLs across 4 categories
 -- Run this in Supabase SQL editor AFTER schema.sql and rls.sql
--- Category IDs:
---   Electronics:  a1000000-0000-0000-0000-000000000001
---   Clothing:     a1000000-0000-0000-0000-000000000002
---   Home & Garden:a1000000-0000-0000-0000-000000000003
---   Smartphones:  a1000000-0000-0000-0000-000000000004
 
+BEGIN;
+
+-- Legacy c100 mock products can be referenced by order_items (FK RESTRICT),
+-- so we do a safe soft-retire instead of deleting them.
+UPDATE public.products
+SET
+  is_active = FALSE,
+  is_featured = FALSE,
+  updated_at = now()
+WHERE id::text LIKE 'c1000000-%';
+
+WITH category_config AS (
+  SELECT *
+  FROM (
+    VALUES
+      (1, 'a1000000-0000-0000-0000-000000000001'::uuid, 'electronics', 'ELEC', 'Electronics'),
+      (2, 'a1000000-0000-0000-0000-000000000002'::uuid, 'clothing', 'CLTH', 'Clothing'),
+      (3, 'a1000000-0000-0000-0000-000000000003'::uuid, 'home-garden', 'HOME', 'Home and Garden'),
+      (4, 'a1000000-0000-0000-0000-000000000004'::uuid, 'smartphone', 'SMRT', 'Smartphone Accessories')
+  ) AS c(category_index, category_id, slug_prefix, sku_prefix, category_label)
+),
+generated AS (
+  SELECT
+    ('d2000000-0000-0000-0000-' || lpad(((c.category_index - 1) * 50 + n)::text, 12, '0'))::uuid AS id,
+    c.category_id,
+    c.category_label || ' Studio Item ' || lpad(n::text, 2, '0') AS name,
+    c.slug_prefix || '-studio-item-' || lpad(n::text, 3, '0') AS slug,
+    'Curated ' || lower(c.category_label) || ' product designed for daily use, reliability, and balanced value.' AS description,
+    round((16 + c.category_index * 8 + n * 1.89)::numeric, 2) AS price,
+    CASE
+      WHEN n % 3 = 0 THEN round((16 + c.category_index * 8 + n * 1.89)::numeric * 1.18, 2)
+      ELSE NULL
+    END AS compare_at_price,
+    'D2-' || c.sku_prefix || '-' || lpad(n::text, 3, '0') AS sku,
+    (24 + ((n * 7 + c.category_index * 13) % 180))::int AS stock_quantity,
+    n IN (3, 9, 15, 21, 27, 33, 39, 45) AS is_featured,
+    TRUE AS is_active
+  FROM category_config c
+  CROSS JOIN generate_series(1, 50) AS n
+)
 INSERT INTO public.products
   (id, category_id, name, slug, description, price, compare_at_price, sku, stock_quantity, is_featured, is_active)
-VALUES
--- ── ELECTRONICS (50 products) ──────────────────────────────
-('c1000000-0000-0000-0000-000000000001','a1000000-0000-0000-0000-000000000001','Wireless Noise-Cancelling Headphones','wireless-nc-headphones','Premium ANC headphones with 30-hour battery life and studio-quality sound.',199.99,279.99,'ELEC-001',85,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000002','a1000000-0000-0000-0000-000000000001','Mechanical Keyboard TKL','mechanical-keyboard-tkl','Tenkeyless mechanical keyboard with Cherry MX switches and RGB backlighting.',129.99,NULL,'ELEC-002',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000003','a1000000-0000-0000-0000-000000000001','4K USB-C Monitor 27"','4k-usbc-monitor-27','27-inch 4K IPS monitor with USB-C 90W PD and factory-calibrated colors.',549.00,649.00,'ELEC-003',40,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000004','a1000000-0000-0000-0000-000000000001','Portable SSD 1TB','portable-ssd-1tb','Pocket-sized NVMe SSD with 1050 MB/s read speed and USB 3.2 Gen 2.',89.99,119.99,'ELEC-004',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000005','a1000000-0000-0000-0000-000000000001','Wireless Charging Pad 15W','wireless-charging-pad-15w','Fast-charge pad compatible with all Qi devices including iPhone and Android.',34.99,NULL,'ELEC-005',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000006','a1000000-0000-0000-0000-000000000001','Smart LED Desk Lamp','smart-led-desk-lamp','Touch-dimmable LED lamp with color temperature control and USB-A charging port.',59.99,79.99,'ELEC-006',150,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000007','a1000000-0000-0000-0000-000000000001','Bluetooth Speaker Waterproof','bluetooth-speaker-waterproof','IPX7 waterproof portable speaker with 360° sound and 20-hour playback.',79.99,99.99,'ELEC-007',175,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000008','a1000000-0000-0000-0000-000000000001','USB-C Hub 10-in-1','usbc-hub-10in1','10-port USB-C hub with 4K HDMI, SD card, and 100W pass-through charging.',69.99,NULL,'ELEC-008',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000009','a1000000-0000-0000-0000-000000000001','Webcam 4K 60fps','webcam-4k-60fps','Ultra-HD webcam with dual microphone array and privacy shutter.',149.99,199.99,'ELEC-009',60,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000010','a1000000-0000-0000-0000-000000000001','Gaming Mouse 25K DPI','gaming-mouse-25k-dpi','Pro gaming mouse with 25,600 DPI optical sensor and 11 programmable buttons.',69.99,89.99,'ELEC-010',110,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000011','a1000000-0000-0000-0000-000000000001','Smart Plug Wi-Fi Pack 4','smart-plug-wifi-4','4-pack Wi-Fi smart plugs with energy monitoring and voice assistant support.',39.99,NULL,'ELEC-011',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000012','a1000000-0000-0000-0000-000000000001','Noise-Cancelling Earbuds','noise-cancelling-earbuds','True wireless earbuds with active noise cancellation and 8-hour battery.',129.99,159.99,'ELEC-012',130,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000013','a1000000-0000-0000-0000-000000000001','Portable Projector Mini','portable-projector-mini','720p mini projector with built-in speaker and 2-hour battery.',249.99,329.99,'ELEC-013',35,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000014','a1000000-0000-0000-0000-000000000001','NVMe SSD 500GB Internal','nvme-ssd-500gb','M.2 NVMe SSD with 3500 MB/s sequential read for laptops and desktops.',64.99,NULL,'ELEC-014',180,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000015','a1000000-0000-0000-0000-000000000001','Ergonomic Vertical Mouse','ergonomic-vertical-mouse','Wireless vertical mouse designed to reduce wrist strain with 6 buttons.',49.99,59.99,'ELEC-015',95,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000016','a1000000-0000-0000-0000-000000000001','Dual Monitor Arm','dual-monitor-arm','Fully adjustable dual monitor mount supporting up to 32" screens.',89.99,NULL,'ELEC-016',70,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000017','a1000000-0000-0000-0000-000000000001','Thunderbolt 4 Dock','thunderbolt4-dock','Premium Thunderbolt 4 dock with dual 4K support and 96W charging.',279.99,349.99,'ELEC-017',30,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000018','a1000000-0000-0000-0000-000000000001','Smart Home Hub','smart-home-hub','Central controller compatible with Zigbee, Z-Wave, and Wi-Fi devices.',99.99,129.99,'ELEC-018',55,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000019','a1000000-0000-0000-0000-000000000001','Mechanical Numpad','mechanical-numpad','Standalone TKL numpad with Cherry MX Blue switches.',49.99,NULL,'ELEC-019',80,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000020','a1000000-0000-0000-0000-000000000001','RGB LED Strip 5m','rgb-led-strip-5m','Wi-Fi RGB+W LED strip with app control and music sync mode.',29.99,39.99,'ELEC-020',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000021','a1000000-0000-0000-0000-000000000001','Laptop Stand Adjustable','laptop-stand-adjustable','Aluminum folding laptop stand with 7 height levels and non-slip pads.',39.99,NULL,'ELEC-021',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000022','a1000000-0000-0000-0000-000000000001','Smart Thermostat Wi-Fi','smart-thermostat-wifi','Learning thermostat with energy-saving schedule and remote control via app.',149.99,199.99,'ELEC-022',45,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000023','a1000000-0000-0000-0000-000000000001','Gaming Headset 7.1','gaming-headset-7-1','7.1 surround sound USB headset with noise-cancelling microphone.',79.99,99.99,'ELEC-023',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000024','a1000000-0000-0000-0000-000000000001','Wireless Keyboard Slim','wireless-keyboard-slim','Ultra-slim wireless keyboard with scissor switches and 12-month battery.',59.99,NULL,'ELEC-024',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000025','a1000000-0000-0000-0000-000000000001','HDMI 2.1 Cable 3m','hdmi-21-cable-3m','8K HDMI 2.1 cable supporting 48Gbps bandwidth and eARC.',19.99,NULL,'ELEC-025',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000026','a1000000-0000-0000-0000-000000000001','Network Switch 8-Port','network-switch-8port','Unmanaged 8-port Gigabit Ethernet switch with plug-and-play setup.',39.99,49.99,'ELEC-026',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000027','a1000000-0000-0000-0000-000000000001','Smart Doorbell Camera','smart-doorbell-camera','1080p video doorbell with two-way audio and motion detection alerts.',129.99,169.99,'ELEC-027',65,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000028','a1000000-0000-0000-0000-000000000001','USB Microphone Cardioid','usb-microphone-cardioid','Plug-and-play USB cardioid mic for podcasting and streaming.',89.99,NULL,'ELEC-028',75,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000029','a1000000-0000-0000-0000-000000000001','Drone with 4K Camera','drone-4k-camera','Foldable drone with 4K stabilised camera and 30-min flight time.',399.99,499.99,'ELEC-029',20,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000030','a1000000-0000-0000-0000-000000000001','Power Bank 26800mAh','power-bank-26800mah','High-capacity power bank with 65W USB-C PD and dual USB-A.',69.99,89.99,'ELEC-030',220,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000031','a1000000-0000-0000-0000-000000000001','Smart Display 8"','smart-display-8inch','8-inch smart display with built-in assistant, video calling, and smart home control.',179.99,229.99,'ELEC-031',40,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000032','a1000000-0000-0000-0000-000000000001','E-Ink Reader 10"','e-ink-reader-10inch','10-inch e-ink reader with warm/cool adjustable front light and waterproof design.',249.99,NULL,'ELEC-032',55,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000033','a1000000-0000-0000-0000-000000000001','Cable Management Kit','cable-management-kit','50-piece cable management kit with clips, sleeves, and Velcro ties.',14.99,NULL,'ELEC-033',600,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000034','a1000000-0000-0000-0000-000000000001','Surge Protector 8-Outlet','surge-protector-8outlet','8-outlet surge protector with 4 USB ports and 4320J protection rating.',49.99,59.99,'ELEC-034',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000035','a1000000-0000-0000-0000-000000000001','Action Camera 4K/120fps','action-camera-4k','Waterproof action camera with 4K/120fps, HyperSmooth stabilisation, and voice control.',349.99,429.99,'ELEC-035',50,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000036','a1000000-0000-0000-0000-000000000001','Wi-Fi 6 Router AX3000','wifi6-router-ax3000','Dual-band Wi-Fi 6 router with 3000Mbps aggregate speed and OFDMA.',149.99,199.99,'ELEC-036',80,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000037','a1000000-0000-0000-0000-000000000001','Drawing Tablet 10"','drawing-tablet-10inch','Pen display tablet with 8192 pressure levels and tilt recognition.',199.99,259.99,'ELEC-037',35,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000038','a1000000-0000-0000-0000-000000000001','Mini PC Intel N100','mini-pc-intel-n100','Ultra-compact desktop PC with Intel N100, 16GB RAM, 512GB NVMe.',299.99,349.99,'ELEC-038',25,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000039','a1000000-0000-0000-0000-000000000001','UPS 600VA','ups-600va','600VA uninterruptible power supply with AVR and LCD display.',89.99,NULL,'ELEC-039',45,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000040','a1000000-0000-0000-0000-000000000001','Screen Privacy Filter 15"','screen-privacy-filter-15','Magnetic privacy filter for 15.6" laptops blocking 60° side views.',29.99,NULL,'ELEC-040',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000041','a1000000-0000-0000-0000-000000000001','LED Ring Light 18"','led-ring-light-18inch','18-inch dimmable ring light with phone holder and tripod for content creation.',79.99,99.99,'ELEC-041',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000042','a1000000-0000-0000-0000-000000000001','Fingerprint USB Security Key','fingerprint-usb-security-key','FIDO2 fingerprint key supporting Windows Hello and web authentication.',49.99,NULL,'ELEC-042',75,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000043','a1000000-0000-0000-0000-000000000001','Smart Plug Energy Monitor','smart-plug-energy-monitor','Single smart plug with real-time energy monitoring and scheduling.',19.99,NULL,'ELEC-043',350,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000044','a1000000-0000-0000-0000-000000000001','Wireless Presenter Remote','wireless-presenter-remote','RF 2.4GHz presentation remote with laser pointer and volume control.',29.99,NULL,'ELEC-044',130,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000045','a1000000-0000-0000-0000-000000000001','USB Isolator Noise Filter','usb-isolator-noise-filter','USB noise isolator eliminating ground loop interference for audio setups.',34.99,NULL,'ELEC-045',60,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000046','a1000000-0000-0000-0000-000000000001','Smart Air Quality Monitor','smart-air-quality-monitor','Indoor air quality sensor tracking PM2.5, CO2, humidity, and temperature.',89.99,119.99,'ELEC-046',55,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000047','a1000000-0000-0000-0000-000000000001','Desk Pad XL Gaming','desk-pad-xl-gaming','900×400mm extended mouse pad with anti-slip base and stitched edges.',24.99,NULL,'ELEC-047',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000048','a1000000-0000-0000-0000-000000000001','Raspberry Pi 5 4GB','raspberry-pi-5-4gb','Latest Raspberry Pi 5 board with 4GB RAM for projects and learning.',79.99,NULL,'ELEC-048',40,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000049','a1000000-0000-0000-0000-000000000001','Digital Luggage Scale','digital-luggage-scale','50kg digital luggage scale with tare function and backlit display.',12.99,NULL,'ELEC-049',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000050','a1000000-0000-0000-0000-000000000001','Car Dash Cam 4K','car-dashcam-4k','Front + rear dual 4K dash cam with GPS, night vision, and parking mode.',179.99,229.99,'ELEC-050',65,TRUE,TRUE),
--- ── CLOTHING (50 products) ─────────────────────────────────
-('c1000000-0000-0000-0000-000000000051','a1000000-0000-0000-0000-000000000002','Classic White Oxford Shirt','classic-white-oxford-shirt','Slim-fit Oxford cotton shirt with button-down collar. Machine washable.',69.99,NULL,'CLTH-001',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000052','a1000000-0000-0000-0000-000000000002','Merino Wool Crewneck','merino-wool-crewneck','Superfine 17.5-micron merino crew in 8 seasonal colors.',129.99,159.99,'CLTH-002',150,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000053','a1000000-0000-0000-0000-000000000002','Slim Chino Trousers','slim-chino-trousers','Stretch twill chinos with a slim tapered cut. Available in 6 colors.',79.99,NULL,'CLTH-003',180,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000054','a1000000-0000-0000-0000-000000000002','French Terry Hoodie','french-terry-hoodie','Midweight French Terry pullover hoodie with kangaroo pocket.',89.99,109.99,'CLTH-004',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000055','a1000000-0000-0000-0000-000000000002','Japanese Denim Jeans','japanese-denim-jeans','Selvedge denim jeans with a slim straight cut. 14-oz Japanese cotton.',169.99,NULL,'CLTH-005',90,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000056','a1000000-0000-0000-0000-000000000002','Linen Overshirt Natural','linen-overshirt-natural','Relaxed-fit natural linen overshirt, perfect as a light layer.',89.99,NULL,'CLTH-006',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000057','a1000000-0000-0000-0000-000000000002','Wool Blend Overcoat','wool-blend-overcoat','Single-breasted wool-blend overcoat with notch lapels and flap pockets.',349.99,429.99,'CLTH-007',45,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000058','a1000000-0000-0000-0000-000000000002','5-Pack Cotton T-Shirts','5pack-cotton-tshirts','Classic crew-neck tees in a value 5-pack. 180gsm combed cotton.',49.99,NULL,'CLTH-008',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000059','a1000000-0000-0000-0000-000000000002','Jogger Sweatpants','jogger-sweatpants','Fleece joggers with elastic waist and tapered leg.',59.99,79.99,'CLTH-009',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000060','a1000000-0000-0000-0000-000000000002','Cashmere Beanie Hat','cashmere-beanie-hat','100% Grade-A cashmere ribbed beanie in 5 classic colors.',59.99,NULL,'CLTH-010',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000061','a1000000-0000-0000-0000-000000000002','Athletic Running Shorts','athletic-running-shorts','4" inseam running shorts with liner, reflective details, and zip pocket.',44.99,NULL,'CLTH-011',180,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000062','a1000000-0000-0000-0000-000000000002','Puffer Jacket Lightweight','puffer-jacket-lightweight','800-fill down puffer jacket that packs into its own pocket.',219.99,279.99,'CLTH-012',80,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000063','a1000000-0000-0000-0000-000000000002','Polo Shirt Pique','polo-shirt-pique','Classic pique polo with two-button placket in 10 colors.',59.99,NULL,'CLTH-013',220,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000064','a1000000-0000-0000-0000-000000000002','Leather Belt Brown','leather-belt-brown','Full-grain leather dress belt with nickel-free brass buckle.',49.99,NULL,'CLTH-014',150,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000065','a1000000-0000-0000-0000-000000000002','Graphic Tee Minimal','graphic-tee-minimal','100% organic cotton tee with minimal art print. Pre-washed for softness.',34.99,NULL,'CLTH-015',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000066','a1000000-0000-0000-0000-000000000002','Cargo Pants Ripstop','cargo-pants-ripstop','Technical ripstop cargo pants with 8 pockets and articulated knees.',119.99,149.99,'CLTH-016',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000067','a1000000-0000-0000-0000-000000000002','Merino Travel Socks 3-Pack','merino-travel-socks-3pack','Anti-blister merino wool socks with arch support, 3-pair pack.',34.99,NULL,'CLTH-017',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000068','a1000000-0000-0000-0000-000000000002','Quarter-Zip Fleece','quarter-zip-fleece','Anti-pill polar fleece quarter-zip with thumbholes and chin guard.',79.99,99.99,'CLTH-018',130,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000069','a1000000-0000-0000-0000-000000000002','Swim Trunks 7"','swim-trunks-7inch','Quick-dry swim trunks with mesh liner and secure zip pocket.',54.99,NULL,'CLTH-019',170,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000070','a1000000-0000-0000-0000-000000000002','Packable Rain Jacket','packable-rain-jacket','2.5-layer waterproof jacket with taped seams and packable hood.',149.99,189.99,'CLTH-020',95,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000071','a1000000-0000-0000-0000-000000000002','Canvas Sneakers Low','canvas-sneakers-low','Unisex low-top canvas sneakers with rubber cupsole. Vegan-friendly.',49.99,NULL,'CLTH-021',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000072','a1000000-0000-0000-0000-000000000002','Derby Leather Shoes','derby-leather-shoes','Full-grain leather derby shoes with leather sole and rubber heel.',229.99,299.99,'CLTH-022',55,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000073','a1000000-0000-0000-0000-000000000002','Hiking Boot Mid Waterproof','hiking-boot-mid-waterproof','Gore-Tex mid hiking boots with Vibram outsole and ankle support.',199.99,NULL,'CLTH-023',70,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000074','a1000000-0000-0000-0000-000000000002','Flannel Shirt Check','flannel-shirt-check','Soft brushed cotton flannel shirt in a classic check pattern.',69.99,NULL,'CLTH-024',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000075','a1000000-0000-0000-0000-000000000002','Knit Tie Wool','knit-tie-wool','Slim knit wool tie with square tip. Italian-made.',59.99,NULL,'CLTH-025',80,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000076','a1000000-0000-0000-0000-000000000002','Compression Base Layer','compression-base-layer','Thermal compression base layer with flat-lock seams for sport.',59.99,79.99,'CLTH-026',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000077','a1000000-0000-0000-0000-000000000002','Denim Jacket Washed','denim-jacket-washed','Classic washed denim trucker jacket with chest pockets.',99.99,NULL,'CLTH-027',110,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000078','a1000000-0000-0000-0000-000000000002','Cotton Boxer Briefs 3-Pack','cotton-boxer-briefs-3pack','Long-staple cotton boxer briefs with Y-front and 7% elastane, 3-pack.',34.99,NULL,'CLTH-028',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000079','a1000000-0000-0000-0000-000000000002','Crossbody Bag Canvas','crossbody-bag-canvas','Waxed canvas crossbody with leather trim and YKK zipper.',89.99,NULL,'CLTH-029',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000080','a1000000-0000-0000-0000-000000000002','Leather Wallet Bifold','leather-wallet-bifold','Slim bifold wallet in vegetable-tanned full-grain leather.',69.99,89.99,'CLTH-030',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000081','a1000000-0000-0000-0000-000000000002','Linen Trousers Summer','linen-trousers-summer','Relaxed linen trousers with elastic waist and side pockets.',79.99,NULL,'CLTH-031',130,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000082','a1000000-0000-0000-0000-000000000002','Quilted Gilet Vest','quilted-gilet-vest','Lightweight quilted vest with stand collar and interior pocket.',89.99,109.99,'CLTH-032',85,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000083','a1000000-0000-0000-0000-000000000002','Wide-Brim Sun Hat','wide-brim-sun-hat','Raffia straw wide-brim hat with UPF 50+ protection.',44.99,NULL,'CLTH-033',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000084','a1000000-0000-0000-0000-000000000002','Leather Gloves Lined','leather-gloves-lined','Soft nappa leather gloves with cashmere lining.',79.99,NULL,'CLTH-034',95,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000085','a1000000-0000-0000-0000-000000000002','Turtleneck Sweater','turtleneck-sweater','Heavyweight cotton-wool turtleneck in 4 seasonal colors.',99.99,NULL,'CLTH-035',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000086','a1000000-0000-0000-0000-000000000002','Slim Suit Jacket','slim-suit-jacket','Virgin wool slim suit jacket with half-canvassed construction.',449.99,549.99,'CLTH-036',30,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000087','a1000000-0000-0000-0000-000000000002','Chelsea Boots Suede','chelsea-boots-suede','Premium suede chelsea boots with elastic side panels and leather sole.',249.99,NULL,'CLTH-037',60,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000088','a1000000-0000-0000-0000-000000000002','Tech Fleece Pants','tech-fleece-pants','Slim-fit tech fleece trousers with side zip pockets and tapered ankle.',89.99,109.99,'CLTH-038',110,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000089','a1000000-0000-0000-0000-000000000002','Woven Scarf Cashmere','woven-scarf-cashmere','100% cashmere scarf in herringbone weave, 180×35cm.',119.99,NULL,'CLTH-039',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000090','a1000000-0000-0000-0000-000000000002','Bucket Hat Ripstop','bucket-hat-ripstop','Packable nylon ripstop bucket hat with UPF 50+ and chin cord.',34.99,NULL,'CLTH-040',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000091','a1000000-0000-0000-0000-000000000002','Knit Polo Long-Sleeve','knit-polo-long-sleeve','Cotton-modal long-sleeve knit polo with ribbed collar.',89.99,NULL,'CLTH-041',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000092','a1000000-0000-0000-0000-000000000002','High-Top Leather Trainers','high-top-leather-trainers','Italian leather high-top trainers with cushioned sole.',179.99,229.99,'CLTH-042',65,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000093','a1000000-0000-0000-0000-000000000002','Mountain Hardshell Jacket','mountain-hardshell-jacket','3-layer Gore-Tex Pro hardshell with helmet-compatible hood.',549.99,649.99,'CLTH-043',25,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000094','a1000000-0000-0000-0000-000000000002','Linen-Cotton Blazer','linen-cotton-blazer','Unstructured linen-cotton blazer for smart-casual dressing.',249.99,NULL,'CLTH-044',50,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000095','a1000000-0000-0000-0000-000000000002','Padded Anorak Jacket','padded-anorak-jacket','Water-resistant padded anorak with kangaroo pocket and drawcord hem.',149.99,189.99,'CLTH-045',75,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000096','a1000000-0000-0000-0000-000000000002','Henley Long-Sleeve','henley-long-sleeve','Heavyweight cotton waffle-knit henley with 3-button placket.',59.99,NULL,'CLTH-046',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000097','a1000000-0000-0000-0000-000000000002','Tropical Print Shirt','tropical-print-shirt','Relaxed resort-style shirt in lightweight viscose with tropical print.',69.99,NULL,'CLTH-047',130,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000098','a1000000-0000-0000-0000-000000000002','Suede Chukka Boots','suede-chukka-boots','Two-eyelet suede chukka boots on crepe sole.',199.99,NULL,'CLTH-048',70,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000099','a1000000-0000-0000-0000-000000000002','Stretch Swim Briefs','stretch-swim-briefs','Competition-style swim briefs in chlorine-resistant stretch fabric.',34.99,NULL,'CLTH-049',180,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000100','a1000000-0000-0000-0000-000000000002','Double-Face Cardigan','double-face-cardigan','Reversible double-face wool cardigan with horn buttons.',179.99,219.99,'CLTH-050',55,FALSE,TRUE),
--- ── HOME & GARDEN (50 products) ────────────────────────────
-('c1000000-0000-0000-0000-000000000101','a1000000-0000-0000-0000-000000000003','Cast Iron Dutch Oven 5.5qt','cast-iron-dutch-oven','Enameled cast iron dutch oven with self-basting lid.',149.99,179.99,'HOME-001',80,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000102','a1000000-0000-0000-0000-000000000003','Ceramic Pour-Over Set','ceramic-pour-over-set','Hand-thrown ceramic dripper, carafe, and filter holder set.',79.99,NULL,'HOME-002',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000103','a1000000-0000-0000-0000-000000000003','Linen Duvet Cover King','linen-duvet-cover-king','Stone-washed 100% French flax linen duvet cover, king size.',199.99,249.99,'HOME-003',60,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000104','a1000000-0000-0000-0000-000000000003','Bamboo Cutting Board Set','bamboo-cutting-board-set','3-piece bamboo cutting board set with juice groove and handles.',44.99,NULL,'HOME-004',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000105','a1000000-0000-0000-0000-000000000003','Robotic Vacuum & Mop','robotic-vacuum-mop','Self-emptying robot vacuum with lidar mapping and mop function.',499.99,599.99,'HOME-005',30,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000106','a1000000-0000-0000-0000-000000000003','Scented Soy Candle Set','scented-soy-candle-set','4-candle set in amber glass jars with botanical fragrance blends.',59.99,NULL,'HOME-006',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000107','a1000000-0000-0000-0000-000000000003','Stainless Steel Knife Block Set','knife-block-set','7-piece German steel knife set with solid walnut block.',229.99,299.99,'HOME-007',55,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000108','a1000000-0000-0000-0000-000000000003','Espresso Machine Semi-Auto','espresso-machine-semiauto','15-bar thermoblock espresso machine with steam wand and PID.',399.99,499.99,'HOME-008',25,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000109','a1000000-0000-0000-0000-000000000003','Indoor Plant Pot Set Ceramic','plant-pot-set-ceramic','Set of 5 glazed ceramic pots with drainage holes, 3"–8".',49.99,NULL,'HOME-009',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000110','a1000000-0000-0000-0000-000000000003','Weighted Blanket 15lbs','weighted-blanket-15lbs','Breathable cotton weighted blanket filled with glass beads.',89.99,119.99,'HOME-010',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000111','a1000000-0000-0000-0000-000000000003','Air Purifier HEPA H13','air-purifier-hepa-h13','True HEPA H13 air purifier for rooms up to 400 sq ft.',179.99,229.99,'HOME-011',65,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000112','a1000000-0000-0000-0000-000000000003','Blackout Curtains 2-Panel','blackout-curtains-2panel','Total blackout thermal curtains with grommets, 52"×84".',59.99,NULL,'HOME-012',150,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000113','a1000000-0000-0000-0000-000000000003','French Press Coffee 1L','french-press-coffee-1l','Borosilicate glass French press with double stainless filter.',39.99,NULL,'HOME-013',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000114','a1000000-0000-0000-0000-000000000003','Memory Foam Pillow','memory-foam-pillow','Shredded memory foam pillow with bamboo cover. Adjustable loft.',59.99,79.99,'HOME-014',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000115','a1000000-0000-0000-0000-000000000003','Stainless Travel Mug 16oz','stainless-travel-mug-16oz','Double-wall vacuum insulated mug keeping drinks hot 12hrs.',34.99,NULL,'HOME-015',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000116','a1000000-0000-0000-0000-000000000003','Hardwood Floor Lamp Arc','hardwood-floor-lamp-arc','Walnut-base arc floor lamp with linen shade and inline dimmer.',299.99,379.99,'HOME-016',35,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000117','a1000000-0000-0000-0000-000000000003','Herb Garden Starter Kit','herb-garden-starter-kit','Self-watering planter with organic soil and basil, mint, parsley seeds.',39.99,NULL,'HOME-017',180,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000118','a1000000-0000-0000-0000-000000000003','Cork Board 24x36','cork-board-24x36','Natural cork notice board with aluminium frame and mounting kit.',29.99,NULL,'HOME-018',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000119','a1000000-0000-0000-0000-000000000003','Kitchen Scale Digital','kitchen-scale-digital','High-precision 0.1g kitchen scale with tare function and stainless platform.',24.99,NULL,'HOME-019',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000120','a1000000-0000-0000-0000-000000000003','Wicker Storage Basket Set','wicker-storage-basket-set','Set of 3 water hyacinth storage baskets with handles.',69.99,89.99,'HOME-020',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000121','a1000000-0000-0000-0000-000000000003','Bamboo Bath Mat','bamboo-bath-mat','Anti-slip bamboo bath mat with adjustable slats.',34.99,NULL,'HOME-021',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000122','a1000000-0000-0000-0000-000000000003','Cast Iron Skillet 12"','cast-iron-skillet-12inch','Pre-seasoned 12-inch cast iron skillet with helper handle.',49.99,NULL,'HOME-022',150,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000123','a1000000-0000-0000-0000-000000000003','Wooden Wall Clock','wooden-wall-clock','Minimalist silent walnut wall clock with brass hands.',79.99,NULL,'HOME-023',85,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000124','a1000000-0000-0000-0000-000000000003','Spice Rack Wall-Mounted','spice-rack-wall-mounted','Magnetic wall-mounted spice rack with 12 stainless tins.',59.99,79.99,'HOME-024',110,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000125','a1000000-0000-0000-0000-000000000003','Terrarium Glass Kit','terrarium-glass-kit','Geometric glass terrarium with misting bottle and gravel kit.',49.99,NULL,'HOME-025',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000126','a1000000-0000-0000-0000-000000000003','Compost Bin Kitchen 5L','compost-bin-kitchen','Stainless steel kitchen compost bin with carbon filter lid.',34.99,NULL,'HOME-026',170,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000127','a1000000-0000-0000-0000-000000000003','Towel Set Organic Cotton','towel-set-organic-cotton','600gsm GOTS-certified organic cotton 6-piece towel set.',99.99,129.99,'HOME-027',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000128','a1000000-0000-0000-0000-000000000003','Bee House for Garden','bee-house-garden','Cedar mason bee house attracting native pollinators.',29.99,NULL,'HOME-028',150,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000129','a1000000-0000-0000-0000-000000000003','Book Nook LED Kit','book-nook-led-kit','DIY book nook insert kit with warm LED strip for shelves.',44.99,59.99,'HOME-029',80,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000130','a1000000-0000-0000-0000-000000000003','Stainless Dish Drying Rack','dish-drying-rack','Compact 2-tier stainless drying rack with utensil holder.',44.99,NULL,'HOME-030',190,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000131','a1000000-0000-0000-0000-000000000003','Cocktail Mixing Set 8pc','cocktail-mixing-set','Professional 8-piece bartender kit with weighted shaker and velvet bag.',69.99,89.99,'HOME-031',75,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000132','a1000000-0000-0000-0000-000000000003','Electric Kettle Gooseneck','electric-kettle-gooseneck','600ml gooseneck electric kettle with 6 temperature presets.',79.99,99.99,'HOME-032',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000133','a1000000-0000-0000-0000-000000000003','Garden Kneeler Padded','garden-kneeler-padded','Foam-padded garden kneeler that converts into a seat bench.',29.99,NULL,'HOME-033',130,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000134','a1000000-0000-0000-0000-000000000003','Glass Water Carafe 1.5L','glass-water-carafe','Borosilicate glass water carafe with cork stopper.',29.99,NULL,'HOME-034',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000135','a1000000-0000-0000-0000-000000000003','Non-Stick Cookware Set 10pc','nonstick-cookware-set','PFOA-free ceramic non-stick 10-piece cookware set.',249.99,319.99,'HOME-035',45,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000136','a1000000-0000-0000-0000-000000000003','Beeswax Wrap Pack 3','beeswax-wrap-3pack','Reusable beeswax food wraps in 3 sizes, replacing plastic wrap.',24.99,NULL,'HOME-036',350,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000137','a1000000-0000-0000-0000-000000000003','Bedside Table Lamp Rattan','bedside-lamp-rattan','Natural rattan bedside lamp with linen shade and USB-A port.',89.99,NULL,'HOME-037',75,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000138','a1000000-0000-0000-0000-000000000003','Grow Light Full Spectrum','grow-light-full-spectrum','LED full-spectrum grow light with timer and adjustable gooseneck.',49.99,59.99,'HOME-038',110,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000139','a1000000-0000-0000-0000-000000000003','Ceramic Diffuser Oil','ceramic-diffuser-oil','Ultrasonic aromatherapy diffuser with 400ml tank and mood lighting.',49.99,NULL,'HOME-039',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000140','a1000000-0000-0000-0000-000000000003','Stand Mixer 6-Speed','stand-mixer-6speed','4.5-quart tilt-head stand mixer with 6-speed motor and 3 attachments.',279.99,349.99,'HOME-040',35,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000141','a1000000-0000-0000-0000-000000000003','Magnetic Knife Strip 18"','magnetic-knife-strip','Strong 18-inch walnut magnetic knife strip holding 12+ knives.',39.99,NULL,'HOME-041',130,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000142','a1000000-0000-0000-0000-000000000003','Acacia Serving Board','acacia-serving-board','Large acacia wood charcuterie and serving board with juice groove.',59.99,NULL,'HOME-042',120,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000143','a1000000-0000-0000-0000-000000000003','Washi Tape Set 20 Rolls','washi-tape-set-20','Decorative washi tape variety set for journaling and crafts.',19.99,NULL,'HOME-043',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000144','a1000000-0000-0000-0000-000000000003','Folding Drying Rack XL','folding-drying-rack-xl','Heavy-duty folding laundry drying rack with 20m drying space.',49.99,NULL,'HOME-044',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000145','a1000000-0000-0000-0000-000000000003','Cotton Rope Hammock','cotton-rope-hammock','Hand-woven cotton rope hammock with spreader bars and hanging kit.',119.99,149.99,'HOME-045',50,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000146','a1000000-0000-0000-0000-000000000003','Ceramic Dinnerware Set 12pc','ceramic-dinnerware-12pc','Reactive glaze stoneware 12-piece dinnerware set for 4.',149.99,199.99,'HOME-046',65,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000147','a1000000-0000-0000-0000-000000000003','Heirloom Seed Collection','heirloom-seed-collection','35-variety heirloom vegetable and herb seed collection.',34.99,NULL,'HOME-047',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000148','a1000000-0000-0000-0000-000000000003','Desk Organiser Walnut','desk-organiser-walnut','Solid walnut desk organiser with pen holder and phone stand.',59.99,NULL,'HOME-048',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000149','a1000000-0000-0000-0000-000000000003','Outdoor Solar Lantern','outdoor-solar-lantern','Metal and glass solar lantern for patio and garden use.',44.99,NULL,'HOME-049',160,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000150','a1000000-0000-0000-0000-000000000003','High-Pressure Shower Head','high-pressure-shower-head','Adjustable high-pressure filtered shower head with 9 spray modes.',49.99,69.99,'HOME-050',180,FALSE,TRUE),
--- ── SMARTPHONES (50 products) ──────────────────────────────
-('c1000000-0000-0000-0000-000000000151','a1000000-0000-0000-0000-000000000004','MagSafe Wallet Card Holder','magsafe-wallet-card-holder','Magnetic card wallet compatible with MagSafe, holds 3 cards.',39.99,NULL,'SMRT-001',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000152','a1000000-0000-0000-0000-000000000004','Tempered Glass Screen Protector 3-Pack','tempered-glass-3pack','9H hardness tempered glass for flagship phones, 3-pack with applicator.',14.99,NULL,'SMRT-002',600,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000153','a1000000-0000-0000-0000-000000000004','GaN Charger 100W 4-Port','gan-charger-100w-4port','GaN 100W multi-port charger powering 4 devices simultaneously.',59.99,79.99,'SMRT-003',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000154','a1000000-0000-0000-0000-000000000004','Phone Stand Adjustable Aluminum','phone-stand-aluminum','Foldable aluminum phone stand with 270° adjustment.',19.99,NULL,'SMRT-004',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000155','a1000000-0000-0000-0000-000000000004','Wireless Charging Stand 3-in-1','wireless-charging-stand-3in1','Charge phone, watch, and earbuds simultaneously. 15W fast charging.',59.99,79.99,'SMRT-005',180,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000156','a1000000-0000-0000-0000-000000000004','Clear MagSafe Case','clear-magsafe-case','Military-grade drop protection clear case with MagSafe compatibility.',39.99,NULL,'SMRT-006',350,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000157','a1000000-0000-0000-0000-000000000004','Phone Grip Ring Holder','phone-grip-ring-holder','360° rotating ring grip and stand with adhesive back.',12.99,NULL,'SMRT-007',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000158','a1000000-0000-0000-0000-000000000004','USB-C Fast Charge Cable 2m Braided','usbc-cable-2m-braided','240W 2-meter nylon braided USB-C cable rated for fast charging.',19.99,NULL,'SMRT-008',600,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000159','a1000000-0000-0000-0000-000000000004','Bluetooth Car Mount Charger','bluetooth-car-mount-charger','Wireless charging car mount with Bluetooth FM transmitter and hands-free.',49.99,69.99,'SMRT-009',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000160','a1000000-0000-0000-0000-000000000004','Privacy Screen Protector Anti-Spy','privacy-screen-protector','9H anti-spy tempered glass with oleophobic coating.',19.99,NULL,'SMRT-010',350,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000161','a1000000-0000-0000-0000-000000000004','Magsafe Battery Pack 5000mAh','magsafe-battery-pack','MagSafe-compatible 5000mAh battery with 7.5W wireless output.',89.99,99.99,'SMRT-011',130,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000162','a1000000-0000-0000-0000-000000000004','Camera Lens Kit 4-in-1','camera-lens-kit-4in1','Clip-on 4-lens kit: fisheye, wide, macro, and 2× telephoto.',34.99,NULL,'SMRT-012',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000163','a1000000-0000-0000-0000-000000000004','Wallet Case Leather Premium','wallet-case-leather','Full-grain leather flip wallet case with 3 card slots.',69.99,89.99,'SMRT-013',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000164','a1000000-0000-0000-0000-000000000004','Slim Hard Shell Case Frosted','slim-hard-shell-frosted','Ultra-thin 0.8mm frosted hard shell case with matte finish.',14.99,NULL,'SMRT-014',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000165','a1000000-0000-0000-0000-000000000004','Phone Sanitizer UV Box','phone-sanitizer-uv','UV-C sanitizing box killing 99.9% of bacteria in 10 minutes.',49.99,NULL,'SMRT-015',90,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000166','a1000000-0000-0000-0000-000000000004','Gimbal Stabiliser 3-Axis','gimbal-stabiliser-3axis','3-axis motorised gimbal for smooth smartphone video recording.',129.99,169.99,'SMRT-016',60,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000167','a1000000-0000-0000-0000-000000000004','Bike Phone Mount','bike-phone-mount','Vibration-damping bike phone mount with one-touch release.',24.99,NULL,'SMRT-017',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000168','a1000000-0000-0000-0000-000000000004','Car Phone Holder Dashboard','car-phone-holder-dashboard','360° adjustable dashboard suction phone holder for all phones.',16.99,NULL,'SMRT-018',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000169','a1000000-0000-0000-0000-000000000004','Armband Sports Phone Holder','armband-sports-holder','Adjustable neoprene armband for 6.7" phones with key pocket.',19.99,NULL,'SMRT-019',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000170','a1000000-0000-0000-0000-000000000004','USB-C to Lightning Adapter','usbc-lightning-adapter','MFi-certified USB-C to Lightning adapter for data and charging.',19.99,NULL,'SMRT-020',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000171','a1000000-0000-0000-0000-000000000004','Dual SIM Card Tray Tool Kit','sim-tray-tool-kit','50-piece SIM ejector pin tool kit in aluminium case.',9.99,NULL,'SMRT-021',600,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000172','a1000000-0000-0000-0000-000000000004','AirTag Key Ring Holder','airtag-keyring-holder','Genuine leather key ring holder for AirTag with engraving.',24.99,NULL,'SMRT-022',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000173','a1000000-0000-0000-0000-000000000004','Titanium Phone Case Ultra-Thin','titanium-phone-case','Marine-grade titanium frame phone bumper case with Gorilla Glass back.',199.99,249.99,'SMRT-023',30,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000174','a1000000-0000-0000-0000-000000000004','Smart Ring Fitness Tracker','smart-ring-fitness','Titanium smart ring tracking sleep, HRV, SpO2, and activity.',299.99,NULL,'SMRT-024',45,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000175','a1000000-0000-0000-0000-000000000004','LED Selfie Light Ring Clip','led-selfie-ring-clip','Clip-on 3-mode LED selfie ring light with flexible gooseneck.',14.99,NULL,'SMRT-025',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000176','a1000000-0000-0000-0000-000000000004','GaN Travel Adapter Universal','gan-travel-adapter','65W GaN travel adapter with plugs for 150+ countries and USB-C PD.',49.99,NULL,'SMRT-026',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000177','a1000000-0000-0000-0000-000000000004','Phone Pouch Waterproof 2-Pack','phone-pouch-waterproof','IPX8 waterproof phone pouch up to 7" with touch-sensitive front.',19.99,NULL,'SMRT-027',350,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000178','a1000000-0000-0000-0000-000000000004','Micro SD Card 512GB','microsd-512gb','A2 UHS-I U3 512GB microSD card with 180 MB/s read speed.',49.99,69.99,'SMRT-028',300,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000179','a1000000-0000-0000-0000-000000000004','Lavalier Microphone USB-C','lavalier-mic-usbc','Plug-and-play USB-C lapel microphone for smartphone video.',39.99,NULL,'SMRT-029',140,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000180','a1000000-0000-0000-0000-000000000004','OTG Adapter USB-C Hub','otg-adapter-usbc-hub','5-in-1 OTG adapter with USB-A, HDMI, SD, and 60W pass-through.',39.99,NULL,'SMRT-030',250,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000181','a1000000-0000-0000-0000-000000000004','Rugged Shockproof Case','rugged-shockproof-case','Military MIL-STD-810G rated rugged case with screen protector built-in.',44.99,NULL,'SMRT-031',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000182','a1000000-0000-0000-0000-000000000004','Lightning to 3.5mm Adapter','lightning-35mm-adapter','MFi-certified Lightning to 3.5mm DAC adapter for headphones.',19.99,NULL,'SMRT-032',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000183','a1000000-0000-0000-0000-000000000004','Wireless Earbuds ANC Sports','wireless-earbuds-anc-sports','IPX5 wireless earbuds with ANC, sport ear hooks, and 8-hr battery.',99.99,129.99,'SMRT-033',150,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000184','a1000000-0000-0000-0000-000000000004','Phone Repair Kit Pro','phone-repair-kit-pro','68-piece precision phone repair tool kit with iFixit-grade tools.',49.99,NULL,'SMRT-034',80,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000185','a1000000-0000-0000-0000-000000000004','Charging Cable Organiser','charging-cable-organiser','PU leather charging cable organiser roll holding 12 cables.',24.99,NULL,'SMRT-035',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000186','a1000000-0000-0000-0000-000000000004','Lens Cleaning Kit','lens-cleaning-kit','Professional lens cleaning kit with microfibre cloths, solution, and bulb blower.',14.99,NULL,'SMRT-036',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000187','a1000000-0000-0000-0000-000000000004','Smart Tag Bluetooth Tracker','smart-tag-bluetooth','Replaceable-battery Bluetooth tracker with crowd-find network.',29.99,NULL,'SMRT-037',350,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000188','a1000000-0000-0000-0000-000000000004','Folding Phone Stand Multi-Angle','folding-phone-stand-multi','Lightweight folding phone stand with 270° angle range.',12.99,NULL,'SMRT-038',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000189','a1000000-0000-0000-0000-000000000004','GaN 30W Compact Charger','gan-30w-compact','Single USB-C 30W GaN charger as small as original Apple block.',29.99,NULL,'SMRT-039',400,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000190','a1000000-0000-0000-0000-000000000004','Phone Screen Replacement Kit','phone-screen-replacement','Premium OLED replacement screen kit with tools for popular models.',79.99,NULL,'SMRT-040',60,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000191','a1000000-0000-0000-0000-000000000004','Waterproof Case Diving 40m','waterproof-case-diving','Sealed waterproof case certified to 40m depth for underwater shooting.',59.99,79.99,'SMRT-041',75,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000192','a1000000-0000-0000-0000-000000000004','Night Vision Phone Scope','night-vision-phone-scope','Clip-on night vision monocular scope with IR illuminator for phones.',149.99,199.99,'SMRT-042',25,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000193','a1000000-0000-0000-0000-000000000004','Pop Socket Grip Customisable','popsocket-grip','Customisable PopSocket grip and stand with swappable tops.',14.99,NULL,'SMRT-043',600,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000194','a1000000-0000-0000-0000-000000000004','Smart Wallet RFID Blocking','smart-wallet-rfid','Ultra-slim RFID-blocking smart wallet with money clip, 4 cards.',49.99,NULL,'SMRT-044',180,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000195','a1000000-0000-0000-0000-000000000004','USB-C Docking Station Vertical','usbc-docking-vertical','Vertical USB-C 7-in-1 dock with HDMI 4K, USB-A, and SD card reader.',69.99,NULL,'SMRT-045',100,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000196','a1000000-0000-0000-0000-000000000004','Phone Back Glass Repair Set','phone-back-glass-repair','Back glass replacement set with UV adhesive and removal tool.',29.99,NULL,'SMRT-046',80,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000197','a1000000-0000-0000-0000-000000000004','Foldable Bluetooth Keyboard','foldable-bluetooth-keyboard','Tri-fold bluetooth keyboard with touchpad for phone and tablet.',79.99,99.99,'SMRT-047',90,TRUE,TRUE),
-('c1000000-0000-0000-0000-000000000198','a1000000-0000-0000-0000-000000000004','Screen Cleaning Spray Kit','screen-cleaning-spray','200ml anti-static screen cleaner with microfibre cloth 2-pack.',12.99,NULL,'SMRT-048',500,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000199','a1000000-0000-0000-0000-000000000004','Lanyard Phone Case','lanyard-phone-case','Crossbody lanyard phone case with card holder and detachable strap.',34.99,NULL,'SMRT-049',200,FALSE,TRUE),
-('c1000000-0000-0000-0000-000000000200','a1000000-0000-0000-0000-000000000004','Dual Wireless Charging Pad','dual-wireless-charging-pad','Side-by-side dual 15W Qi wireless charging pad for two devices.',49.99,69.99,'SMRT-050',160,FALSE,TRUE)
-ON CONFLICT (slug) DO NOTHING;
-
--- Product images (one primary image per product)
-INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_primary)
 SELECT
   id,
-  'https://placehold.co/600x600?text=' || replace(name, ' ', '+'),
+  category_id,
   name,
-  0,
-  TRUE
-FROM public.products
-WHERE id::text LIKE 'c1000000%'
-ON CONFLICT DO NOTHING;
+  slug,
+  description,
+  price,
+  compare_at_price,
+  sku,
+  stock_quantity,
+  is_featured,
+  is_active
+FROM generated
+ON CONFLICT (slug) DO UPDATE
+SET
+  category_id = EXCLUDED.category_id,
+  name = EXCLUDED.name,
+  description = EXCLUDED.description,
+  price = EXCLUDED.price,
+  compare_at_price = EXCLUDED.compare_at_price,
+  sku = EXCLUDED.sku,
+  stock_quantity = EXCLUDED.stock_quantity,
+  is_featured = EXCLUDED.is_featured,
+  is_active = EXCLUDED.is_active,
+  updated_at = now();
+
+INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_primary)
+SELECT
+  p.id,
+  'https://picsum.photos/seed/' || p.slug || '/1200/1200' AS url,
+  p.name AS alt_text,
+  0 AS sort_order,
+  TRUE AS is_primary
+FROM public.products p
+WHERE p.id::text LIKE 'd2000000-%'
+ON CONFLICT (product_id) WHERE (is_primary) DO UPDATE
+SET
+  url = EXCLUDED.url,
+  alt_text = EXCLUDED.alt_text,
+  sort_order = 0;
+
+COMMIT;

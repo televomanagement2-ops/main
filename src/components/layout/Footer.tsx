@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useI18n } from '../../lib/i18n';
 
 export function Footer() {
   const year = new Date().getFullYear();
+  const { t } = useI18n();
 
   return (
     <footer className="footer">
@@ -11,49 +13,49 @@ export function Footer() {
             Shop<span>Base</span>
           </Link>
           <p className="footer-brand-copy">
-            Curated essentials, clear pricing and a smoother shopping experience.
+            {t('footer.tagline')}
           </p>
           <div className="footer-contact-pill">
-            <span>Support</span>
-            <a href="mailto:support@shopbase.example">support@shopbase.example</a>
+            <span>{t('footer.support')}</span>
+            <a href="mailto:support@shopbase.com">support@shopbase.com</a>
           </div>
         </div>
 
         <div className="footer-columns">
           <div className="footer-column">
-            <p className="footer-column__title">Contattaci</p>
-            <Link to="/" className="footer-link">Live chat</Link>
-            <a href="mailto:support@shopbase.example" className="footer-link">Email support</a>
-            <a href="tel:+390212345678" className="footer-link">+39 02 1234 5678</a>
+            <p className="footer-column__title">{t('footer.contact')}</p>
+            <Link to="/help" className="footer-link">{t('footer.liveChat')}</Link>
+            <a href="mailto:support@shopbase.com" className="footer-link">{t('footer.emailSupport')}</a>
+            <a href="tel:+390000000000" className="footer-link">+39 000 000 0000</a>
           </div>
 
           <div className="footer-column">
-            <p className="footer-column__title">Aiuto</p>
-            <Link to="/products" className="footer-link">Shop products</Link>
-            <Link to="/cart" className="footer-link">Cart & checkout</Link>
-            <Link to="/orders" className="footer-link">Order tracking</Link>
+            <p className="footer-column__title">{t('footer.help')}</p>
+            <Link to="/help" className="footer-link">{t('footer.faq')}</Link>
+            <Link to="/help" className="footer-link">{t('footer.ordersPayments')}</Link>
+            <Link to="/help" className="footer-link">{t('footer.shippingReturns')}</Link>
           </div>
 
           <div className="footer-column">
-            <p className="footer-column__title">Azienda</p>
-            <Link to="/" className="footer-link">About ShopBase</Link>
-            <Link to="/products" className="footer-link">Categories</Link>
-            <Link to="/login" className="footer-link">Account</Link>
+            <p className="footer-column__title">{t('footer.company')}</p>
+            <Link to="/help" className="footer-link">{t('footer.about')}</Link>
+            <Link to="/products" className="footer-link">{t('footer.categories')}</Link>
+            <Link to="/settings" className="footer-link">{t('footer.settings')}</Link>
           </div>
 
           <div className="footer-column">
-            <p className="footer-column__title">Privacy</p>
-            <Link to="/" className="footer-link">Privacy policy</Link>
-            <Link to="/" className="footer-link">Terms of service</Link>
-            <Link to="/" className="footer-link">Cookie preferences</Link>
+            <p className="footer-column__title">{t('footer.privacy')}</p>
+            <Link to="/privacy" className="footer-link">{t('footer.privacyPolicy')}</Link>
+            <Link to="/privacy#terms" className="footer-link">{t('footer.terms')}</Link>
+            <Link to="/privacy" className="footer-link">{t('footer.cookie')}</Link>
           </div>
         </div>
 
         <div className="footer-bottom">
           <p className="footer-copy">&copy; {year} ShopBase</p>
           <div className="footer-bottom__meta">
-            <span>IT</span>
-            <span>Italy</span>
+            <span>{t('footer.countryCode')}</span>
+            <span>{t('footer.countryName')}</span>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useCategories } from '../../../hooks/useCategories';
+import { useI18n } from '../../../lib/i18n';
 import type { ProductFilters } from '../../../types';
 
 interface Props {
@@ -10,12 +11,13 @@ interface Props {
 
 export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: Props) {
   const { data: categories = [] } = useCategories();
+  const { t, tCount } = useI18n();
 
   return (
     <div className="filters-bar">
       <input
         type="search"
-        placeholder="Search products…"
+        placeholder={t('products.searchPlaceholder')}
         value={filters.search ?? ''}
         onChange={(e) => onChange({ search: e.target.value || undefined, page: 1 })}
         className="input filters-bar__search"
@@ -27,7 +29,7 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
         className="select"
         style={{ width: 'auto', minWidth: 148 }}
       >
-        <option value="">All categories</option>
+        <option value="">{t('products.allCategories')}</option>
         {categories.map((cat) => (
           <option key={cat.id} value={cat.slug}>{cat.name}</option>
         ))}
@@ -36,7 +38,7 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
       <div className="filters-bar__price">
         <input
           type="number"
-          placeholder="Min $"
+          placeholder={t('products.minPrice')}
           value={filters.minPrice ?? ''}
           onChange={(e) => onChange({ minPrice: e.target.value ? +e.target.value : undefined, page: 1 })}
           className="input input-sm"
@@ -46,7 +48,7 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
         <span className="filters-bar__sep">–</span>
         <input
           type="number"
-          placeholder="Max $"
+          placeholder={t('products.maxPrice')}
           value={filters.maxPrice ?? ''}
           onChange={(e) => onChange({ maxPrice: e.target.value ? +e.target.value : undefined, page: 1 })}
           className="input input-sm"
@@ -56,7 +58,7 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
       </div>
 
       <span className="results-count">
-        {isLoading ? 'Loading…' : `${totalCount} product${totalCount !== 1 ? 's' : ''}`}
+        {isLoading ? t('products.loading') : tCount('products.results', totalCount)}
       </span>
     </div>
   );

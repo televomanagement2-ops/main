@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useCartStore } from '../../../store/cartStore';
 import { CartItemRow } from '../components/CartItemRow';
 import { BackButton } from '../../../components/ui/BackButton';
+import { useI18n } from '../../../lib/i18n';
 
 const TAX_RATE = 0.1;
 
@@ -9,6 +10,7 @@ export function CartPage() {
   const items     = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
   const subtotal  = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const { t, tCount, formatCurrency } = useI18n();
 
   if (items.length === 0) {
     return (
@@ -19,10 +21,10 @@ export function CartPage() {
             <line x1="3" y1="6" x2="21" y2="6"/>
             <path d="M16 10a4 4 0 01-8 0"/>
           </svg>
-          <p className="cart-empty-state__title">Your cart is empty</p>
-          <p className="cart-empty-state__sub">Add some products and they'll appear here.</p>
+          <p className="cart-empty-state__title">{t('cart.emptyTitle')}</p>
+          <p className="cart-empty-state__sub">{t('cart.emptySubtitle')}</p>
           <Link to="/products" className="btn btn-primary btn-lg" style={{ marginTop: 'var(--sp-2)' }}>
-            Browse products
+            {t('cart.browseProducts')}
           </Link>
         </div>
       </div>
@@ -37,13 +39,13 @@ export function CartPage() {
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
       <BackButton />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--sp-8)' }}>
-        <h1 className="heading-1" style={{ marginBottom: 0 }}>Your Cart</h1>
+        <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('cart.title')}</h1>
         <button
           onClick={clearCart}
           className="btn btn-ghost btn-sm"
           style={{ color: 'var(--color-text-3)' }}
         >
-          Clear all
+          {t('cart.clearAll')}
         </button>
       </div>
 
@@ -54,24 +56,24 @@ export function CartPage() {
           ))}
         </div>
 
-        <aside className="order-summary" aria-label="Order summary">
-          <h2 className="order-summary__title">Order summary</h2>
+        <aside className="order-summary" aria-label={t('cart.orderSummary')}>
+          <h2 className="order-summary__title">{t('cart.orderSummary')}</h2>
 
           <div className="summary-line">
-            <span>Subtotal ({items.reduce((n, i) => n + i.quantity, 0)} items)</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>{t('cart.subtotal')} ({tCount('orders.items', items.reduce((n, i) => n + i.quantity, 0))})</span>
+            <span>{formatCurrency(subtotal)}</span>
           </div>
           <div className="summary-line">
-            <span>Shipping</span>
-            <span className="summary-line--free">Free</span>
+            <span>{t('cart.shipping')}</span>
+            <span className="summary-line--free">{t('common.free')}</span>
           </div>
           <div className="summary-line">
-            <span>Tax (10%)</span>
-            <span>${tax.toFixed(2)}</span>
+            <span>{t('cart.tax')}</span>
+            <span>{formatCurrency(tax)}</span>
           </div>
           <div className="summary-line summary-line--total">
-            <span>Total</span>
-            <span>${total.toFixed(2)}</span>
+            <span>{t('cart.total')}</span>
+            <span>{formatCurrency(total)}</span>
           </div>
 
           <Link
@@ -79,14 +81,14 @@ export function CartPage() {
             className="btn btn-primary btn-lg btn-full"
             style={{ marginTop: 'var(--sp-5)' }}
           >
-            Proceed to checkout
+            {t('cart.proceedCheckout')}
           </Link>
           <Link
             to="/products"
             className="btn btn-ghost btn-sm btn-full"
             style={{ marginTop: 'var(--sp-2)' }}
           >
-            Continue shopping
+            {t('cart.continueShopping')}
           </Link>
         </aside>
       </div>

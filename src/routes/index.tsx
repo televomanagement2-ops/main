@@ -12,7 +12,15 @@ import { CheckoutPage } from '../features/checkout/pages/CheckoutPage';
 import { CheckoutSuccessPage } from '../features/checkout/pages/CheckoutSuccessPage';
 import { CheckoutCancelPage } from '../features/checkout/pages/CheckoutCancelPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
+import { HelpPage } from '../features/help/pages/HelpPage';
+import { PrivacyPage } from '../features/legal/pages/PrivacyPage';
 import { ProtectedRoute } from './ProtectedRoute';
+import { AdminRoute } from './AdminRoute';
+import { AdminLayout } from '../features/admin/layout/AdminLayout';
+import { AdminDashboardPage } from '../features/admin/pages/AdminDashboardPage';
+import { AdminOrdersPage } from '../features/admin/pages/AdminOrdersPage';
+import { AdminCatalogPage } from '../features/admin/pages/AdminCatalogPage';
+import { AdminFinancePage } from '../features/admin/pages/AdminFinancePage';
 
 const router = createBrowserRouter([
   {
@@ -79,6 +87,22 @@ const router = createBrowserRouter([
             <ProfilePage />
           </ProtectedRoute>
         ),
+      },
+      { path: 'help', element: <HelpPage /> },
+      { path: 'privacy', element: <PrivacyPage /> },
+      {
+        path: 'admin',
+        element: (
+          <AdminRoute>
+            <AdminLayout />
+          </AdminRoute>
+        ),
+        children: [
+          { index: true, element: <AdminDashboardPage /> },
+          { path: 'orders', element: <AdminOrdersPage /> },
+          { path: 'catalog', element: <AdminCatalogPage /> },
+          { path: 'finance', element: <AdminFinancePage /> },
+        ],
       },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
