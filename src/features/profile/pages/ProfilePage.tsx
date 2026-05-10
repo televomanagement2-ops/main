@@ -207,6 +207,15 @@ export function ProfilePage() {
             </div>
           </div>
         </section>
+
+        <section className="profile-mobile-legals" aria-label={t('profile.account')}>
+          <Link to="/help" className="btn btn-secondary btn-sm">
+            {t('nav.help')}
+          </Link>
+          <Link to="/privacy" className="btn btn-secondary btn-sm">
+            {t('nav.privacy')}
+          </Link>
+        </section>
       </div>
 
       {buyAgainTiles.length > 0 && (

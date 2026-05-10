@@ -11,7 +11,7 @@ function getStoredBoolean(key: string, defaultValue: boolean): boolean {
   return raw === 'true';
 }
 
-export function SettingsPage() {
+ export function SettingsPage() {
   const { t } = useI18n();
   const [locationAllowed, setLocationAllowed] = useState<boolean>(() => getStoredBoolean('settings.locationAllowed', false));
   const [analyticsAllowed, setAnalyticsAllowed] = useState<boolean>(() => getStoredBoolean('settings.analyticsAllowed', true));

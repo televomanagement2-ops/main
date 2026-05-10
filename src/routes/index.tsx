@@ -12,6 +12,7 @@ import { CheckoutPage } from '../features/checkout/pages/CheckoutPage';
 import { CheckoutSuccessPage } from '../features/checkout/pages/CheckoutSuccessPage';
 import { CheckoutCancelPage } from '../features/checkout/pages/CheckoutCancelPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
+import { SettingsPage } from '../features/settings/pages/SettingsPage';
 import { HelpPage } from '../features/help/pages/HelpPage';
 import { PrivacyPage } from '../features/legal/pages/PrivacyPage';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -85,6 +86,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <ProfilePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'settings',
+        element: (
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         ),
       },
