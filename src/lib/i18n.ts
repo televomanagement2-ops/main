@@ -461,6 +461,8 @@ const translations: Translations = {
         trackingPlaceholder: 'Enter tracking',
         saveTracking: 'Save tracking',
         savingTracking: 'Saving...',
+        trackingSaved: 'Tracking saved and email sent.',
+        trackingSaveError: 'Tracking save failed. Please try again.',
       },
       catalog: {
         loadError: 'Failed to load products. Please refresh.',
@@ -1072,6 +1074,8 @@ const translations: Translations = {
         trackingPlaceholder: 'Inserisci tracking',
         saveTracking: 'Salva tracking',
         savingTracking: 'Salvataggio...',
+        trackingSaved: 'Tracking salvato e email inviata.',
+        trackingSaveError: 'Salvataggio tracking fallito. Riprova.',
       },
       catalog: {
         loadError: 'Impossibile caricare prodotti. Aggiorna la pagina.',
@@ -1683,6 +1687,8 @@ const translations: Translations = {
         trackingPlaceholder: 'Ingresar tracking',
         saveTracking: 'Guardar tracking',
         savingTracking: 'Guardando...',
+        trackingSaved: 'Tracking guardado y email enviado.',
+        trackingSaveError: 'Error al guardar tracking. Intenta de nuevo.',
       },
       catalog: {
         loadError: 'No se pudieron cargar los productos. Actualiza la pagina.',
@@ -2294,6 +2300,8 @@ const translations: Translations = {
         trackingPlaceholder: 'Saisir le suivi',
         saveTracking: 'Enregistrer le suivi',
         savingTracking: 'Enregistrement...',
+        trackingSaved: 'Tracking enregistre et email envoye.',
+        trackingSaveError: 'Echec enregistrement du tracking. Reessayez.',
       },
       catalog: {
         loadError: 'Impossible de charger les produits. Actualisez la page.',

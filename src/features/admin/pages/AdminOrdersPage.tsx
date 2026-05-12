@@ -8,6 +8,7 @@ import type { Order, OrderStatus } from '../../../types';
 type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
 
 type StatusFilter = 'all' | OrderStatus;
+type TrackingFeedback = { type: 'success' | 'error'; message: string };
 
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['processing', 'cancelled'],
@@ -29,6 +30,8 @@ export function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
+  const [trackingFeedback, setTrackingFeedback] = useState<Record<string, TrackingFeedback>>({});
+  const [trackingSavingId, setTrackingSavingId] = useState<string | null>(null);
 
   const statusLabels: Record<OrderStatus, string> = {
     pending: t('status.pending'),
@@ -153,6 +156,8 @@ export function AdminOrdersPage() {
             const nextStatusOptions = [order.status, ...STATUS_TRANSITIONS[order.status]]
               .filter((value, index, arr) => arr.indexOf(value) === index);
             const canSendTracking = order.status === 'paid' && trackingValue.trim().length > 0;
+            const feedback = trackingFeedback[order.id];
+            const isSavingTracking = trackingSavingId === order.id;
 
             return (
               <article key={order.id} className="card admin-order-card">
@@ -233,29 +238,75 @@ export function AdminOrdersPage() {
                         className="input"
                         placeholder={t('admin.orders.trackingPlaceholder')}
                         value={trackingValue}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           setTrackingDrafts((prev) => ({
                             ...prev,
                             [order.id]: event.target.value,
-                          }))
-                        }
+                          }));
+                          setTrackingFeedback((prev) => {
+                            if (!prev[order.id]) return prev;
+                            const next = { ...prev };
+                            delete next[order.id];
+                            return next;
+                          });
+                        }}
                       />
                     </label>
 
                     <button
                       className="btn btn-secondary btn-sm"
-                      onClick={() =>
-                        updateTracking.mutate({
-                          orderId: order.id,
-                          trackingId: trackingValue.trim(),
-                        })
-                      }
-                      disabled={!canSendTracking || updateTracking.isPending}
+                      onClick={() => {
+                        const trimmed = trackingValue.trim();
+                        setTrackingSavingId(order.id);
+                        setTrackingFeedback((prev) => {
+                          if (!prev[order.id]) return prev;
+                          const next = { ...prev };
+                          delete next[order.id];
+                          return next;
+                        });
+                        updateTracking.mutate(
+                          { orderId: order.id, trackingId: trimmed },
+                          {
+                            onSuccess: () => {
+                              setTrackingFeedback((prev) => ({
+                                ...prev,
+                                [order.id]: {
+                                  type: 'success',
+                                  message: t('admin.orders.trackingSaved'),
+                                },
+                              }));
+                            },
+                            onError: (err) => {
+                              const message = err instanceof Error
+                                ? err.message
+                                : t('admin.orders.trackingSaveError');
+                              setTrackingFeedback((prev) => ({
+                                ...prev,
+                                [order.id]: { type: 'error', message },
+                              }));
+                            },
+                            onSettled: () => setTrackingSavingId(null),
+                          }
+                        );
+                      }}
+                      disabled={!canSendTracking || updateTracking.isPending || isSavingTracking}
                     >
-                      {updateTracking.isPending
+                      {isSavingTracking
                         ? t('admin.orders.savingTracking')
                         : t('admin.orders.saveTracking')}
                     </button>
+                    {feedback && (
+                      <p
+                        className="caption"
+                        style={{
+                          color: feedback.type === 'error'
+                            ? 'var(--color-danger)'
+                            : 'var(--color-text-2)',
+                        }}
+                      >
+                        {feedback.message}
+                      </p>
+                    )}
                   </div>
                 </div>
               </article>
