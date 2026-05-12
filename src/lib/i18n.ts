@@ -120,6 +120,7 @@ const translations: Translations = {
       cancelNotAllowedDelivered: 'This order has been delivered and cannot be cancelled.',
       cancelNotAllowedCancelled: 'This order has already been cancelled.',
       cancelNotAllowedFailed: 'This order failed and was not charged.',
+      cancelNotAllowedRefunded: 'This order has been refunded.',
       orderNotFound: 'Order not found.',
       backToOrders: 'Back to orders',
     },
@@ -612,6 +613,7 @@ const translations: Translations = {
       cancelled: 'Cancelled',
       shipped: 'Shipped',
       delivered: 'Delivered',
+      refunded: 'Refunded',
     },
     statusDescription: {
       pending: 'Your order has been received and is awaiting payment confirmation.',
@@ -622,6 +624,7 @@ const translations: Translations = {
       cancelled: 'This order has been cancelled.',
       shipped: 'Your order is on its way.',
       delivered: 'Your order has been delivered. Enjoy!',
+      refunded: 'This order has been refunded.',
     },
   },
   it: {
@@ -728,6 +731,7 @@ const translations: Translations = {
       cancelNotAllowedDelivered: 'Questo ordine e stato consegnato e non puo essere annullato.',
       cancelNotAllowedCancelled: 'Questo ordine e gia stato annullato.',
       cancelNotAllowedFailed: 'Questo ordine non e stato pagato.',
+      cancelNotAllowedRefunded: 'Questo ordine e stato rimborsato.',
       orderNotFound: 'Ordine non trovato.',
       backToOrders: 'Torna agli ordini',
     },
@@ -1220,6 +1224,7 @@ const translations: Translations = {
       cancelled: 'Annullato',
       shipped: 'Spedito',
       delivered: 'Consegnato',
+      refunded: 'Rimborsato',
     },
     statusDescription: {
       pending: 'Ordine ricevuto, in attesa di conferma pagamento.',
@@ -1230,6 +1235,7 @@ const translations: Translations = {
       cancelled: 'Questo ordine e stato annullato.',
       shipped: 'Il tuo ordine e in viaggio.',
       delivered: 'Il tuo ordine e stato consegnato.',
+      refunded: 'Questo ordine e stato rimborsato.',
     },
   },
   es: {
@@ -1336,6 +1342,7 @@ const translations: Translations = {
       cancelNotAllowedDelivered: 'Este pedido ya fue entregado y no se puede cancelar.',
       cancelNotAllowedCancelled: 'Este pedido ya fue cancelado.',
       cancelNotAllowedFailed: 'Este pedido fallo y no fue cobrado.',
+      cancelNotAllowedRefunded: 'Este pedido fue reembolsado.',
       orderNotFound: 'Pedido no encontrado.',
       backToOrders: 'Volver a pedidos',
     },
@@ -1828,6 +1835,7 @@ const translations: Translations = {
       cancelled: 'Cancelado',
       shipped: 'Enviado',
       delivered: 'Entregado',
+      refunded: 'Reembolsado',
     },
     statusDescription: {
       pending: 'Tu pedido fue recibido y espera confirmacion de pago.',
@@ -1838,6 +1846,7 @@ const translations: Translations = {
       cancelled: 'Este pedido fue cancelado.',
       shipped: 'Tu pedido esta en camino.',
       delivered: 'Tu pedido fue entregado.',
+      refunded: 'Este pedido fue reembolsado.',
     },
   },
   fr: {
@@ -1944,6 +1953,7 @@ const translations: Translations = {
       cancelNotAllowedDelivered: 'Cette commande a ete livree et ne peut pas etre annulee.',
       cancelNotAllowedCancelled: 'Cette commande a deja ete annulee.',
       cancelNotAllowedFailed: "Cette commande a echoue et n'a pas ete payee.",
+      cancelNotAllowedRefunded: 'Cette commande a ete remboursee.',
       orderNotFound: 'Commande introuvable.',
       backToOrders: 'Retour aux commandes',
     },
@@ -2436,6 +2446,7 @@ const translations: Translations = {
       cancelled: 'Annulee',
       shipped: 'Expediee',
       delivered: 'Livree',
+      refunded: 'Remboursee',
     },
     statusDescription: {
       pending: 'Votre commande a ete recue et attend la confirmation du paiement.',
@@ -2446,6 +2457,7 @@ const translations: Translations = {
       cancelled: 'Cette commande a ete annulee.',
       shipped: 'Votre commande est en route.',
       delivered: 'Votre commande a ete livree.',
+      refunded: 'Cette commande a ete remboursee.',
     },
   },
 };

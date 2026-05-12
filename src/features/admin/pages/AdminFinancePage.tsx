@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Cell,
   CartesianGrid,
@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { Spinner } from '../../../components/ui/Spinner';
-import { useAdminOrders } from '../../../hooks/useAdminOrders';
+import { useAdminOrders, useRefundOrder } from '../../../hooks/useAdminOrders';
 import { useI18n } from '../../../lib/i18n';
 import type { Order } from '../../../types';
 
@@ -21,6 +21,8 @@ const REVENUE_STATUSES: Order['status'][] = ['paid', 'shipped', 'delivered'];
 const STATUS_COLORS = ['#2563eb', '#f59e0b', '#10b981', '#ef4444', '#6b7280', '#8b5cf6', '#14b8a6', '#f97316'];
 export function AdminFinancePage() {
   const { data: orders = [], isLoading, error } = useAdminOrders();
+  const refundMutation = useRefundOrder();
+  const [refundId, setRefundId] = useState<string | null>(null);
   const { t, formatCurrency, formatDate } = useI18n();
 
   const statusLabels = useMemo<Record<Order['status'], string>>(() => ({
@@ -32,10 +34,13 @@ export function AdminFinancePage() {
     cancelled: t('status.cancelled'),
     shipped: t('status.shipped'),
     delivered: t('status.delivered'),
+    refunded: t('status.refunded'),
   }), [t]);
 
   const refundableOrders = useMemo(
-    () => orders.filter((order) => REFUNDABLE_STATUSES.includes(order.status)).slice(0, 8),
+    () => orders
+      .filter((order) => REFUNDABLE_STATUSES.includes(order.status) && !order.refund_id)
+      .slice(0, 8),
     [orders]
   );
 
@@ -214,8 +219,20 @@ export function AdminFinancePage() {
                 <p className="admin-refund-item__amount">{formatCurrency(order.total)}</p>
                 <p className="caption">{statusLabels[order.status]}</p>
               </div>
-              <button className="btn btn-ghost btn-sm" disabled>
-                {t('admin.finance.refund')}
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setRefundId(order.id);
+                  refundMutation.mutate(
+                    { orderId: order.id },
+                    { onSettled: () => setRefundId(null) },
+                  );
+                }}
+                disabled={refundMutation.isPending || refundId === order.id}
+              >
+                {refundMutation.isPending && refundId === order.id
+                  ? `${t('admin.finance.refund')}...`
+                  : t('admin.finance.refund')}
               </button>
             </div>
           ))}

@@ -479,7 +479,8 @@ export type Database = {
         | 'failed'
         | 'cancelled'
         | 'shipped'
-        | 'delivered';
+        | 'delivered'
+        | 'refunded';
       user_role: 'customer' | 'admin';
     };
   };

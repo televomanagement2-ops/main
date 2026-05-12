@@ -16,6 +16,7 @@ export function AdminDashboardPage() {
     cancelled: t('status.cancelled'),
     shipped: t('status.shipped'),
     delivered: t('status.delivered'),
+    refunded: t('status.refunded'),
   };
 
   if (isLoading) {

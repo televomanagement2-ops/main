@@ -21,7 +21,8 @@ BEGIN
       'failed',
       'shipped',
       'delivered',
-      'cancelled'
+      'cancelled',
+      'refunded'
     );
   END IF;
 END

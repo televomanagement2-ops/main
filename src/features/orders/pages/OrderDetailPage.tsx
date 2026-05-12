@@ -18,6 +18,7 @@ const STATUS_VARIANTS: Record<OrderStatus, BadgeVariant> = {
   cancelled: 'danger',
   shipped: 'accent',
   delivered: 'success',
+  refunded: 'warning',
 };
 
 // Only 'paid' orders can be cancelled (not yet prepared for shipment)
@@ -224,6 +225,7 @@ export function OrderDetailPage() {
             {order.status === 'delivered' && t('orderDetail.cancelNotAllowedDelivered')}
             {order.status === 'cancelled' && t('orderDetail.cancelNotAllowedCancelled')}
             {order.status === 'failed' && t('orderDetail.cancelNotAllowedFailed')}
+            {order.status === 'refunded' && t('orderDetail.cancelNotAllowedRefunded')}
             {(order.status === 'pending' || order.status === 'processing' || order.status === 'requires_action') &&
               t('orderDetail.cancelNotAllowed')}
           </p>

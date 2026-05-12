@@ -8,7 +8,8 @@ export type OrderStatus =
   | 'failed'
   | 'cancelled'
   | 'shipped'
-  | 'delivered';
+  | 'delivered'
+  | 'refunded';
 
 export interface Profile {
   id: string;

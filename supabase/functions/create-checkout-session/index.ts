@@ -249,7 +249,11 @@ Deno.serve(async (req) => {
         mode: 'payment',
         success_url,
         cancel_url,
+        client_reference_id: order.id,
         metadata: { order_id: order.id, user_id: user.id },
+        payment_intent_data: {
+          metadata: { order_id: order.id, user_id: user.id },
+        },
         automatic_tax: { enabled: false },
       });
       console.log('[checkout] Stripe session created:', session.id);

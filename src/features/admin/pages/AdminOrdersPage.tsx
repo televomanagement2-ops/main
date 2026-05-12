@@ -18,6 +18,7 @@ const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   delivered: [],
   failed: [],
   cancelled: [],
+  refunded: [],
 };
 
 export function AdminOrdersPage() {
@@ -38,6 +39,7 @@ export function AdminOrdersPage() {
     cancelled: t('status.cancelled'),
     shipped: t('status.shipped'),
     delivered: t('status.delivered'),
+    refunded: t('status.refunded'),
   };
 
   const statusBadge: Record<OrderStatus, { variant: BadgeVariant; label: string }> = {
@@ -49,6 +51,7 @@ export function AdminOrdersPage() {
     cancelled: { variant: 'danger', label: statusLabels.cancelled },
     shipped: { variant: 'accent', label: statusLabels.shipped },
     delivered: { variant: 'success', label: statusLabels.delivered },
+    refunded: { variant: 'warning', label: statusLabels.refunded },
   };
 
   const filters: { value: StatusFilter; label: string }[] = [
@@ -60,6 +63,7 @@ export function AdminOrdersPage() {
     { value: 'delivered', label: statusLabels.delivered },
     { value: 'cancelled', label: statusLabels.cancelled },
     { value: 'failed', label: statusLabels.failed },
+    { value: 'refunded', label: statusLabels.refunded },
     { value: 'pending', label: statusLabels.pending },
   ];
 

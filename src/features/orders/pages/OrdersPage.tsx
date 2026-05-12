@@ -18,10 +18,11 @@ const STATUS_VARIANTS: Record<OrderStatus, BadgeVariant> = {
   cancelled: 'danger',
   shipped: 'accent',
   delivered: 'success',
+  refunded: 'warning',
 };
 
 const ACTIVE_STATUSES: OrderStatus[] = ['pending', 'processing', 'requires_action', 'paid', 'shipped'];
-const HISTORY_STATUSES: OrderStatus[] = ['delivered', 'cancelled', 'failed'];
+const HISTORY_STATUSES: OrderStatus[] = ['delivered', 'cancelled', 'failed', 'refunded'];
 
 export function OrdersPage() {
   const { data: allOrders = [], isLoading, error } = useOrders();
