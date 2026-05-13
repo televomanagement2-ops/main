@@ -55,6 +55,10 @@ VITE_SUPABASE_ANON_KEY=<anon key>
 ```
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+SUPABASE_ANON_KEY=eyJ...
+RESEND_API_KEY=re_...
+# Optional
+RESEND_FROM_EMAIL=ShopBase <support@shopbase.com>
 ```
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 
@@ -75,6 +79,8 @@ STRIPE_WEBHOOK_SECRET=whsec_...
      - `checkout.session.expired`
      - `payment_intent.succeeded`
      - `payment_intent.payment_failed`
+       - `charge.refunded`
+       - `refund.updated`
 5. Copy **Signing secret** → add as `STRIPE_WEBHOOK_SECRET` in Supabase secrets
 
 ---
@@ -88,6 +94,8 @@ supabase login
 supabase link --project-ref <your-project-ref>
 supabase functions deploy create-checkout-session
 supabase functions deploy stripe-webhook
+supabase functions deploy update-tracking
+supabase functions deploy handle-order-action
 ```
 
 Test locally first:

@@ -86,11 +86,28 @@ Set these in Supabase Dashboard → Project Settings → Edge Functions → Secr
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 SUPABASE_ANON_KEY=eyJ...
+RESEND_API_KEY=re_...
+# Optional
+RESEND_FROM_EMAIL=ShopBase <support@shopbase.com>
 ```
 
 The Supabase runtime injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically for Edge Functions.
 
 `create-checkout-session` requires all of these at runtime:
+
+- `STRIPE_SECRET_KEY`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_URL` (runtime injected)
+- `SUPABASE_SERVICE_ROLE_KEY` (runtime injected)
+
+`update-tracking` requires:
+
+- `RESEND_API_KEY`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_URL` (runtime injected)
+- `SUPABASE_SERVICE_ROLE_KEY` (runtime injected)
+
+`handle-order-action` requires:
 
 - `STRIPE_SECRET_KEY`
 - `SUPABASE_ANON_KEY`
@@ -106,6 +123,8 @@ npx supabase login
 npx supabase link --project-ref <project-ref>
 npx supabase functions deploy create-checkout-session
 npx supabase functions deploy stripe-webhook
+npx supabase functions deploy update-tracking
+npx supabase functions deploy handle-order-action
 ```
 
 If you run the functions locally, use the Supabase CLI and an env file that contains the edge-function secrets.
@@ -149,6 +168,8 @@ Listen for these events:
 - `checkout.session.expired`
 - `payment_intent.succeeded`
 - `payment_intent.payment_failed`
+- `charge.refunded`
+- `refund.updated`
 
 ## Build and Quality Checks
 
