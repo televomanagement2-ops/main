@@ -844,6 +844,11 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
 }
+.showcase-search:focus-within {
+  outline: none;
+  border-color: rgba(0, 102, 255, .40);
+  box-shadow: 0 0 0 3px rgba(0,102,255,.16), 0 8px 18px rgba(0,0,0,.08);
+}
 .showcase-search__icon {
   color: rgba(0, 0, 0, 0.72);
   display: flex;
@@ -1495,6 +1500,22 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
   }
   .promo-art--deals {
     top: 44%;
+  }
+}
+
+@media (max-width: 480px) {
+  .promo-card__title {
+    font-size: clamp(26px, 8vw, 34px);
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .promo-card__subtitle {
+    font-size: clamp(13px, 3.8vw, 17px);
+    max-width: 100%;
+  }
+  .promo-card__header {
+    padding: 20px 18px 0;
   }
 }
 
@@ -3356,6 +3377,23 @@ html.dark .buy-again-card {
 html.dark .buy-again-card:hover {
   border-color: rgba(77,159,255,.28);
   box-shadow: 0 0 16px rgba(77,159,255,.10), 0 8px 24px rgba(0,0,0,.50);
+}
+
+/* ── 17. Pagination dots ─────────────────────────────────────── */
+html.dark .promo-dot {
+  background: rgba(255,255,255,.25);
+  border-color: rgba(255,255,255,.10);
+}
+html.dark .promo-dot.is-active {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+/* ── 18. Search focus ring (dark) ────────────────────────────── */
+html.dark .showcase-search:focus-within {
+  outline: none;
+  border-color: rgba(77,159,255,.50);
+  box-shadow: 0 0 0 3px rgba(77,159,255,.22), 0 8px 18px rgba(0,0,0,.40);
 }
 
 .sr-only{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
