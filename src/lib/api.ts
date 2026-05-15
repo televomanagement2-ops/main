@@ -454,6 +454,46 @@ export async function updateOrderTracking(
   return payload.order;
 }
 
+export async function markOrderDelivered(orderId: string): Promise<Order> {
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing Supabase environment variables.');
+  }
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !sessionData.session) {
+    throw new Error('Your session has expired. Please sign in again.');
+  }
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/handle-order-action`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${sessionData.session.access_token}`,
+      apikey: supabaseAnonKey,
+    },
+    body: JSON.stringify({ action: 'deliver', order_id: orderId }),
+  });
+
+  let payload: { order?: Order; error?: string } | null = null;
+  try {
+    payload = (await res.json()) as { order?: Order; error?: string };
+  } catch {
+    payload = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(payload?.error || `Delivery update failed with status ${res.status}.`);
+  }
+
+  if (!payload?.order) {
+    throw new Error('Delivery update did not return order details.');
+  }
+
+  return payload.order;
+}
+
 export async function refundOrder(orderId: string, amount?: number): Promise<Order> {
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;

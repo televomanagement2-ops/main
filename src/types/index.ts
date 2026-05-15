@@ -153,6 +153,7 @@ export interface Order {
   refunded_at?: string | null;
   refund_id?: string | null;
   refund_amount?: number | null;
+  delivered_at?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

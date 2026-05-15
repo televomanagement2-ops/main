@@ -185,14 +185,14 @@ CREATE POLICY "orders: owner insert"
   ON public.orders FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
--- Customers can only cancel; admins can set any status
+-- Customers can only cancel their own orders; admins can set any status
 CREATE POLICY "orders: owner cancel"
   ON public.orders FOR UPDATE
   USING (auth.uid() = user_id)
   WITH CHECK (
     auth.uid() = user_id AND
     status = 'cancelled' AND
-    (SELECT status FROM public.orders WHERE id = orders.id) = 'pending'
+    (SELECT status FROM public.orders WHERE id = orders.id) IN ('pending', 'processing', 'requires_action', 'paid')
   );
 
 CREATE POLICY "orders: admin update"

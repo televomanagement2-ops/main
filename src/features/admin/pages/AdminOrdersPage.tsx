@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Badge } from '../../../components/ui/Badge';
 import { Spinner } from '../../../components/ui/Spinner';
-import { useAdminOrders, useUpdateAdminOrderStatus, useUpdateAdminOrderTracking } from '../../../hooks/useAdminOrders';
+import { useAdminOrders, useMarkOrderDelivered, useUpdateAdminOrderStatus, useUpdateAdminOrderTracking } from '../../../hooks/useAdminOrders';
 import { useI18n } from '../../../lib/i18n';
 import type { Order, OrderStatus } from '../../../types';
 
@@ -9,6 +9,17 @@ type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
 
 type StatusFilter = 'all' | OrderStatus;
 type TrackingFeedback = { type: 'success' | 'error'; message: string };
+
+function getDeliverErrorMessage(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : '';
+  if (raw.includes('delivered_at') || raw.includes('schema cache')) {
+    return 'Errore DB: colonna delivered_at mancante. Esegui la migration 009 in Supabase e poi NOTIFY pgrst, \'reload schema\';';
+  }
+  if (raw.includes('JWT') || raw.includes('session') || raw.includes('Session')) {
+    return 'Sessione scaduta. Ricarica la pagina e riprova.';
+  }
+  return raw || fallback;
+}
 
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['processing', 'cancelled'],
@@ -26,12 +37,14 @@ export function AdminOrdersPage() {
   const { data: orders = [], isLoading, error } = useAdminOrders();
   const updateStatus = useUpdateAdminOrderStatus();
   const updateTracking = useUpdateAdminOrderTracking();
+  const markDelivered = useMarkOrderDelivered();
   const { t, tCount, formatCurrency, formatDateTime } = useI18n();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [trackingFeedback, setTrackingFeedback] = useState<Record<string, TrackingFeedback>>({});
   const [trackingSavingId, setTrackingSavingId] = useState<string | null>(null);
+  const [deliverFeedback, setDeliverFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
 
   const statusLabels: Record<OrderStatus, string> = {
     pending: t('status.pending'),
@@ -54,7 +67,7 @@ export function AdminOrdersPage() {
     cancelled: { variant: 'danger', label: statusLabels.cancelled },
     shipped: { variant: 'accent', label: statusLabels.shipped },
     delivered: { variant: 'success', label: statusLabels.delivered },
-    refunded: { variant: 'warning', label: statusLabels.refunded },
+    refunded: { variant: 'accent', label: statusLabels.refunded },
   };
 
   const filters: { value: StatusFilter; label: string }[] = [
@@ -149,7 +162,7 @@ export function AdminOrdersPage() {
             const primaryItem = order.order_items?.[0] ?? null;
             const extraItems = Math.max((order.order_items?.length ?? 0) - 1, 0);
             const orderTitle = primaryItem
-              ? `${primaryItem.product_name}${extraItems > 0 ? ` ${t('admin.orders.moreItems', { count: extraItems })}` : ''}`
+              ? `${primaryItem.product_name}${extraItems > 0 ? ` +${extraItems}` : ''}`
               : `${t('admin.orders.orderLabel')} ${order.id.slice(0, 8).toUpperCase()}`;
             const thumbnail = primaryItem?.product_image
               ?? 'https://placehold.co/96x96/f5f5f7/aeaeb2?text=No+image';
@@ -169,10 +182,10 @@ export function AdminOrdersPage() {
                     <div>
                       <p className="admin-order-card__title">{orderTitle}</p>
                       <p className="caption">
-                        {t('admin.orders.orderMeta', {
-                          id: order.id.slice(0, 8).toUpperCase(),
-                          date: formatDateTime(new Date(order.created_at)),
-                        })}
+                        {formatDateTime(new Date(order.created_at))}
+                      </p>
+                      <p className="caption">
+                        {t('admin.orders.customerLabel', { name: order.profiles?.full_name || order.shipping_address?.full_name || 'N/A' })}
                       </p>
                     </div>
                   </div>
@@ -207,6 +220,16 @@ export function AdminOrdersPage() {
                       <p className="caption">
                         {tCount('orders.items', order.order_items?.length ?? 0)}
                       </p>
+                      {order.status === 'refunded' && order.refund_amount && (
+                        <p className="caption" style={{ color: 'var(--color-accent)', marginTop: 'var(--sp-1)' }}>
+                          {t('admin.orders.refundedAmount', { amount: formatCurrency(order.refund_amount) })}
+                        </p>
+                      )}
+                      {order.status === 'delivered' && order.delivered_at && (
+                        <p className="caption" style={{ color: 'var(--color-text-2)', marginTop: 'var(--sp-1)' }}>
+                          {t('admin.orders.deliveredAt', { date: formatDateTime(new Date(order.delivered_at)) })}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -231,6 +254,56 @@ export function AdminOrdersPage() {
                         ))}
                       </select>
                     </label>
+
+                    {order.status === 'shipped' && (
+                      <>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setDeliverFeedback((prev) => {
+                              const next = { ...prev };
+                              delete next[order.id];
+                              return next;
+                            });
+                            markDelivered.mutate(
+                              { orderId: order.id },
+                              {
+                                onSuccess: () => {
+                                  setDeliverFeedback((prev) => ({
+                                    ...prev,
+                                    [order.id]: { type: 'success', message: t('admin.orders.markDelivered') + ' ✓' },
+                                  }));
+                                },
+                                onError: (err) => {
+                                  const message = getDeliverErrorMessage(err, t('admin.orders.markDeliveredError'));
+                                  setDeliverFeedback((prev) => ({
+                                    ...prev,
+                                    [order.id]: { type: 'error', message },
+                                  }));
+                                },
+                              }
+                            );
+                          }}
+                          disabled={markDelivered.isPending}
+                        >
+                          {markDelivered.isPending
+                            ? t('admin.orders.markingDelivered')
+                            : t('admin.orders.markDelivered')}
+                        </button>
+                        {deliverFeedback[order.id] && (
+                          <p
+                            className="caption"
+                            style={{
+                              color: deliverFeedback[order.id].type === 'error'
+                                ? 'var(--color-danger)'
+                                : 'var(--color-text-2)',
+                            }}
+                          >
+                            {deliverFeedback[order.id].message}
+                          </p>
+                        )}
+                      </>
+                    )}
 
                     <label className="admin-action">
                       <span>{t('admin.orders.trackingId')}</span>

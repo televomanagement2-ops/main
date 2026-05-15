@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Cell,
   CartesianGrid,
@@ -16,6 +16,18 @@ import { useAdminOrders, useRefundOrder } from '../../../hooks/useAdminOrders';
 import { useI18n } from '../../../lib/i18n';
 import type { Order } from '../../../types';
 
+// Helper: get order display name (product or customer name)
+function getOrderDisplayName(order: Order): string {
+  const primaryItem = order.order_items?.[0];
+  if (primaryItem) {
+    const extraItems = Math.max((order.order_items?.length ?? 0) - 1, 0);
+    return extraItems > 0 
+      ? `${primaryItem.product_name} +${extraItems}` 
+      : primaryItem.product_name;
+  }
+  return order.profiles?.full_name || `Order ${order.id.slice(0, 8).toUpperCase()}`;
+}
+
 const REFUNDABLE_STATUSES: Order['status'][] = ['paid', 'shipped', 'delivered'];
 const REVENUE_STATUSES: Order['status'][] = ['paid', 'shipped', 'delivered'];
 const STATUS_COLORS = ['#2563eb', '#f59e0b', '#10b981', '#ef4444', '#6b7280', '#8b5cf6', '#14b8a6', '#f97316'];
@@ -23,7 +35,15 @@ export function AdminFinancePage() {
   const { data: orders = [], isLoading, error } = useAdminOrders();
   const refundMutation = useRefundOrder();
   const [refundId, setRefundId] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const { t, formatCurrency, formatDate } = useI18n();
+
+  // Auto-dismiss notification after 4 seconds
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => setNotification(null), 4000);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   const statusLabels = useMemo<Record<Order['status'], string>>(() => ({
     pending: t('status.pending'),
@@ -114,21 +134,20 @@ export function AdminFinancePage() {
         </div>
       </div>
 
-      <div className="admin-grid-split">
-        <section className="card card-padded admin-panel">
-          <p className="label-caps">{t('admin.finance.refundCenter')}</p>
-          <h3 className="heading-2" style={{ marginTop: 'var(--sp-2)' }}>
-            {t('admin.finance.refundTitle')}
-          </h3>
-          <p className="body" style={{ marginTop: 'var(--sp-3)' }}>
-            {t('admin.finance.refundNote')}
-          </p>
-          <button className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--sp-4)' }} disabled>
-            {t('admin.finance.refundCta')}
-          </button>
-        </section>
+      {/* Notification Toast */}
+      {notification && (
+        <div
+          className={`alert alert-${notification.type}`}
+          style={{
+            marginBottom: 'var(--sp-5)',
+            animation: 'fadeIn 0.3s ease-in-out',
+          }}
+        >
+          {notification.message}
+        </div>
+      )}
 
-        <section className="card card-padded admin-panel admin-panel--accent">
+      <section className="card card-padded admin-panel admin-panel--accent">
           <p className="label-caps">{t('admin.finance.revenueSnapshot')}</p>
           <h3 className="heading-2" style={{ marginTop: 'var(--sp-2)' }}>
             {t('admin.finance.last30Days')}
@@ -147,8 +166,7 @@ export function AdminFinancePage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </section>
-      </div>
+      </section>
 
       <section className="card card-padded admin-panel" style={{ marginTop: 'var(--sp-6)' }}>
         <div className="admin-panel__head">
@@ -210,7 +228,7 @@ export function AdminFinancePage() {
           {refundableOrders.map((order) => (
             <div key={order.id} className="admin-refund-item">
               <div>
-                <p className="admin-refund-item__id">#{order.id.slice(0, 8).toUpperCase()}</p>
+                <p className="admin-refund-item__id">{getOrderDisplayName(order)}</p>
                 <p className="caption">
                   {formatDate(new Date(order.created_at), { month: 'short', day: 'numeric' })}
                 </p>
@@ -225,7 +243,23 @@ export function AdminFinancePage() {
                   setRefundId(order.id);
                   refundMutation.mutate(
                     { orderId: order.id },
-                    { onSettled: () => setRefundId(null) },
+                    {
+                      onSuccess: () => {
+                        setNotification({
+                          type: 'success',
+                          message: `${getOrderDisplayName(order)} refunded successfully`,
+                        });
+                        setRefundId(null);
+                      },
+                      onError: (err) => {
+                        const errorMsg = err instanceof Error ? err.message : 'Failed to refund order';
+                        setNotification({
+                          type: 'error',
+                          message: errorMsg,
+                        });
+                        setRefundId(null);
+                      },
+                    }
                   );
                 }}
                 disabled={refundMutation.isPending || refundId === order.id}

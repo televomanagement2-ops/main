@@ -49,6 +49,12 @@ export function HelpPage() {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const email = (form.elements.namedItem('help-email') as HTMLInputElement).value;
+    const message = (form.elements.namedItem('help-message') as HTMLTextAreaElement).value;
+    const subject = `Richiesta Supporto da ShopBase (${email})`;
+    const mailtoUrl = `mailto:support@shopbase.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+    window.location.href = mailtoUrl;
     setSent(true);
   };
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchAdminOrders, refundOrder, updateOrderStatus, updateOrderTracking } from '../lib/api';
+import { fetchAdminOrders, markOrderDelivered, refundOrder, updateOrderStatus, updateOrderTracking } from '../lib/api';
 import type { OrderStatus } from '../types';
 
 export function useAdminOrders() {
@@ -31,6 +31,17 @@ export function useUpdateAdminOrderTracking() {
       orderId: string;
       trackingId: string;
     }) => updateOrderTracking(orderId, trackingId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-orders'] });
+      qc.invalidateQueries({ queryKey: ['admin-analytics'] });
+    },
+  });
+}
+
+export function useMarkOrderDelivered() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId }: { orderId: string }) => markOrderDelivered(orderId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-orders'] });
       qc.invalidateQueries({ queryKey: ['admin-analytics'] });

@@ -3045,4 +3045,317 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
 .gap-4  { gap: var(--sp-4); }
 .mt-auto{ margin-top: auto; }
 .w-full { width: 100%; }
+
+/* ══════════════════════════════════════════════════════════
+   DARK MODE — SPACE-MINIMALIST THEME
+   Triggered by the `dark` class on <html>.
+   All overrides redefine semantic tokens so every component
+   that already uses var(--color-*) / var(--shadow-*) adapts
+   automatically without touching component markup.
+   ══════════════════════════════════════════════════════════ */
+
+html.dark {
+  color-scheme: dark;
+
+  /* ── Backgrounds (deep-space blues, no pure black) ──── */
+  --color-bg:        #0d0f14;
+  --color-surface:   #12151c;
+  --color-surface-2: #181c26;
+  --color-surface-3: #1e2330;
+  --color-border:    rgba(255,255,255,.07);
+  --color-border-2:  rgba(255,255,255,.12);
+
+  /* ── Text ─────────────────────────────────────────────── */
+  --color-text:   #e8ecf4;
+  --color-text-2: #7e8ba0;
+  --color-text-3: #49546a;
+
+  /* ── Brand accent (electric blue, readable on dark bg) ── */
+  --accent:        #4d9fff;
+  --accent-hover:  #66aeff;
+  --accent-subtle: rgba(77,159,255,.12);
+  --accent-border: rgba(77,159,255,.28);
+  --accent-glow:   0 0 0 3px rgba(77,159,255,.20);
+
+  /* ── Shadows → subtle glow rings instead of dark drops ── */
+  --shadow-xs:   0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm:   0 0 0 1px rgba(77,159,255,.06), 0 2px 8px rgba(0,0,0,.40);
+  --shadow-md:   0 0 0 1px rgba(77,159,255,.08), 0 4px 20px rgba(0,0,0,.50);
+  --shadow-lg:   0 0 16px rgba(77,159,255,.10), 0 8px 32px rgba(0,0,0,.55);
+  --shadow-xl:   0 0 32px rgba(77,159,255,.14), 0 20px 48px rgba(0,0,0,.60);
+  --shadow-card: 0 0 0 1px rgba(255,255,255,.06), 0 2px 12px rgba(0,0,0,.45);
+
+  /* ── Status colours (muted, work on dark surfaces) ───── */
+  --color-success:        #34d17a;
+  --color-success-bg:     rgba(52,209,122,.10);
+  --color-success-border: rgba(52,209,122,.22);
+  --color-warning:        #f0a940;
+  --color-warning-bg:     rgba(240,169,64,.10);
+  --color-warning-border: rgba(240,169,64,.22);
+  --color-danger:         #ff6b6b;
+  --color-danger-bg:      rgba(255,107,107,.10);
+  --color-danger-border:  rgba(255,107,107,.22);
+}
+
+/* ── Body background propagation ──────────────────────── */
+html.dark body {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── Scrollbar (webkit) ────────────────────────────────── */
+html.dark ::-webkit-scrollbar-track { background: var(--color-surface); }
+html.dark ::-webkit-scrollbar-thumb { background: var(--color-surface-3); border-radius: 4px; }
+
+/* ── Promo carousel cards — richer, space-era gradients ── */
+html.dark .promo-card--delivery {
+  background: linear-gradient(180deg, #c24a00 0%, #d05500 52%, #e0722a 100%);
+}
+html.dark .promo-card--deals {
+  background: linear-gradient(180deg, #a8273a 0%, #b33040 42%, #c04455 100%);
+  color: #ffe8ec;
+}
+html.dark .promo-card--tech {
+  background: linear-gradient(180deg, #0a2540 0%, #0d2e50 40%, #133a62 100%);
+  color: #c8e8ff;
+}
+html.dark .promo-card--one-euro {
+  background: linear-gradient(180deg, #3a0090 0%, #4800a8 44%, #5c10c0 100%);
+}
+html.dark .promo-card.is-active {
+  box-shadow: 0 28px 46px rgba(0,0,0,.60), 0 0 40px rgba(77,159,255,.12);
+}
+
+/* ── Profile hero ──────────────────────────────────────── */
+html.dark .profile-hero {
+  border-color: rgba(77,159,255,.12);
+  background:
+    radial-gradient(420px 190px at 94% 8%, rgba(77,159,255,.12) 0%, rgba(77,159,255,0) 72%),
+    linear-gradient(180deg, #0d1829 0%, #101520 60%, #0a0e18 100%);
+  box-shadow: inset 0 1px 0 rgba(77,159,255,.15), 0 8px 18px rgba(0,0,0,.40);
+}
+html.dark .profile-hero::before {
+  background: linear-gradient(180deg, rgba(77,159,255,.06) 0%, rgba(77,159,255,.01) 46%, rgba(77,159,255,.03) 100%);
+}
+
+/* ── Profile promo banner ──────────────────────────────── */
+html.dark .profile-promo {
+  border-color: rgba(77,159,255,.14);
+  background: linear-gradient(135deg, #0d1829 0%, #111a30 50%, #0a1020 100%);
+  box-shadow: 0 22px 46px rgba(0,0,0,.45), 0 0 0 1px rgba(77,159,255,.08);
+}
+html.dark .profile-promo__glow--one {
+  background: radial-gradient(circle at center, rgba(77,159,255,.35) 0%, rgba(77,159,255,.02) 68%, transparent 80%);
+}
+html.dark .profile-promo__glow--two {
+  background: radial-gradient(circle at center, rgba(120,80,255,.30) 0%, rgba(120,80,255,.02) 68%, transparent 80%);
+}
+
+/* ── 1. Sidebar ────────────────────────────────────────────── */
+html.dark .sidebar {
+  background: rgba(18,21,28,.97);
+  border-right-color: var(--color-border);
+}
+html.dark .sidebar-lang-list {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+}
+@media (min-width: 769px) {
+  html.dark .sidebar {
+    background: linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+  }
+}
+
+/* ── 2. Desktop top nav ────────────────────────────────────── */
+html.dark .desktop-nav {
+  background: linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+  border-bottom-color: var(--color-border);
+  box-shadow: none;
+}
+html.dark .desktop-nav__menu {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+}
+html.dark .desktop-nav__flag {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+}
+html.dark .desktop-nav__lang-menu {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+  box-shadow: 0 14px 30px rgba(0,0,0,.50);
+}
+
+/* ── 3. Mobile bottom nav + mobile sidebar ─────────────────── */
+@media (max-width: 768px) {
+  html.dark .sidebar {
+    background: #12151c;
+    border-top-color: var(--color-border);
+  }
+  html.dark .bottom-nav {
+    background: rgba(18,21,28,.97);
+    border-color: rgba(255,255,255,.08);
+    box-shadow: 0 -8px 32px rgba(0,0,0,.50);
+  }
+}
+
+/* ── 4. Home showcase — banner + fade ──────────────────────── */
+html.dark .home-showcase::after {
+  background: linear-gradient(180deg, rgba(13,15,20,0) 0%, rgba(13,15,20,.56) 54%, #0d0f14 100%);
+}
+html.dark .home-showcase--delivery {
+  --showcase-top: #5c1e00;
+  --showcase-mid: #1a0800;
+  --showcase-glow: rgba(200,80,0,.22);
+}
+html.dark .home-showcase--deals {
+  --showcase-top: #5a0f18;
+  --showcase-mid: #160508;
+  --showcase-glow: rgba(200,40,60,.22);
+}
+html.dark .home-showcase--tech {
+  --showcase-top: #051a38;
+  --showcase-mid: #020a18;
+  --showcase-glow: rgba(20,80,180,.25);
+}
+html.dark .home-showcase--one-euro {
+  --showcase-top: #2a0068;
+  --showcase-mid: #0c0028;
+  --showcase-glow: rgba(80,10,200,.30);
+}
+
+/* ── 5. Showcase search bar ────────────────────────────────── */
+html.dark .showcase-search {
+  background: rgba(18,21,28,.88);
+  border-color: rgba(77,159,255,.20);
+  box-shadow: 0 0 0 1px rgba(77,159,255,.08), 0 8px 18px rgba(0,0,0,.40);
+}
+html.dark .showcase-search__icon { color: var(--color-text-2); }
+html.dark .showcase-search__input { color: var(--color-text); }
+html.dark .showcase-search__input::placeholder { color: var(--color-text-3); }
+html.dark .showcase-search__submit {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ── 6. Trend chips ────────────────────────────────────────── */
+html.dark .trend-chip {
+  background: rgba(77,159,255,.08);
+  border-color: rgba(77,159,255,.18);
+  color: var(--color-text);
+}
+html.dark .trend-chip:hover {
+  background: rgba(77,159,255,.16);
+  box-shadow: 0 4px 14px rgba(77,159,255,.12);
+}
+
+/* ── 7. Home feed layer (product grid area) ────────────────── */
+html.dark .home-feed-layer {
+  background:
+    radial-gradient(1200px 420px at 10% 0%, rgba(30,40,60,.30) 0%, rgba(30,40,60,0) 64%),
+    radial-gradient(900px 380px at 90% 4%, rgba(20,30,50,.25) 0%, rgba(20,30,50,0) 60%),
+    linear-gradient(180deg, #0d0f14 0%, #0d0f14 100%);
+}
+html.dark .home-feed-layer::before { background: none; }
+html.dark .home-feed-layer::after {
+  background: linear-gradient(180deg, rgba(13,15,20,0) 0%, rgba(13,15,20,.84) 72%, rgba(13,15,20,1) 100%);
+}
+
+/* ── 8. Admin hero (Centro di Comando) ─────────────────────── */
+html.dark .admin-hero {
+  border-color: rgba(77,159,255,.14);
+  background:
+    radial-gradient(520px 200px at 8% 12%, rgba(77,159,255,.12) 0%, rgba(77,159,255,0) 68%),
+    radial-gradient(420px 200px at 88% 6%, rgba(120,80,255,.08) 0%, rgba(120,80,255,0) 68%),
+    linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+}
+html.dark .admin-meta-card {
+  background: rgba(255,255,255,.04);
+  border-color: rgba(255,255,255,.07);
+}
+
+/* ── 9. Admin panel accent card ────────────────────────────── */
+html.dark .admin-panel--accent {
+  background: linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+  border-color: rgba(77,159,255,.14);
+}
+
+/* ── 10. Footer contact pill ───────────────────────────────── */
+html.dark .footer-contact-pill {
+  background: rgba(77,159,255,.10);
+  border-color: rgba(77,159,255,.20);
+  color: var(--color-text);
+}
+
+/* ── 11. Profile mobile language menu ──────────────────────── */
+html.dark .profile-mobile-language__menu {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+  box-shadow: 0 8px 24px rgba(0,0,0,.50);
+}
+
+/* ── 12. Settings / Help / Privacy — hero boxes ────────────── */
+html.dark .settings-hero,
+html.dark .help-hero,
+html.dark .privacy-hero {
+  border-color: rgba(77,159,255,.12);
+  background:
+    radial-gradient(430px 220px at 94% -2%, rgba(77,159,255,.10) 0%, rgba(77,159,255,0) 72%),
+    linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+  box-shadow: 0 8px 24px rgba(0,0,0,.40);
+}
+
+/* ── 13. Settings / Help / Privacy — content cards ─────────── */
+html.dark .settings-card,
+html.dark .help-card,
+html.dark .privacy-card,
+html.dark .help-contact {
+  border-color: var(--color-border);
+  background:
+    radial-gradient(260px 120px at 100% 0%, rgba(77,159,255,.06) 0%, rgba(77,159,255,0) 70%),
+    linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+
+/* ── 14. FAQ accordion items ────────────────────────────────── */
+html.dark .help-faq-item {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+}
+
+/* ── 15. Form inputs + autofill kill ────────────────────────── */
+html.dark .input,
+html.dark .help-form__textarea,
+html.dark input,
+html.dark textarea {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-2);
+  color: var(--color-text);
+  color-scheme: dark;
+}
+html.dark .input::placeholder,
+html.dark .help-form__textarea::placeholder,
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: var(--color-text-3);
+}
+html.dark input:-webkit-autofill,
+html.dark input:-webkit-autofill:hover,
+html.dark input:-webkit-autofill:focus,
+html.dark textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 100px #181c26 inset;
+  -webkit-text-fill-color: #e8ecf4;
+  caret-color: #e8ecf4;
+}
+
+/* ── 16. Buy-again card ─────────────────────────────────────── */
+html.dark .buy-again-card {
+  background: linear-gradient(180deg, #181c26 0%, #12151c 100%);
+  border-color: var(--color-border);
+}
+html.dark .buy-again-card:hover {
+  border-color: rgba(77,159,255,.28);
+  box-shadow: 0 0 16px rgba(77,159,255,.10), 0 8px 24px rgba(0,0,0,.50);
+}
+
 .sr-only{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }

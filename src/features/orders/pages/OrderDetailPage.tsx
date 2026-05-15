@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useOrder, useCancelOrder } from '../../../hooks/useOrders';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -6,6 +6,24 @@ import { Badge } from '../../../components/ui/Badge';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
 import type { OrderStatus } from '../../../types';
+
+// Error code mapping
+const ERROR_MESSAGES: Record<string, string> = {
+  'ORDER_ALREADY_REFUNDED': 'This order has already been refunded',
+  'ORDER_NOT_CANCELABLE': 'This order cannot be cancelled at this stage',
+  'AUTH_INVALID_SESSION': 'Your session has expired. Please sign in again',
+  'ORDER_NOT_FOUND': 'Order not found',
+};
+
+function getErrorMessage(error: Error): string {
+  const message = error.message || '';
+  for (const [code, userMsg] of Object.entries(ERROR_MESSAGES)) {
+    if (message.includes(code)) {
+      return userMsg;
+    }
+  }
+  return message || 'Failed to cancel order. Please try again.';
+}
 
 type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
 
@@ -29,7 +47,15 @@ export function OrderDetailPage() {
   const { data: order, isLoading, error } = useOrder(orderId ?? '');
   const cancelMutation = useCancelOrder(orderId ?? '');
   const [showConfirm, setShowConfirm] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(false);
   const { t, formatDate, formatCurrency } = useI18n();
+
+  // Auto-dismiss success message after 3 seconds
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(false), 3000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
 
   if (isLoading) {
     return <div className="page-loading"><Spinner size="lg" /></div>;
@@ -50,29 +76,45 @@ export function OrderDetailPage() {
     variant: STATUS_VARIANTS[order.status] ?? 'default',
     label: t(`status.${order.status}`),
   };
-  const canCancel = CANCELLABLE_STATUSES.includes(order.status);
+  const canCancel = CANCELLABLE_STATUSES.includes(order.status) && !order.refund_id;
 
   const subtotal = order.order_items?.reduce((s, i) => s + i.total_price, 0) ?? 0;
   const shippingCost = (order as unknown as Record<string, unknown>).shipping_cost as number ?? 0;
   const taxAmount = (order as unknown as Record<string, unknown>).tax_amount as number ?? 0;
 
   const addr = (order as unknown as Record<string, unknown>).shipping_address as Record<string, string> | null;
+  const productName = order.order_items?.[0]?.product_name || 'Order';
 
   const handleCancel = async () => {
-    await cancelMutation.mutateAsync();
-    setShowConfirm(false);
+    try {
+      await cancelMutation.mutateAsync();
+      setSuccessMessage(true);
+      setShowConfirm(false);
+    } catch {
+      // Error is already displayed by mutation
+    }
   };
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)', maxWidth: 720 }}>
       <BackButton to="/orders" label={t('orderDetail.backToOrders')} />
 
+      {/* Success Message */}
+      {successMessage && (
+        <div
+          className="alert alert-success"
+          style={{ marginBottom: 'var(--sp-5)', animation: 'fadeIn 0.3s ease-in-out' }}
+        >
+          {t('orderDetail.cancelSuccess')}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-4)', marginBottom: 'var(--sp-8)' }}>
         <div>
           <span className="section-eyebrow">{t('orderDetail.order')}</span>
           <h1 className="heading-1" style={{ marginBottom: 'var(--sp-1)' }}>
-            #{order.id.slice(0, 8).toUpperCase()}
+            {productName}
           </h1>
           <p style={{ fontSize: 13, color: 'var(--color-text-3)' }}>
             {t('orderDetail.placedOn', {
@@ -92,6 +134,11 @@ export function OrderDetailPage() {
         {order.status === 'shipped' && (
           <p style={{ fontSize: 13, color: 'var(--color-text-3)', marginTop: 'var(--sp-2)' }}>
             {t('orderDetail.expectedDelivery')}
+          </p>
+        )}
+        {order.delivered_at && (
+          <p style={{ fontSize: 13, color: 'var(--color-text-3)', marginTop: 'var(--sp-2)' }}>
+            {t('orderDetail.deliveredAt', { date: formatDate(new Date(order.delivered_at), { year: 'numeric', month: 'long', day: 'numeric' }) })}
           </p>
         )}
       </div>
@@ -213,7 +260,7 @@ export function OrderDetailPage() {
                 </div>
                 {cancelMutation.isError && (
                   <p style={{ fontSize: 13, color: 'var(--color-danger)', marginTop: 'var(--sp-3)' }}>
-                    {t('orderDetail.cancelError')}
+                    {getErrorMessage(cancelMutation.error instanceof Error ? cancelMutation.error : new Error('Unknown error'))}
                   </p>
                 )}
               </div>

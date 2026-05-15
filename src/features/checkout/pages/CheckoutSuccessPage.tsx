@@ -133,7 +133,7 @@ export function CheckoutSuccessPage() {
           width: '100%',
         }}>
           <p style={{ fontSize: 13, color: 'var(--color-text-3)', marginBottom: 'var(--sp-3)' }}>
-            {t('checkoutSuccess.orderLabel')} #{order.id.slice(0, 8).toUpperCase()}
+            {order.order_items?.[0]?.product_name || t('checkoutSuccess.orderLabel')}
           </p>
           {order.order_items?.map((item) => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: 'var(--sp-1) 0' }}>

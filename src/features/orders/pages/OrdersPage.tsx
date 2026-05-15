@@ -1,11 +1,28 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCancelOrder, useOrders } from '../../../hooks/useOrders';
 import { Spinner } from '../../../components/ui/Spinner';
 import { Badge } from '../../../components/ui/Badge';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
 import type { Order, OrderStatus } from '../../../types';
+
+// Error code mapping
+const ERROR_MESSAGES: Record<string, string> = {
+  'ORDER_ALREADY_REFUNDED': 'This order has already been refunded',
+  'ORDER_NOT_CANCELABLE': 'This order cannot be cancelled at this stage',
+  'AUTH_INVALID_SESSION': 'Your session has expired. Please sign in again',
+};
+
+function getErrorMessage(error: Error): string {
+  const message = error.message || '';
+  for (const [code, userMsg] of Object.entries(ERROR_MESSAGES)) {
+    if (message.includes(code)) {
+      return userMsg;
+    }
+  }
+  return message || 'Failed to cancel order. Please try again.';
+}
 
 type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
 
@@ -86,6 +103,7 @@ export function OrdersPage() {
                     formatCurrency={formatCurrency}
                     t={t}
                     tCount={tCount}
+                    getErrorMessage={getErrorMessage}
                   />
                 ))}
               </div>
@@ -108,6 +126,7 @@ export function OrdersPage() {
                     formatCurrency={formatCurrency}
                     t={t}
                     tCount={tCount}
+                    getErrorMessage={getErrorMessage}
                   />
                 ))}
               </div>
@@ -126,6 +145,7 @@ function OrderCard({
   formatCurrency,
   t,
   tCount,
+  getErrorMessage,
 }: {
   order: Order;
   highlight: boolean;
@@ -133,9 +153,18 @@ function OrderCard({
   formatCurrency: (value: number) => string;
   t: (key: string, params?: Record<string, string | number>) => string;
   tCount: (key: string, count: number, params?: Record<string, string | number>) => string;
+  getErrorMessage: (error: Error) => string;
 }) {
   const cancelMutation = useCancelOrder(order.id);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(false);
+
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(false), 3000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
+
   const badge = {
     variant: STATUS_VARIANTS[order.status] ?? 'default',
     label: t(`status.${order.status}`),
@@ -145,9 +174,16 @@ function OrderCard({
   const handleCancel = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    await cancelMutation.mutateAsync();
-    setShowConfirm(false);
+    try {
+      await cancelMutation.mutateAsync();
+      setSuccessMessage(true);
+      setShowConfirm(false);
+    } catch {
+      // Error is displayed in UI
+    }
   };
+
+  const productName = order.order_items?.[0]?.product_name || 'Order';
 
   return (
     <Link
@@ -158,9 +194,23 @@ function OrderCard({
         boxShadow: '0 0 0 1px var(--accent-border)',
       } : {}}
     >
+      {/* Success Message */}
+      {successMessage && (
+        <div
+          className="alert alert-success"
+          style={{
+            marginBottom: 'var(--sp-3)',
+            fontSize: 12,
+            animation: 'fadeIn 0.3s ease-in-out',
+          }}
+        >
+          {t('orderDetail.cancelSuccess')}
+        </div>
+      )}
+
       <div className="order-card__head">
         <div>
-          <p className="order-card__id">#{order.id.slice(0, 8).toUpperCase()}</p>
+          <p className="order-card__id">{productName}</p>
           <p className="order-card__date">
             {formatDate(new Date(order.created_at))}
           </p>
@@ -250,7 +300,7 @@ function OrderCard({
 
       {cancelMutation.isError && (
         <p style={{ fontSize: 12.5, color: 'var(--color-danger)', padding: '0 var(--sp-6) var(--sp-3)' }}>
-          {t('orders.cancelError')}
+          {getErrorMessage(cancelMutation.error instanceof Error ? cancelMutation.error : new Error('Unknown error'))}
         </p>
       )}
     </Link>
