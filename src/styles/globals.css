@@ -2898,6 +2898,36 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
   color: var(--color-text-2);
 }
 
+/* Iubenda API content */
+.iubenda-policy-body h1,
+.iubenda-policy-body h2,
+.iubenda-policy-body h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-1);
+  margin-top: var(--sp-5);
+  margin-bottom: var(--sp-2);
+}
+.iubenda-policy-body h1 { font-size: 17px; margin-top: 0; }
+.iubenda-policy-body p,
+.iubenda-policy-body li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-text-2);
+}
+.iubenda-policy-body ul,
+.iubenda-policy-body ol {
+  padding-left: 18px;
+  margin: var(--sp-2) 0;
+  display: grid;
+  gap: var(--sp-1);
+}
+.iubenda-policy-body a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.iubenda-policy-body strong { font-weight: 600; }
+
 @media (max-width: 800px) {
   .help-contact {
     grid-template-columns: 1fr;

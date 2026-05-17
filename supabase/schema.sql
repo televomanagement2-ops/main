@@ -387,9 +387,24 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_primary) VALUES
-  ('b1000000-0000-0000-0000-000000000001', 'https://placehold.co/600x600?text=ProPhone+X1',       'ProPhone X1 front view',               0, TRUE),
-  ('b1000000-0000-0000-0000-000000000002', 'https://placehold.co/600x600?text=Headphones',         'Wireless headphones',                  0, TRUE),
-  ('b1000000-0000-0000-0000-000000000003', 'https://placehold.co/600x600?text=T-Shirt',            'Classic cotton t-shirt white',         0, TRUE),
-  ('b1000000-0000-0000-0000-000000000004', 'https://placehold.co/600x600?text=Plant+Pots',         'Ceramic plant pot set',                0, TRUE),
-  ('b1000000-0000-0000-0000-000000000005', 'https://placehold.co/600x600?text=USB-C+Hub',          'USB-C 7-in-1 Hub',                     0, TRUE)
+  -- ProPhone X1
+  ('b1000000-0000-0000-0000-000000000001', 'https://picsum.photos/seed/prophone-x1/1200/1200',        'ProPhone X1 front view',             0, TRUE),
+  ('b1000000-0000-0000-0000-000000000001', 'https://picsum.photos/seed/prophone-x1-2/1200/1200',      'ProPhone X1 back view',              1, FALSE),
+  ('b1000000-0000-0000-0000-000000000001', 'https://picsum.photos/seed/prophone-x1-3/1200/1200',      'ProPhone X1 detail',                 2, FALSE),
+  -- Wireless Noise-Cancelling Headphones
+  ('b1000000-0000-0000-0000-000000000002', 'https://picsum.photos/seed/wireless-nc-headphones/1200/1200',   'Wireless headphones folded',    0, TRUE),
+  ('b1000000-0000-0000-0000-000000000002', 'https://picsum.photos/seed/wireless-nc-headphones-2/1200/1200', 'Wireless headphones worn',      1, FALSE),
+  ('b1000000-0000-0000-0000-000000000002', 'https://picsum.photos/seed/wireless-nc-headphones-3/1200/1200', 'Wireless headphones detail',    2, FALSE),
+  -- Classic Cotton T-Shirt
+  ('b1000000-0000-0000-0000-000000000003', 'https://picsum.photos/seed/classic-cotton-tshirt/1200/1200',   'Classic cotton t-shirt front',   0, TRUE),
+  ('b1000000-0000-0000-0000-000000000003', 'https://picsum.photos/seed/classic-cotton-tshirt-2/1200/1200', 'Classic cotton t-shirt back',    1, FALSE),
+  ('b1000000-0000-0000-0000-000000000003', 'https://picsum.photos/seed/classic-cotton-tshirt-3/1200/1200', 'Classic cotton t-shirt detail',  2, FALSE),
+  -- Ceramic Plant Pot Set
+  ('b1000000-0000-0000-0000-000000000004', 'https://picsum.photos/seed/ceramic-plant-pot-set/1200/1200',   'Ceramic plant pot set arranged', 0, TRUE),
+  ('b1000000-0000-0000-0000-000000000004', 'https://picsum.photos/seed/ceramic-plant-pot-set-2/1200/1200', 'Ceramic pots close-up',          1, FALSE),
+  ('b1000000-0000-0000-0000-000000000004', 'https://picsum.photos/seed/ceramic-plant-pot-set-3/1200/1200', 'Ceramic pot with plant',         2, FALSE),
+  -- USB-C Hub 7-in-1
+  ('b1000000-0000-0000-0000-000000000005', 'https://picsum.photos/seed/usb-c-hub-7in1/1200/1200',     'USB-C hub top view',                 0, TRUE),
+  ('b1000000-0000-0000-0000-000000000005', 'https://picsum.photos/seed/usb-c-hub-7in1-2/1200/1200',   'USB-C hub ports detail',             1, FALSE),
+  ('b1000000-0000-0000-0000-000000000005', 'https://picsum.photos/seed/usb-c-hub-7in1-3/1200/1200',   'USB-C hub in use',                   2, FALSE)
 ON CONFLICT DO NOTHING;

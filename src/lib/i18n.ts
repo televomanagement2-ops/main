@@ -343,6 +343,20 @@ const translations: Translations = {
         },
       },
     },
+    terms: {
+      eyebrow: 'Legal',
+      title: 'Terms of Service',
+      subtitle: 'Rules governing the use of the platform, purchases, payments, shipping, returns, and liability.',
+      placeholder: 'Placeholder document — activate Iubenda Terms of Service Generator and replace this content before going live.',
+      lastUpdated: 'Last updated',
+    },
+    cookies: {
+      eyebrow: 'Legal',
+      title: 'Cookie Policy',
+      subtitle: 'Information on the cookies used by this site and how to manage your preferences.',
+      manageBtn: 'Manage cookie preferences',
+      manageSub: 'Open the cookie preference panel to review or change your consent at any time.',
+    },
     privacy: {
       eyebrow: 'Legal',
       title: 'Privacy Policy',
@@ -965,6 +979,20 @@ const translations: Translations = {
           a2: 'Per una gestione completa ordini e consigliato l account. Alcuni flussi possono consentire checkout semplificato.',
         },
       },
+    },
+    terms: {
+      eyebrow: 'Legale',
+      title: 'Termini di servizio',
+      subtitle: 'Regole che disciplinano l utilizzo della piattaforma, acquisti, pagamenti, spedizioni, resi e responsabilita.',
+      placeholder: 'Documento placeholder — attiva il Generatore di Termini e Condizioni di Iubenda e sostituisci questo contenuto prima del lancio.',
+      lastUpdated: 'Ultimo aggiornamento',
+    },
+    cookies: {
+      eyebrow: 'Legale',
+      title: 'Cookie Policy',
+      subtitle: 'Informazioni sui cookie utilizzati da questo sito e su come gestire le tue preferenze.',
+      manageBtn: 'Gestisci preferenze cookie',
+      manageSub: 'Apri il pannello preferenze cookie per rivedere o modificare il tuo consenso in qualsiasi momento.',
     },
     privacy: {
       eyebrow: 'Legale',
@@ -1589,6 +1617,20 @@ const translations: Translations = {
         },
       },
     },
+    terms: {
+      eyebrow: 'Legal',
+      title: 'Terminos de servicio',
+      subtitle: 'Reglas que regulan el uso de la plataforma, compras, pagos, envios, devoluciones y responsabilidad.',
+      placeholder: 'Documento placeholder — activa el Generador de Terminos y Condiciones de Iubenda y sustituye este contenido antes del lanzamiento.',
+      lastUpdated: 'Ultima actualizacion',
+    },
+    cookies: {
+      eyebrow: 'Legal',
+      title: 'Politica de cookies',
+      subtitle: 'Informacion sobre las cookies utilizadas en este sitio y como gestionar tus preferencias.',
+      manageBtn: 'Gestionar preferencias de cookies',
+      manageSub: 'Abre el panel de preferencias de cookies para revisar o cambiar tu consentimiento en cualquier momento.',
+    },
     privacy: {
       eyebrow: 'Legal',
       title: 'Politica de privacidad',
@@ -2211,6 +2253,20 @@ const translations: Translations = {
           a2: 'Pour une gestion complete, un compte est recommande. Certains parcours peuvent permettre un checkout simplifie.',
         },
       },
+    },
+    terms: {
+      eyebrow: 'Legal',
+      title: 'Conditions de service',
+      subtitle: 'Regles regissant l utilisation de la plateforme, achats, paiements, livraison, retours et responsabilite.',
+      placeholder: 'Document placeholder — activez le Generateur de Conditions de service d Iubenda et remplacez ce contenu avant le lancement.',
+      lastUpdated: 'Derniere mise a jour',
+    },
+    cookies: {
+      eyebrow: 'Legal',
+      title: 'Politique de cookies',
+      subtitle: 'Informations sur les cookies utilises par ce site et comment gerer vos preferences.',
+      manageBtn: 'Gerer les preferences de cookies',
+      manageSub: 'Ouvrez le panneau de preferences de cookies pour revoir ou modifier votre consentement a tout moment.',
     },
     privacy: {
       eyebrow: 'Legal',

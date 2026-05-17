@@ -128,7 +128,7 @@ function getStoredBoolean(key: string, defaultValue: boolean): boolean {
           <p className="settings-note" style={{ marginBottom: 'var(--sp-4)' }}>
             {t('settings.privacySub')}
           </p>
-          <Link to="/privacy" className="btn btn-secondary btn-sm">{t('settings.openPrivacy')}</Link>
+          <Link to="/privacy-policy" className="btn btn-secondary btn-sm">{t('settings.openPrivacy')}</Link>
         </article>
 
         <article className="settings-card">

@@ -14,6 +14,32 @@
         if (dark) document.documentElement.classList.add('dark');
       })();
     </script>
+    <!-- Iubenda Consent Solution (CMP) — sostituire IUBENDA_SITE_ID e IUBENDA_COOKIE_POLICY_ID con i valori reali dalla dashboard Iubenda > Privacy Controls and Cookie Solution > Implementa -->
+    <script type="text/javascript">
+      var _iub = _iub || [];
+      _iub.csConfiguration = {
+        siteId: 430676,
+        cookiePolicyId: 23532675,
+        lang: "auto",
+        storage: { useSiteId: true },
+        banner: {
+          acceptButtonDisplay: true,
+          customizeButtonDisplay: true,
+          rejectButtonDisplay: true,
+          position: "bottom",
+          slideDown: false,
+        },
+        callback: {
+          onConsentGiven: function () {
+            window.dispatchEvent(new Event("iubenda:consent:given"));
+          },
+          onConsentRejected: function () {
+            window.dispatchEvent(new Event("iubenda:consent:rejected"));
+          },
+        },
+      };
+    </script>
+    <script type="text/javascript" src="//cdn.iubenda.com/cs/iubenda_cs.js" charset="UTF-8" async></script>
   </head>
   <body>
     <div id="root"></div>

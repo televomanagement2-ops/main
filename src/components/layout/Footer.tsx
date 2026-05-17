@@ -45,9 +45,9 @@ export function Footer() {
 
           <div className="footer-column">
             <p className="footer-column__title">{t('footer.privacy')}</p>
-            <Link to="/privacy" className="footer-link">{t('footer.privacyPolicy')}</Link>
-            <Link to="/privacy#terms" className="footer-link">{t('footer.terms')}</Link>
-            <Link to="/privacy" className="footer-link">{t('footer.cookie')}</Link>
+            <Link to="/privacy-policy" className="footer-link">{t('footer.privacyPolicy')}</Link>
+            <Link to="/terms" className="footer-link">{t('footer.terms')}</Link>
+            <Link to="/cookies" className="footer-link">{t('footer.cookie')}</Link>
           </div>
         </div>
 

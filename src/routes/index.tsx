@@ -15,6 +15,9 @@ import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { SettingsPage } from '../features/settings/pages/SettingsPage';
 import { HelpPage } from '../features/help/pages/HelpPage';
 import { PrivacyPage } from '../features/legal/pages/PrivacyPage';
+import { PrivacyPolicyPage } from '../features/legal/pages/PrivacyPolicyPage';
+import { TermsPage } from '../features/legal/pages/TermsPage';
+import { CookiePolicyPage } from '../features/legal/pages/CookiePolicyPage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { AdminRoute } from './AdminRoute';
 import { AdminLayout } from '../features/admin/layout/AdminLayout';
@@ -99,6 +102,9 @@ const router = createBrowserRouter([
       },
       { path: 'help', element: <HelpPage /> },
       { path: 'privacy', element: <PrivacyPage /> },
+      { path: 'privacy-policy', element: <PrivacyPolicyPage /> },
+      { path: 'terms', element: <TermsPage /> },
+      { path: 'cookies', element: <CookiePolicyPage /> },
       {
         path: 'admin',
         element: (
