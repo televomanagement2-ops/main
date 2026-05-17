@@ -16,54 +16,96 @@ interface PromoSlide {
   kicker: string;
 }
 
+interface PromoProduct {
+  slug: string;
+  imageUrl: string;
+  name: string;
+  discountPct?: number;
+}
+
+const PROMO_PRODUCTS: Record<PromoTheme, PromoProduct[]> = {
+  deals: [
+    { slug: 'mechanical-keyboard-tkl', imageUrl: 'https://picsum.photos/seed/mechanical-keyboard-tkl/600/600', name: 'Mechanical Keyboard TKL', discountPct: 19 },
+    { slug: 'laptop-stand-aluminium', imageUrl: 'https://picsum.photos/seed/laptop-stand-aluminium/600/600', name: 'Laptop Stand Aluminium', discountPct: 22 },
+    { slug: 'slim-fit-chinos', imageUrl: 'https://picsum.photos/seed/slim-fit-chinos/600/600', name: 'Slim-Fit Chinos', discountPct: 18 },
+    { slug: 'organic-denim-jacket', imageUrl: 'https://picsum.photos/seed/organic-denim-jacket/600/600', name: 'Organic Denim Jacket', discountPct: 21 },
+  ],
+  tech: [
+    { slug: 'noise-isolating-earbuds', imageUrl: 'https://picsum.photos/seed/noise-isolating-earbuds/600/600', name: 'Noise-Isolating Earbuds' },
+    { slug: 'portable-ssd-1tb', imageUrl: 'https://picsum.photos/seed/portable-ssd-1tb/600/600', name: 'Portable SSD 1TB' },
+    { slug: 'prophone-x1', imageUrl: 'https://picsum.photos/seed/prophone-x1-2/600/600', name: 'ProPhone X1' },
+    { slug: 'webcam-4k-pro', imageUrl: 'https://picsum.photos/seed/webcam-4k-pro/600/600', name: 'Webcam 4K Pro' },
+  ],
+  delivery: [
+    { slug: 'oversized-hoodie', imageUrl: 'https://picsum.photos/seed/oversized-hoodie/600/600', name: 'Oversized Hoodie' },
+    { slug: 'merino-wool-crewneck', imageUrl: 'https://picsum.photos/seed/merino-wool-crewneck/600/600', name: 'Merino Wool Crewneck' },
+    { slug: 'monitor-27-4k-usbc', imageUrl: 'https://picsum.photos/seed/monitor-27-4k-usbc/600/600', name: '27" 4K Monitor' },
+    { slug: 'relaxed-linen-shirt', imageUrl: 'https://picsum.photos/seed/relaxed-linen-shirt/600/600', name: 'Relaxed Linen Shirt' },
+  ],
+  'one-euro': [
+    { slug: 'wireless-charging-pad-15w', imageUrl: 'https://picsum.photos/seed/wireless-charging-pad-15w/600/600', name: 'Wireless Charging Pad' },
+    { slug: 'usb-c-hub-7in1', imageUrl: 'https://picsum.photos/seed/usb-c-hub-7in1-2/600/600', name: 'USB-C Hub 7-in-1' },
+    { slug: 'classic-cotton-tshirt', imageUrl: 'https://picsum.photos/seed/classic-cotton-tshirt-2/600/600', name: 'Classic Cotton T-Shirt' },
+    { slug: 'ceramic-plant-pot-set', imageUrl: 'https://picsum.photos/seed/ceramic-plant-pot-set-2/600/600', name: 'Ceramic Plant Pot Set' },
+  ],
+};
+
 function PromoCardArt({ theme }: { theme: PromoTheme }) {
-  const { t } = useI18n();
+  const products = PROMO_PRODUCTS[theme];
 
   if (theme === 'deals') {
     return (
-      <div className="promo-art promo-art--deals" aria-hidden="true">
-        {[35, 28, 19, 6].map((discount) => (
-          <div key={discount} className="promo-deal-tile">
-            <div className="promo-deal-thumb" />
-            <span className="promo-deal-badge">{t('home.promo.deals.badge', { discount })}</span>
-          </div>
+      <div className="promo-art promo-art--deals">
+        {products.map((p) => (
+          <Link key={p.slug} to={`/products/${p.slug}`} className="promo-deal-tile promo-deal-tile--link">
+            <img src={p.imageUrl} alt={p.name} className="promo-deal-thumb promo-deal-thumb--img" loading="lazy" />
+            <span className="promo-deal-badge">-{p.discountPct}%</span>
+          </Link>
         ))}
       </div>
     );
   }
 
   if (theme === 'tech') {
+    const techClasses = ['tech-orb--earbuds', 'tech-orb--ssd', 'tech-orb--phone', 'tech-orb--pen'];
     return (
-      <div className="promo-art promo-art--tech" aria-hidden="true">
-        <div className="tech-orb tech-orb--earbuds" />
-        <div className="tech-orb tech-orb--ssd" />
-        <div className="tech-orb tech-orb--phone" />
-        <div className="tech-orb tech-orb--pen" />
+      <div className="promo-art promo-art--tech">
+        {products.map((p, i) => (
+          <Link key={p.slug} to={`/products/${p.slug}`} className={`tech-orb ${techClasses[i]} tech-orb--img-link`} aria-label={p.name}>
+            <img src={p.imageUrl} alt={p.name} className="tech-orb__img" loading="lazy" />
+          </Link>
+        ))}
       </div>
     );
   }
 
   if (theme === 'one-euro') {
     return (
-      <div className="promo-art promo-art--one-euro" aria-hidden="true">
-        <span className="haul-star">✦</span>
-        <span className="haul-star haul-star--small">✦</span>
-        <div className="haul-ring haul-ring--one" />
-        <div className="haul-ring haul-ring--two" />
+      <div className="promo-art promo-art--one-euro">
+        <span className="haul-star" aria-hidden="true">✦</span>
+        <span className="haul-star haul-star--small" aria-hidden="true">✦</span>
+        <div className="haul-ring haul-ring--one" aria-hidden="true" />
+        <div className="haul-ring haul-ring--two" aria-hidden="true" />
         <div className="haul-sticker-row">
-          <div className="haul-sticker" />
-          <div className="haul-sticker" />
-          <div className="haul-sticker" />
+          {products.slice(0, 3).map((p) => (
+            <Link key={p.slug} to={`/products/${p.slug}`} className="haul-sticker haul-sticker--img-link" aria-label={p.name}>
+              <img src={p.imageUrl} alt={p.name} className="haul-sticker__img" loading="lazy" />
+            </Link>
+          ))}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="promo-art promo-art--delivery" aria-hidden="true">
-      <div className="delivery-cut delivery-cut--one" />
-      <div className="delivery-cut delivery-cut--two" />
-      <div className="delivery-figure" />
+    <div className="promo-art promo-art--delivery">
+      <div className="promo-delivery-grid">
+        {products.map((p) => (
+          <Link key={p.slug} to={`/products/${p.slug}`} className="promo-delivery-tile" aria-label={p.name}>
+            <img src={p.imageUrl} alt={p.name} className="promo-delivery-tile__img" loading="lazy" />
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
