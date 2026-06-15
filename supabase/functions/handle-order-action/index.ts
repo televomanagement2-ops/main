@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
 
       // Send refund confirmation email (non-blocking: failure does not affect the refund response)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'ShopBase <support@shopbase.com>';
+      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
       const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
       const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Cliente';
 
@@ -344,7 +344,7 @@ Deno.serve(async (req) => {
 
       // Send delivery notification email (non-blocking)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'ShopBase <support@shopbase.com>';
+      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
       const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
       const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Cliente';
 
@@ -358,11 +358,11 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             from: fromEmail,
             to: customerEmail,
-            subject: 'Il tuo ordine ShopBase è stato consegnato',
+            subject: 'Il tuo ordine CommerceJet è stato consegnato',
             html: `
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff;">
                 <div style="background: #000; padding: 24px 32px;">
-                  <p style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 0.05em;">SHOPBASE</p>
+                  <p style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 0.05em;">COMMERCEJET</p>
                 </div>
                 <div style="padding: 40px 32px; color: #111;">
                   <p style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px;">Consegna confermata</p>
@@ -374,13 +374,13 @@ Deno.serve(async (req) => {
                     Se hai domande sulla tua spedizione, hai ricevuto un prodotto diverso da quello ordinato, o hai bisogno di assistenza, rispondi direttamente a questa email — il nostro team ti risponde entro 24 ore.
                   </p>
                   <div style="border-top: 1px solid #eee; padding-top: 24px; margin-top: 8px;">
-                    <p style="font-size: 13px; color: #888; margin: 0;">Grazie per aver scelto ShopBase.</p>
-                    <p style="font-size: 13px; color: #bbb; margin: 4px 0 0;">© ${new Date().getFullYear()} ShopBase. Tutti i diritti riservati.</p>
+                    <p style="font-size: 13px; color: #888; margin: 0;">Grazie per aver scelto CommerceJet.</p>
+                    <p style="font-size: 13px; color: #bbb; margin: 4px 0 0;">© ${new Date().getFullYear()} CommerceJet. Tutti i diritti riservati.</p>
                   </div>
                 </div>
               </div>
             `,
-            text: `Ciao ${customerName},\n\nIl tuo ordine ShopBase è stato consegnato.\n\nSperiamo che i tuoi nuovi capi siano esattamente come te li aspettavi.\n\nSe hai domande o problemi, rispondi a questa email — il nostro team ti risponde entro 24 ore.\n\nGrazie per aver scelto ShopBase.`,
+            text: `Ciao ${customerName},\n\nIl tuo ordine CommerceJet è stato consegnato.\n\nSperiamo che i tuoi nuovi capi siano esattamente come te li aspettavi.\n\nSe hai domande o problemi, rispondi a questa email — il nostro team ti risponde entro 24 ore.\n\nGrazie per aver scelto CommerceJet.`,
           }),
         }).catch((emailErr) => {
           console.error('Delivery email failed (non-blocking):', emailErr);

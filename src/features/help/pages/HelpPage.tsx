@@ -52,8 +52,8 @@ export function HelpPage() {
     const form = event.currentTarget;
     const email = (form.elements.namedItem('help-email') as HTMLInputElement).value;
     const message = (form.elements.namedItem('help-message') as HTMLTextAreaElement).value;
-    const subject = `Richiesta Supporto da ShopBase (${email})`;
-    const mailtoUrl = `mailto:support@shopbase.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+    const subject = `Richiesta Supporto da CommerceJet (${email})`;
+    const mailtoUrl = `mailto:support@commercejet.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
     window.location.href = mailtoUrl;
     setSent(true);
   };
@@ -89,7 +89,7 @@ export function HelpPage() {
       <section className="help-contact" aria-label={t('help.contactAria')}>
         <div>
           <h2 className="heading-2" style={{ marginBottom: 'var(--sp-2)' }}>{t('help.contactTitle')}</h2>
-          <p className="body-sm">{t('help.contactEmail')}: <a href="mailto:support@shopbase.com">support@shopbase.com</a></p>
+          <p className="body-sm">{t('help.contactEmail')}: <a href="mailto:support@commercejet.com">support@commercejet.com</a></p>
           <p className="body-sm">{t('help.contactPhone')}: <a href="tel:+390000000000">+39 000 000 0000</a></p>
           <p className="body-sm">{t('help.contactHours')}</p>
         </div>

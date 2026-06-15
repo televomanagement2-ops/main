@@ -13,7 +13,7 @@ export function Header() {
     <header className="header">
       <div className="container header-inner">
         <Link to="/" className="logo">
-          Shop<span>Base</span>
+          Commerce<span>Jet</span>
         </Link>
 
         <nav className="nav">

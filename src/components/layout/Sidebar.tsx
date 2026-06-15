@@ -77,7 +77,7 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
       {!mini && (
         <div className="sidebar-brand">
           <Link to="/" className="sidebar-brand__logo">
-            Shop<span>Base</span>
+            Commerce<span>Jet</span>
           </Link>
           <button
             className="sidebar-brand__toggle"

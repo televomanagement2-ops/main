@@ -37,7 +37,7 @@ export function DesktopNavBar({ onMenuClick }: Props) {
       </button>
 
       <Link to="/" className="desktop-nav__brand">
-        Shop<span>Base</span>
+        Commerce<span>Jet</span>
       </Link>
 
       <div className="desktop-nav__actions">

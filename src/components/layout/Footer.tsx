@@ -10,14 +10,14 @@ export function Footer() {
       <div className="container footer-inner">
         <div className="footer-brand-block">
           <Link to="/" className="footer-brand">
-            Shop<span>Base</span>
+            Commerce<span>Jet</span>
           </Link>
           <p className="footer-brand-copy">
             {t('footer.tagline')}
           </p>
           <div className="footer-contact-pill">
             <span>{t('footer.support')}</span>
-            <a href="mailto:support@shopbase.com">support@shopbase.com</a>
+            <a href="mailto:support@commercejet.com">support@commercejet.com</a>
           </div>
         </div>
 
@@ -25,7 +25,7 @@ export function Footer() {
           <div className="footer-column">
             <p className="footer-column__title">{t('footer.contact')}</p>
             <Link to="/help" className="footer-link">{t('footer.liveChat')}</Link>
-            <a href="mailto:support@shopbase.com" className="footer-link">{t('footer.emailSupport')}</a>
+            <a href="mailto:support@commercejet.com" className="footer-link">{t('footer.emailSupport')}</a>
             <a href="tel:+390000000000" className="footer-link">+39 000 000 0000</a>
           </div>
 
@@ -52,7 +52,7 @@ export function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <p className="footer-copy">&copy; {year} ShopBase</p>
+          <p className="footer-copy">&copy; {year} CommerceJet</p>
           <div className="footer-bottom__meta">
             <span>{t('footer.countryCode')}</span>
             <span>{t('footer.countryName')}</span>

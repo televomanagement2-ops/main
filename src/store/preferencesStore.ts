@@ -22,7 +22,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       setLanguage: (language) => set({ language }),
     }),
     {
-      name: 'shopbase-preferences',
+      name: 'commercejet-preferences',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ language: state.language }),
     }

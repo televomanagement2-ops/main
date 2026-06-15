@@ -15,7 +15,7 @@ export const useCookieConsentStore = create<CookieConsentState>()(
       setStatus: (status) => set({ status }),
     }),
     {
-      name: 'shopbase-cookie-consent',
+      name: 'commercejet-cookie-consent',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ status: state.status }),
     }

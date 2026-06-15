@@ -1,6 +1,6 @@
-# ShopBase
+# CommerceJet
 
-ShopBase is a full-stack e-commerce storefront built with React, Supabase, and Stripe. It includes catalog browsing, guest and authenticated carts, checkout via Stripe Checkout, webhook-driven order updates, and database-backed order history.
+CommerceJet is a full-stack e-commerce storefront built with React, Supabase, and Stripe. It includes catalog browsing, guest and authenticated carts, checkout via Stripe Checkout, webhook-driven order updates, and database-backed order history.
 
 ## What is included
 
@@ -88,7 +88,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 SUPABASE_ANON_KEY=eyJ...
 RESEND_API_KEY=re_...
 # Optional
-RESEND_FROM_EMAIL=ShopBase <support@shopbase.com>
+RESEND_FROM_EMAIL=CommerceJet <support@commercejet.com>
 ```
 
 The Supabase runtime injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically for Edge Functions.

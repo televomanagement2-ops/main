@@ -24,10 +24,10 @@ const it: PolicyData = {
     {
       title: '3. Cookie Tecnici Specifici del Sito',
       content: [
-        'shopbase-theme — memorizza la preferenza tema (chiaro/scuro/sistema). Durata: persistente. Prima parte. Non richiede consenso.',
-        'shopbase-preferences — memorizza la lingua selezionata dall\'utente. Durata: persistente. Prima parte. Non richiede consenso.',
-        'shopbase-cart — mantiene il contenuto del carrello per utenti non autenticati. Durata: sessione. Prima parte. Non richiede consenso.',
-        'shopbase-cookie-consent — memorizza la scelta dell\'utente relativa ai cookie. Durata: 12 mesi. Prima parte. Non richiede consenso.',
+        'commercejet-theme —memorizza la preferenza tema (chiaro/scuro/sistema). Durata: persistente. Prima parte. Non richiede consenso.',
+        'commercejet-preferences —memorizza la lingua selezionata dall\'utente. Durata: persistente. Prima parte. Non richiede consenso.',
+        'commercejet-cart —mantiene il contenuto del carrello per utenti non autenticati. Durata: sessione. Prima parte. Non richiede consenso.',
+        'commercejet-cookie-consent —memorizza la scelta dell\'utente relativa ai cookie. Durata: 12 mesi. Prima parte. Non richiede consenso.',
         'Cookie di sessione Supabase — gestiscono l\'autenticazione sicura dell\'utente. Durata: sessione / token JWT. Prima parte. Non richiedono consenso.',
       ],
     },
@@ -103,10 +103,10 @@ const en: PolicyData = {
     {
       title: '3. Site-Specific Technical Cookies',
       content: [
-        'shopbase-theme — stores theme preference (light/dark/system). Duration: persistent. First party. No consent required.',
-        'shopbase-preferences — stores the user\'s selected language. Duration: persistent. First party. No consent required.',
-        'shopbase-cart — maintains the cart contents for unauthenticated users. Duration: session. First party. No consent required.',
-        'shopbase-cookie-consent — stores the user\'s cookie choice. Duration: 12 months. First party. No consent required.',
+        'commercejet-theme —stores theme preference (light/dark/system). Duration: persistent. First party. No consent required.',
+        'commercejet-preferences —stores the user\'s selected language. Duration: persistent. First party. No consent required.',
+        'commercejet-cart —maintains the cart contents for unauthenticated users. Duration: session. First party. No consent required.',
+        'commercejet-cookie-consent —stores the user\'s cookie choice. Duration: 12 months. First party. No consent required.',
         'Supabase session cookies — manage secure user authentication. Duration: session / JWT token. First party. No consent required.',
       ],
     },
@@ -182,10 +182,10 @@ const es: PolicyData = {
     {
       title: '3. Cookies Técnicas Específicas del Sitio',
       content: [
-        'shopbase-theme — almacena la preferencia de tema (claro/oscuro/sistema). Duración: persistente. Primera parte. No requiere consentimiento.',
-        'shopbase-preferences — almacena el idioma seleccionado por el usuario. Duración: persistente. Primera parte. No requiere consentimiento.',
-        'shopbase-cart — mantiene el contenido del carrito para usuarios no autenticados. Duración: sesión. Primera parte. No requiere consentimiento.',
-        'shopbase-cookie-consent — almacena la elección del usuario respecto a las cookies. Duración: 12 meses. Primera parte. No requiere consentimiento.',
+        'commercejet-theme —almacena la preferencia de tema (claro/oscuro/sistema). Duración: persistente. Primera parte. No requiere consentimiento.',
+        'commercejet-preferences —almacena el idioma seleccionado por el usuario. Duración: persistente. Primera parte. No requiere consentimiento.',
+        'commercejet-cart —mantiene el contenido del carrito para usuarios no autenticados. Duración: sesión. Primera parte. No requiere consentimiento.',
+        'commercejet-cookie-consent —almacena la elección del usuario respecto a las cookies. Duración: 12 meses. Primera parte. No requiere consentimiento.',
         'Cookies de sesión de Supabase — gestionan la autenticación segura del usuario. Duración: sesión / token JWT. Primera parte. No requieren consentimiento.',
       ],
     },
@@ -261,10 +261,10 @@ const fr: PolicyData = {
     {
       title: '3. Cookies Techniques Spécifiques au Site',
       content: [
-        'shopbase-theme — stocke la préférence de thème (clair/sombre/système). Durée : persistant. Première partie. Pas de consentement requis.',
-        'shopbase-preferences — stocke la langue sélectionnée par l\'utilisateur. Durée : persistant. Première partie. Pas de consentement requis.',
-        'shopbase-cart — maintient le contenu du panier pour les utilisateurs non authentifiés. Durée : session. Première partie. Pas de consentement requis.',
-        'shopbase-cookie-consent — stocke le choix de l\'utilisateur concernant les cookies. Durée : 12 mois. Première partie. Pas de consentement requis.',
+        'commercejet-theme —stocke la préférence de thème (clair/sombre/système). Durée : persistant. Première partie. Pas de consentement requis.',
+        'commercejet-preferences —stocke la langue sélectionnée par l\'utilisateur. Durée : persistant. Première partie. Pas de consentement requis.',
+        'commercejet-cart —maintient le contenu du panier pour les utilisateurs non authentifiés. Durée : session. Première partie. Pas de consentement requis.',
+        'commercejet-cookie-consent —stocke le choix de l\'utilisateur concernant les cookies. Durée : 12 mois. Première partie. Pas de consentement requis.',
         'Cookies de session Supabase — gèrent l\'authentification sécurisée de l\'utilisateur. Durée : session / jeton JWT. Première partie. Pas de consentement requis.',
       ],
     },

@@ -45,7 +45,7 @@ export function Topbar({ onMenuClick }: Props) {
 
       {/* Logo */}
       <Link to="/" className="topbar__logo">
-        Shop<span>Base</span>
+        Commerce<span>Jet</span>
       </Link>
 
       {/* Search */}

@@ -15,7 +15,7 @@ export function applyTheme(theme: Theme): void {
 }
 
 export function initTheme(): void {
-  const stored = localStorage.getItem('shopbase-theme');
+  const stored = localStorage.getItem('commercejet-theme');
   let theme: Theme = 'system';
   if (stored) {
     try {
@@ -43,7 +43,7 @@ export const useThemeStore = create<ThemeState>()(
       },
     }),
     {
-      name: 'shopbase-theme',
+      name: 'commercejet-theme',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ theme: state.theme }),
     }
