@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { DesktopNavBar } from './DesktopNavBar';
 import { BottomNavBar } from './BottomNavBar';
+import { CookieConsentBanner } from '../consent/CookieConsentBanner';
 import { useAuthListener } from '../../hooks/useAuth';
 
 export function RootLayout() {
@@ -51,6 +52,8 @@ export function RootLayout() {
       </div>
 
       <BottomNavBar onMenuClick={handleHamburger} />
+
+      <CookieConsentBanner />
     </div>
   );
 }

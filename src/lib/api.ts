@@ -3,7 +3,6 @@ import type {
   Product,
   Category,
   Order,
-  OrderItem,
   OrderStatus,
   Cart,
   CartItem,
@@ -13,8 +12,19 @@ import type {
   Address,
   ShippingMethod,
   ProductReview,
+  ProductImage,
   AdminAnalytics,
 } from '../types';
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // strip diacritics
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
 
 // ============================================================
 // PRODUCTS
@@ -208,6 +218,17 @@ export async function fetchReviews(productId: string): Promise<ProductReview[]> 
   return (data as unknown as ProductReview[]) ?? [];
 }
 
+export async function hasPurchasedProduct(productId: string): Promise<boolean> {
+  // Calls the SECURITY DEFINER function added in migration 010. Returns false
+  // if the function is missing (migration not yet applied) or on any error.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('has_purchased', {
+    p_product_id: productId,
+  });
+  if (error) return false;
+  return Boolean(data);
+}
+
 export async function submitReview(
   productId: string,
   userId: string,
@@ -353,35 +374,6 @@ export async function cancelOrder(orderId: string): Promise<Order> {
   }
 
   return payload.order;
-}
-
-export async function createOrder(
-  order: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'order_items'>,
-  items: Omit<OrderItem, 'id' | 'order_id' | 'created_at'>[]
-): Promise<Order> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client = supabase as any;
-
-  const { data: newOrder, error: orderErr } = await client
-    .from('orders')
-    .insert(order)
-    .select()
-    .single();
-
-  if (orderErr) throw orderErr;
-
-  const orderItems = items.map((item) => ({
-    ...item,
-    order_id: (newOrder as unknown as Order).id,
-  }));
-
-  const { error: itemsErr } = await client
-    .from('order_items')
-    .insert(orderItems);
-
-  if (itemsErr) throw itemsErr;
-
-  return newOrder as unknown as Order;
 }
 
 // ============================================================
@@ -632,4 +624,128 @@ export async function updateProduct(
 
   if (error) throw error;
   return data as unknown as Product;
+}
+
+// ============================================================
+// ADMIN — PRODUCT CREATION, IMAGES, CATEGORIES
+// ============================================================
+
+export type ProductInput = {
+  name: string;
+  category_id: string;
+  price: number;
+  description?: string | null;
+  sku?: string | null;
+  stock_quantity?: number;
+  low_stock_threshold?: number;
+  weight_grams?: number | null;
+  is_active?: boolean;
+  is_featured?: boolean;
+  slug?: string;
+};
+
+export async function createProduct(input: ProductInput): Promise<Product> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+
+  // Resolve a unique slug (the products.slug column is UNIQUE).
+  const base = (input.slug?.trim() || slugify(input.name)) || `product-${Date.now()}`;
+  let slug = base;
+  for (let i = 0; i < 5; i++) {
+    const { data: existing } = await client
+      .from('products')
+      .select('id')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!existing) break;
+    slug = `${base}-${Math.random().toString(36).slice(2, 6)}`;
+  }
+
+  const { data, error } = await client
+    .from('products')
+    .insert({
+      name: input.name,
+      slug,
+      category_id: input.category_id,
+      price: input.price,
+      description: input.description ?? null,
+      sku: input.sku || null,
+      stock_quantity: input.stock_quantity ?? 0,
+      low_stock_threshold: input.low_stock_threshold ?? 5,
+      weight_grams: input.weight_grams ?? null,
+      is_active: input.is_active ?? true,
+      is_featured: input.is_featured ?? false,
+    })
+    .select('*, product_images(*), categories(*)')
+    .single();
+
+  if (error) throw error;
+  return data as unknown as Product;
+}
+
+/** Upload an image file to the product-images bucket; returns its public URL. */
+export async function uploadProductImage(file: File): Promise<string> {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
+  if (error) throw error;
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function addProductImages(
+  productId: string,
+  images: { url: string; alt_text?: string | null; is_primary?: boolean; sort_order?: number }[]
+): Promise<ProductImage[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+  const rows = images.map((img, i) => ({
+    product_id: productId,
+    url: img.url,
+    alt_text: img.alt_text ?? null,
+    is_primary: img.is_primary ?? i === 0,
+    sort_order: img.sort_order ?? i,
+  }));
+  const { data, error } = await client.from('product_images').insert(rows).select();
+  if (error) throw error;
+  return data as ProductImage[];
+}
+
+export async function deleteProductImage(imageId: string): Promise<void> {
+  const { error } = await supabase.from('product_images').delete().eq('id', imageId);
+  if (error) throw error;
+}
+
+export async function setPrimaryProductImage(productId: string, imageId: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+  // One primary per product (enforced by a partial unique index): clear, then set.
+  await client
+    .from('product_images')
+    .update({ is_primary: false })
+    .eq('product_id', productId)
+    .eq('is_primary', true);
+  const { error } = await client.from('product_images').update({ is_primary: true }).eq('id', imageId);
+  if (error) throw error;
+}
+
+export async function fetchAdminCategories(): Promise<Category[]> {
+  const { data, error } = await supabase.from('categories').select('*').order('sort_order');
+  if (error) throw error;
+  return (data as unknown as Category[]) ?? [];
+}
+
+export async function createCategory(name: string): Promise<Category> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = supabase as any;
+  const slug = slugify(name) || `category-${Date.now()}`;
+  const { data, error } = await client
+    .from('categories')
+    .insert({ name, slug })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Category;
 }

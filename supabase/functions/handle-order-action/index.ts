@@ -2,7 +2,12 @@ import Stripe from 'npm:stripe@14';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const STRIPE_API_VERSION = '2024-06-20';
-const allowedOrigins = ['*']; // Replace with your frontend origin when ready.
+// Origins allowed to call this function from a browser. Set ALLOWED_ORIGINS
+// (comma-separated) as a secret; falls back to "*" only when unset.
+const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 const corsHeadersBase = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -171,6 +176,10 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'cancel') {
+      // Customer-initiated cancellation of a PAID (not yet shipped) order:
+      // issue a FULL Stripe refund and move the order to 'refunded'. Using
+      // 'refunded' (not 'cancelled') keeps the subsequent charge.refunded /
+      // refund.updated webhooks idempotent (refunded → refunded is a no-op).
       if (order.user_id !== user.id) {
         throw new OrderActionError(403, 'AUTH_NOT_OWNER', 'auth.authorize_owner', 'Order ownership required.');
       }
@@ -179,10 +188,83 @@ Deno.serve(async (req) => {
         throw new OrderActionError(
           409,
           'ORDER_NOT_CANCELABLE',
-          'refund.validate',
+          'cancel.validate',
           `Order status ${order.status} is not cancelable.`,
         );
       }
+
+      const stripeSecret = Deno.env.get('STRIPE_SECRET_KEY');
+      if (!stripeSecret) {
+        throw new OrderActionError(
+          500,
+          'CONFIG_MISSING_SECRETS',
+          'config.validate_secrets',
+          'Missing required Edge Function secret: STRIPE_SECRET_KEY',
+        );
+      }
+
+      if (!order.stripe_payment_intent_id) {
+        throw new OrderActionError(
+          400,
+          'ORDER_MISSING_PAYMENT_INTENT',
+          'cancel.validate',
+          'Order is missing Stripe payment intent id.',
+        );
+      }
+
+      // Full refund only — never trust any client-supplied amount on cancel.
+      const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION });
+      const refund = await stripe.refunds.create({
+        payment_intent: order.stripe_payment_intent_id,
+      });
+
+      const refundValue = Math.round(
+        (refund.amount ?? Math.round(Number(order.total) * 100)) / 100 * 100,
+      ) / 100;
+
+      const { data: updatedOrder, error: updateError } = await supabase
+        .from('orders')
+        .update({
+          refund_id: refund.id,
+          refund_amount: refundValue,
+          refunded_at: refund.created
+            ? new Date(refund.created * 1000).toISOString()
+            : new Date().toISOString(),
+          status: 'refunded',
+        })
+        .eq('id', orderId)
+        .select('*, order_items(*), profiles(full_name, email, phone)')
+        .single();
+
+      if (updateError || !updatedOrder) {
+        throw new OrderActionError(
+          500,
+          'DB_ORDER_UPDATE_ERROR',
+          'db.update_order',
+          updateError?.message ?? 'Failed to update order after cancellation refund.',
+        );
+      }
+
+      // Refund confirmation email (non-blocking: failure does not affect the response)
+      const resendApiKey = Deno.env.get('RESEND_API_KEY');
+      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
+      const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
+      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Cliente';
+
+      if (resendApiKey && customerEmail) {
+        sendRefundEmail({
+          resendApiKey,
+          fromEmail,
+          toEmail: customerEmail,
+          customerName,
+          orderId,
+          refundAmount: refundValue,
+        }).catch((emailErr) => {
+          console.error('Cancellation refund email failed (non-blocking):', emailErr);
+        });
+      }
+
+      return jsonResponse({ order: updatedOrder }, 200, origin);
     }
 
     if (action === 'refund') {
@@ -385,26 +467,6 @@ Deno.serve(async (req) => {
         }).catch((emailErr) => {
           console.error('Delivery email failed (non-blocking):', emailErr);
         });
-      }
-
-      return jsonResponse({ order: updatedOrder }, 200, origin);
-    }
-
-    if (action === 'cancel') {
-      const { data: updatedOrder, error: updateError } = await supabase
-        .from('orders')
-        .update({ status: 'cancelled' })
-        .eq('id', orderId)
-        .select('*, order_items(*), profiles(full_name, email, phone)')
-        .single();
-
-      if (updateError || !updatedOrder) {
-        throw new OrderActionError(
-          500,
-          'DB_ORDER_UPDATE_ERROR',
-          'db.update_order',
-          updateError?.message ?? 'Failed to cancel order.',
-        );
       }
 
       return jsonResponse({ order: updatedOrder }, 200, origin);

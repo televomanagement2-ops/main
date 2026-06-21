@@ -1,6 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const allowedOrigins = ['*']; // Replace with your frontend origin when ready.
+// Origins allowed to call this function from a browser. Set ALLOWED_ORIGINS
+// (comma-separated) as a secret; falls back to "*" only when unset.
+const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 const corsHeadersBase = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

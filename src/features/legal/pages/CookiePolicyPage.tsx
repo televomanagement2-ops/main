@@ -1,27 +1,18 @@
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
 import { usePreferencesStore } from '../../../store/preferencesStore';
+import { useCookieConsentStore } from '../../../store/cookieConsentStore';
+import { fillPlaceholders } from '../../../config/storeConfig';
 import { cookieContent } from '../constants/cookieData';
-
-declare global {
-  interface Window {
-    _iub?: {
-      cs?: {
-        api?: {
-          openPreferences?: () => void;
-        };
-      };
-    };
-  }
-}
 
 export function CookiePolicyPage() {
   const { t } = useI18n();
   const language = usePreferencesStore((s) => s.language);
+  const openPreferences = useCookieConsentStore((s) => s.openPreferences);
   const { lastUpdated, sections } = cookieContent[language];
 
   const handleManagePreferences = () => {
-    window._iub?.cs?.api?.openPreferences?.();
+    openPreferences();
   };
 
   return (
@@ -55,7 +46,7 @@ export function CookiePolicyPage() {
           <article key={section.title} className="privacy-card">
             <h2>{section.title}</h2>
             {section.content.map((line, i) => (
-              <p key={i}>{line}</p>
+              <p key={i}>{fillPlaceholders(line)}</p>
             ))}
           </article>
         ))}

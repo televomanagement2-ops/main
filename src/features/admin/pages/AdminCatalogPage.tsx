@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Spinner } from '../../../components/ui/Spinner';
 import { useAdminProducts, useUpdateAdminProduct } from '../../../hooks/useAdminProducts';
+import { ProductFormModal } from '../components/ProductFormModal';
 import { useI18n } from '../../../lib/i18n';
+import type { Product } from '../../../types';
 
 export function AdminCatalogPage() {
   const { data: products = [], isLoading, error } = useAdminProducts();
@@ -11,6 +13,7 @@ export function AdminCatalogPage() {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'active' | 'archive'>('active');
   const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
+  const [modal, setModal] = useState<{ mode: 'create' | 'edit'; product?: Product } | null>(null);
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -65,7 +68,7 @@ export function AdminCatalogPage() {
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-          <button className="btn btn-primary btn-sm" disabled>
+          <button className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
             {t('admin.catalog.newProduct')}
           </button>
         </div>
@@ -155,6 +158,12 @@ export function AdminCatalogPage() {
                 <div className="admin-product-card__buttons">
                   <button
                     className="btn btn-secondary btn-sm"
+                    onClick={() => setModal({ mode: 'edit', product })}
+                  >
+                    {t('admin.catalog.edit')}
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
                     onClick={() =>
                       updateProduct.mutate({
                         productId: product.id,
@@ -188,6 +197,14 @@ export function AdminCatalogPage() {
       <div className="admin-note">
         <p className="body">{t('admin.catalog.note')}</p>
       </div>
+
+      {modal && (
+        <ProductFormModal
+          mode={modal.mode}
+          product={modal.product}
+          onClose={() => setModal(null)}
+        />
+      )}
     </div>
   );
 }

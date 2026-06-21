@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useProduct } from '../../../hooks/useProducts';
-import { useReviews, useSubmitReview } from '../../../hooks/useReviews';
+import { useReviews, useSubmitReview, useHasPurchased } from '../../../hooks/useReviews';
 import { useCartStore } from '../../../store/cartStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { Spinner } from '../../../components/ui/Spinner';
@@ -51,6 +51,7 @@ function StarRating({
 function ReviewsSection({ productId }: { productId: string }) {
   const { user } = useAuth();
   const { data: reviews = [], isLoading } = useReviews(productId);
+  const { data: hasPurchased = false } = useHasPurchased(productId, user?.id);
   const { mutate: submit, isPending, error: submitError } = useSubmitReview(productId);
   const { t, tCount, formatDate } = useI18n();
 
@@ -95,7 +96,16 @@ function ReviewsSection({ productId }: { productId: string }) {
         </div>
       </div>
 
-      {user ? (
+      {!user ? (
+        <div className="review-login-prompt">
+          <Link to="/login" className="link-btn">{t('auth.signIn')}</Link>
+          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}>{t('product.reviews.signInPrompt')}</span>
+        </div>
+      ) : !hasPurchased ? (
+        <div className="review-login-prompt">
+          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}>{t('product.reviews.mustPurchase')}</span>
+        </div>
+      ) : (
         <form onSubmit={handleSubmit} className="review-form">
           <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
             {submitted ? t('product.reviews.updated') : t('product.reviews.write')}
@@ -125,11 +135,6 @@ function ReviewsSection({ productId }: { productId: string }) {
             {isPending ? t('product.reviews.submitting') : t('product.reviews.publish')}
           </button>
         </form>
-      ) : (
-        <div className="review-login-prompt">
-          <Link to="/login" className="link-btn">{t('auth.signIn')}</Link>
-          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}>{t('product.reviews.signInPrompt')}</span>
-        </div>
       )}
 
       {isLoading ? (
@@ -156,6 +161,7 @@ function ReviewsSection({ productId }: { productId: string }) {
                       <p className="review-card__date">
                         {formatDate(new Date(r.created_at))}
                       </p>
+                      <p className="review-card__verified">✓ {t('product.reviews.verified')}</p>
                     </div>
                   </div>
                   <StarRating value={r.rating} readonly />

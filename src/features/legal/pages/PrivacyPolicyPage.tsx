@@ -1,6 +1,7 @@
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
 import { usePreferencesStore } from '../../../store/preferencesStore';
+import { fillPlaceholders } from '../../../config/storeConfig';
 import { privacyContent } from '../constants/privacyData';
 
 export function PrivacyPolicyPage() {
@@ -26,7 +27,7 @@ export function PrivacyPolicyPage() {
           <article key={section.title} className="privacy-card">
             <h2>{section.title}</h2>
             {section.content.map((line, i) => (
-              <p key={i}>{line}</p>
+              <p key={i}>{fillPlaceholders(line)}</p>
             ))}
           </article>
         ))}

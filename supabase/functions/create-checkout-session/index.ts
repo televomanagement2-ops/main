@@ -1,10 +1,26 @@
 import Stripe from 'npm:stripe@14';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Origins allowed to call this function from a browser. Set the ALLOWED_ORIGINS
+// secret to a comma-separated list (e.g. "https://commercejet.com,https://www.commercejet.com").
+// Falls back to "*" only if unset, so local dev keeps working before deploy config.
+const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function getCorsHeaders(origin: string | null) {
+  const allowOrigin = allowedOrigins.includes('*')
+    ? '*'
+    : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0] ?? '');
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
+  } as Record<string, string>;
+}
 
 class CheckoutHttpError extends Error {
   status: number;
@@ -17,13 +33,6 @@ class CheckoutHttpError extends Error {
     this.code = code;
     this.phase = phase;
   }
-}
-
-function jsonResponse(payload: unknown, status = 200) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
 }
 
 function toCheckoutHttpError(err: unknown): CheckoutHttpError {
@@ -46,8 +55,15 @@ function toCheckoutHttpError(err: unknown): CheckoutHttpError {
 }
 
 Deno.serve(async (req) => {
+  const origin = req.headers.get('Origin');
+  const jsonResponse = (payload: unknown, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json' },
+    });
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(origin) });
   }
 
   try {
@@ -56,13 +72,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-
-    console.log('[checkout] secrets present:', {
-      STRIPE_SECRET_KEY: Boolean(stripeSecret),
-      SUPABASE_URL: Boolean(supabaseUrl),
-      SUPABASE_SERVICE_ROLE_KEY: Boolean(serviceRoleKey),
-      SUPABASE_ANON_KEY: Boolean(anonKey),
-    });
 
     if (!stripeSecret || !supabaseUrl || !serviceRoleKey || !anonKey) {
       const missing: string[] = [];
@@ -112,8 +121,6 @@ Deno.serve(async (req) => {
       cancel_url,
       shipping_address,
       shipping_method_id,
-      shipping_method_name,
-      shipping_cost = 0,
     } = body;
 
     if (!items?.length) {
@@ -136,15 +143,125 @@ Deno.serve(async (req) => {
       }, 400);
     }
 
-    console.log('[checkout] items:', items.length, '| user:', user.id);
+    console.log('[checkout] items:', items.length);
 
-    const subtotal = items.reduce(
-      (sum: number, i: { price: number; quantity: number }) => sum + i.price * i.quantity,
-      0,
-    );
-    const shippingCostNum = Number(shipping_cost) || 0;
-    const tax = Math.round((subtotal + shippingCostNum) * 0.1 * 100) / 100;
-    const orderTotal = Math.round((subtotal + shippingCostNum + tax) * 100) / 100;
+    // ── SECURITY: never trust client-supplied prices. Resolve authoritative
+    // prices, names and availability from the database (service role). The
+    // client `price`/`name`/`shipping_cost` fields are ignored entirely.
+    type CheckoutItem = {
+      product_id: string;
+      quantity: number;
+      image?: string | null;
+      selected_size?: string | null;
+    };
+    const requestedItems = items as CheckoutItem[];
+
+    const productIds = [...new Set(requestedItems.map((i) => i.product_id))];
+    if (productIds.some((id) => !id)) {
+      return jsonResponse({
+        error: 'One or more items are missing product_id.',
+        code: 'VALIDATION_MISSING_PRODUCT_ID',
+        phase: 'request.validate_items',
+      }, 400);
+    }
+
+    const { data: dbProducts, error: productsErr } = await supabase
+      .from('products')
+      .select('id, name, price, is_active, stock_quantity')
+      .in('id', productIds);
+
+    if (productsErr) {
+      throw new CheckoutHttpError(
+        500,
+        'DB_PRODUCT_LOOKUP_ERROR',
+        'db.fetch_products',
+        `Failed to load products: ${productsErr.message}`,
+      );
+    }
+
+    const productById = new Map((dbProducts ?? []).map((p) => [p.id as string, p]));
+
+    // Build trusted line items from DB data only.
+    const resolvedItems = requestedItems.map((i) => {
+      const product = productById.get(i.product_id);
+      if (!product) {
+        throw new CheckoutHttpError(
+          400,
+          'PRODUCT_NOT_FOUND',
+          'request.resolve_prices',
+          `Product ${i.product_id} does not exist.`,
+        );
+      }
+      if (product.is_active === false) {
+        throw new CheckoutHttpError(
+          409,
+          'PRODUCT_INACTIVE',
+          'request.resolve_prices',
+          `Product "${product.name}" is no longer available.`,
+        );
+      }
+      const quantity = Math.trunc(Number(i.quantity));
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new CheckoutHttpError(
+          400,
+          'INVALID_QUANTITY',
+          'request.resolve_prices',
+          `Invalid quantity for product "${product.name}".`,
+        );
+      }
+      if (typeof product.stock_quantity === 'number' && quantity > product.stock_quantity) {
+        throw new CheckoutHttpError(
+          409,
+          'INSUFFICIENT_STOCK',
+          'request.resolve_prices',
+          `Insufficient stock for "${product.name}".`,
+        );
+      }
+      const unitPrice = Math.round(Number(product.price) * 100) / 100;
+      return {
+        product_id: product.id as string,
+        name: product.name as string,
+        unit_price: unitPrice,
+        quantity,
+        image: i.image ?? null,
+        selected_size: i.selected_size ?? null,
+      };
+    });
+
+    // ── SECURITY: resolve shipping cost from the DB, never from the client.
+    let resolvedShippingCost = 0;
+    let resolvedShippingName: string | null = null;
+    if (shipping_method_id) {
+      const { data: method, error: methodErr } = await supabase
+        .from('shipping_methods')
+        .select('id, name, price, is_active')
+        .eq('id', shipping_method_id)
+        .maybeSingle();
+
+      if (methodErr) {
+        throw new CheckoutHttpError(
+          500,
+          'DB_SHIPPING_LOOKUP_ERROR',
+          'db.fetch_shipping_method',
+          `Failed to load shipping method: ${methodErr.message}`,
+        );
+      }
+      if (!method || method.is_active === false) {
+        return jsonResponse({
+          error: 'Selected shipping method is not available.',
+          code: 'SHIPPING_METHOD_UNAVAILABLE',
+          phase: 'request.resolve_shipping',
+        }, 400);
+      }
+      resolvedShippingCost = Math.round(Number(method.price) * 100) / 100;
+      resolvedShippingName = method.name as string;
+    }
+
+    const subtotal = Math.round(
+      resolvedItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) * 100,
+    ) / 100;
+    const tax = Math.round((subtotal + resolvedShippingCost) * 0.1 * 100) / 100;
+    const orderTotal = Math.round((subtotal + resolvedShippingCost + tax) * 100) / 100;
     let orderId: string | null = null;
 
     // Create order
@@ -157,10 +274,10 @@ Deno.serve(async (req) => {
         total: orderTotal,
         subtotal: Math.round(subtotal * 100) / 100,
         tax_amount: tax,
-        shipping_cost: shippingCostNum,
+        shipping_cost: resolvedShippingCost,
         shipping_address: addr,
         shipping_method_id: shipping_method_id || null,
-        shipping_method_name: shipping_method_name || null,
+        shipping_method_name: resolvedShippingName,
       })
       .select()
       .single();
@@ -177,23 +294,16 @@ Deno.serve(async (req) => {
     orderId = order.id;
     console.log('[checkout] order created:', order.id);
 
-    // Insert order items (with optional selected_size)
-    const orderItems = items.map((i: {
-      product_id: string;
-      name: string;
-      price: number;
-      quantity: number;
-      image?: string | null;
-      selected_size?: string | null;
-    }) => ({
+    // Insert order items (prices resolved from DB, with optional selected_size)
+    const orderItems = resolvedItems.map((i) => ({
       order_id: order.id,
       product_id: i.product_id,
       product_name: i.name,
-      product_image: i.image ?? null,
+      product_image: i.image,
       quantity: i.quantity,
-      unit_price: i.price,
-      total_price: Math.round(i.price * i.quantity * 100) / 100,
-      selected_size: i.selected_size ?? null,
+      unit_price: i.unit_price,
+      total_price: Math.round(i.unit_price * i.quantity * 100) / 100,
+      selected_size: i.selected_size,
     }));
 
     console.log('[checkout] phase=db.insert_order_items');
@@ -210,31 +320,25 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build Stripe line items — include shipping as a separate line if non-zero
-    const lineItems = items.map((i: {
-      name: string;
-      price: number;
-      quantity: number;
-      image?: string | null;
-      selected_size?: string | null;
-    }) => ({
+    // Build Stripe line items from resolved (DB-trusted) data
+    const lineItems = resolvedItems.map((i) => ({
       price_data: {
         currency: 'usd',
         product_data: {
           name: i.selected_size ? `${i.name} (${i.selected_size})` : i.name,
           ...(i.image ? { images: [i.image] } : {}),
         },
-        unit_amount: Math.round(i.price * 100),
+        unit_amount: Math.round(i.unit_price * 100),
       },
       quantity: i.quantity,
     }));
 
-    if (shippingCostNum > 0) {
+    if (resolvedShippingCost > 0) {
       lineItems.push({
         price_data: {
           currency: 'usd',
-          product_data: { name: `Shipping — ${shipping_method_name ?? 'Standard'}` },
-          unit_amount: Math.round(shippingCostNum * 100),
+          product_data: { name: `Shipping — ${resolvedShippingName ?? 'Standard'}` },
+          unit_amount: Math.round(resolvedShippingCost * 100),
         },
         quantity: 1,
       });

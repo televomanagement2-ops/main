@@ -9,7 +9,15 @@
 3. `supabase/migrations/001_fixes.sql`
 4. `supabase/migrations/002_rls_hardening.sql`
 5. `supabase/migrations/003_payment_hardening.sql`
-6. `supabase/seeds/002_mock_products.sql` ← 200 products
+6. `supabase/migrations/004_variants_reviews_shipping.sql`
+7. `supabase/migrations/005_admin_tracking_refunds.sql`
+8. `supabase/migrations/006_remove_order_limit.sql`
+9. `supabase/migrations/007_refund_status.sql`
+10. `supabase/migrations/008_refund_id_unique.sql`
+11. `supabase/migrations/009_delivered_at.sql`
+12. `supabase/migrations/010_reviews_verified_purchase.sql`  ← reviews only by buyers
+13. `supabase/migrations/011_product_storage.sql`  ← product-images storage bucket + policies
+14. `supabase/seeds/002_mock_products.sql` ← optional sample products
 
 ### Verify tables exist
 Go to **Table Editor** and confirm these tables are present:
@@ -57,10 +65,15 @@ STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 SUPABASE_ANON_KEY=eyJ...
 RESEND_API_KEY=re_...
+# Restrict which website origins may call the functions from a browser
+# (comma-separated). STRONGLY recommended in production.
+ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
 # Optional
-RESEND_FROM_EMAIL=CommerceJet <support@commercejet.com>
+RESEND_FROM_EMAIL=CommerceJet <support@your-domain.com>
 ```
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
+If `ALLOWED_ORIGINS` is left unset, CORS falls back to `*` (fine for local dev,
+not recommended in production).
 
 ---
 
@@ -97,6 +110,9 @@ supabase functions deploy stripe-webhook
 supabase functions deploy update-tracking
 supabase functions deploy handle-order-action
 ```
+
+> Deploy **all four** functions. `handle-order-action` powers cancellations,
+> refunds and delivery; `update-tracking` sends the shipping email.
 
 Test locally first:
 ```bash

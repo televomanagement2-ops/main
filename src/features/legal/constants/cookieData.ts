@@ -1,317 +1,255 @@
 import type { AppLanguageCode } from '../../../store/preferencesStore';
 import type { PolicyData } from './privacyData';
 
-const it: PolicyData = {
-  lastUpdated: 'Maggio 2026',
+// ─────────────────────────────────────────────────────────────────────────────
+// Cookie Policy — self-hosted consent (no third-party CMP). PRIMARY United States
+// (Do Not Sell/Share + GPC) with an EU/EEA prior-consent section. Replace
+// [PRIVACY_EMAIL] with the real address before launch.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const en: PolicyData = {
+  lastUpdated: 'June 2026',
   sections: [
     {
-      title: '1. Cosa sono i Cookie',
+      title: '1. What Are Cookies',
       content: [
-        'I cookie sono piccoli file di testo che i siti web inviano al browser dell\'utente e che vengono memorizzati sul suo dispositivo (computer, smartphone, tablet). Consentono al sito di riconoscere l\'utente nelle visite successive e di memorizzare le sue preferenze.',
-        'I cookie non danneggiano il dispositivo e non contengono informazioni personali direttamente identificative, salvo quando l\'utente abbia esplicitamente fornito tali informazioni al sito.',
+        'Cookies are small text files placed on your device when you visit a website. Similar technologies (such as local storage) work the same way. They let the site remember your actions and preferences.',
+        'This site uses only first-party cookies and local storage. We do not use third-party advertising, remarketing, or profiling cookies.',
       ],
     },
     {
-      title: '2. Tipologie di Cookie Utilizzati',
+      title: '2. Categories We Use',
       content: [
-        'Cookie tecnici necessari — indispensabili per il corretto funzionamento del sito. Includono: gestione della sessione utente, mantenimento del carrello, preferenze di lingua e tema. Non richiedono consenso (Art. 122 D.Lgs. 196/2003).',
-        'Cookie di autenticazione — utilizzati per mantenere l\'utente connesso durante la navigazione. Scadono alla chiusura della sessione o dopo un periodo definito.',
-        'Cookie di preferenze — memorizzano impostazioni scelte dall\'utente (es. lingua, modalità scura/chiara). Persistenti per la durata scelta dall\'utente.',
-        'Cookie analitici di prima parte — raccolgono dati aggregati e anonimi sull\'utilizzo del sito (pagine visitate, durata sessione, percorsi di navigazione) per migliorare l\'esperienza. Richiedono consenso.',
-        'Cookie di terze parti — eventualmente presenti se il sito integra servizi di terzi (es. mappe, video, social). Ogni terza parte ha la propria policy. Richiedono consenso esplicito.',
+        'Strictly necessary — required for the site to work: session and authentication, shopping cart, language and theme preferences, and recording your cookie choice. These do not require consent.',
+        'Analytics (optional) — first-party, aggregate, anonymous statistics that help us improve the store. These are off by default and load only if you opt in.',
+        'We currently do not run any non-essential cookies until you grant consent.',
       ],
     },
     {
-      title: '3. Cookie Tecnici Specifici del Sito',
+      title: '3. Specific First-Party Cookies / Storage',
       content: [
-        'commercejet-theme —memorizza la preferenza tema (chiaro/scuro/sistema). Durata: persistente. Prima parte. Non richiede consenso.',
-        'commercejet-preferences —memorizza la lingua selezionata dall\'utente. Durata: persistente. Prima parte. Non richiede consenso.',
-        'commercejet-cart —mantiene il contenuto del carrello per utenti non autenticati. Durata: sessione. Prima parte. Non richiede consenso.',
-        'commercejet-cookie-consent —memorizza la scelta dell\'utente relativa ai cookie. Durata: 12 mesi. Prima parte. Non richiede consenso.',
-        'Cookie di sessione Supabase — gestiscono l\'autenticazione sicura dell\'utente. Durata: sessione / token JWT. Prima parte. Non richiedono consenso.',
+        'commercejet-theme — stores your light/dark/system theme. Persistent. Strictly necessary.',
+        'commercejet-preferences — stores your selected language. Persistent. Strictly necessary.',
+        'commercejet-cart — keeps your cart contents. Session/persistent. Strictly necessary.',
+        'commercejet-cookie-consent — records your cookie choice. Persistent (up to 12 months). Strictly necessary.',
+        'Supabase session — secure authentication tokens that keep you signed in. Session. Strictly necessary.',
+        'Stripe — at checkout, Stripe may set technical cookies for payment security and fraud prevention on its own pages. See stripe.com/privacy.',
       ],
     },
     {
-      title: '4. Cookie di Terze Parti',
+      title: '4. Managing Your Preferences',
       content: [
-        'Stripe — il gateway di pagamento può utilizzare cookie tecnici per la sicurezza delle transazioni. Non raccolgono dati di navigazione sul nostro sito. Policy: stripe.com/privacy.',
-        'Cookie analitici (se attivati) — utilizzati solo previo consenso esplicito dell\'utente per migliorare il servizio in forma anonima e aggregata.',
-        'Non utilizziamo cookie pubblicitari, di remarketing o di profilazione commerciale.',
+        'On your first visit, our consent banner lets you Accept all, Reject all, or Customize. Rejecting is as easy as accepting, and rejecting non-essential cookies does not affect browsing or purchasing.',
+        'You can change your choice at any time using the floating cookie button (bottom right) or the "Manage cookie preferences" button on this page.',
+        'You can also block or delete cookies in your browser settings; doing so may affect some site features.',
       ],
     },
     {
-      title: '5. Base Giuridica e Consenso',
+      title: '5. U.S. Residents — Do Not Sell/Share & Global Privacy Control',
       content: [
-        'Cookie tecnici necessari: non richiedono consenso in quanto strettamente necessari all\'erogazione del servizio richiesto dall\'utente (Art. 122, co. 1, D.Lgs. 196/2003; Considerando 25 Direttiva ePrivacy).',
-        'Cookie analitici e di terze parti: richiedono consenso esplicito e informato, preventivo all\'installazione. Il consenso è raccolto tramite il banner cookie al primo accesso.',
-        'Il consenso è sempre revocabile: l\'utente può modificare le proprie preferenze in qualsiasi momento tramite il pannello dedicato (pulsante "Gestisci preferenze cookie" in questa pagina o icona in basso a destra del sito).',
-        'Il rifiuto dei cookie non tecnici non pregiudica la navigazione né l\'acquisto sul sito.',
+        'We do not sell your personal information and do not share it for cross-context behavioral advertising. There is therefore no advertising tracking to opt out of.',
+        'We honor recognized opt-out preference signals, including Global Privacy Control (GPC), as a valid opt-out where applicable. See our Privacy Policy for your state rights.',
       ],
     },
     {
-      title: '6. Durata dei Cookie',
+      title: '6. EU/EEA Residents — Prior Consent',
       content: [
-        'Cookie di sessione: eliminati automaticamente alla chiusura del browser.',
-        'Cookie persistenti: rimangono sul dispositivo per la durata specificata (massimo 12 mesi per i cookie di consenso, come indicato dal Garante Privacy italiano).',
-        'Il Titolare non utilizza cookie con durata superiore a 12 mesi, salvo diversa indicazione per cookie tecnici strettamente necessari.',
+        'For visitors in the EU/EEA, non-essential cookies (e.g., analytics) are set only after you give prior, informed consent via the banner, in line with the ePrivacy Directive and EDPB/Garante guidance.',
+        'Consent is recorded for up to 12 months, after which you will be asked again. You may withdraw consent at any time as easily as you gave it.',
       ],
     },
     {
-      title: '7. Come Gestire i Cookie',
+      title: '7. Updates',
       content: [
-        'Tramite il pannello preferenze del sito: clicca su "Gestisci preferenze cookie" in questa pagina o sull\'icona di gestione consenso presente in basso a destra del sito.',
-        'Tramite le impostazioni del browser: ogni browser permette di bloccare, cancellare o limitare i cookie. La modifica delle impostazioni del browser può influire sul funzionamento di alcune funzionalità del sito.',
-        'Google Chrome: Impostazioni > Privacy e sicurezza > Cookie e altri dati dei siti.',
-        'Mozilla Firefox: Impostazioni > Privacy e sicurezza > Cookie e dati dei siti web.',
-        'Safari: Preferenze > Privacy > Gestisci dati siti web.',
-        'Microsoft Edge: Impostazioni > Cookie e autorizzazioni sito.',
-      ],
-    },
-    {
-      title: '8. Aggiornamenti della Cookie Policy',
-      content: [
-        'La presente Cookie Policy può essere aggiornata in seguito a modifiche tecniche, normative o di servizio.',
-        'In caso di modifiche sostanziali che richiedano un nuovo consenso, il banner cookie verrà ripresentato agli utenti.',
-        'La versione vigente è sempre quella pubblicata su questa pagina con la data di ultimo aggiornamento.',
-        'Data ultima revisione: maggio 2026.',
-        'Titolare del trattamento: [INSERISCI_QUI_NOME_NEGOZIO] — [INSERISCI_EMAIL_PRIVACY].',
+        'We may update this Cookie Policy following technical, regulatory, or service changes. The version in force is the one published here with its "last updated" date.',
+        'If material changes require new consent, the banner will be shown again.',
+        'Questions: [PRIVACY_EMAIL].',
       ],
     },
   ],
 };
 
-const en: PolicyData = {
-  lastUpdated: 'May 2026',
+const it: PolicyData = {
+  lastUpdated: 'Giugno 2026',
   sections: [
     {
-      title: '1. What are Cookies',
+      title: '1. Cosa Sono i Cookie',
       content: [
-        'Cookies are small text files that websites send to the user\'s browser and are stored on their device (computer, smartphone, tablet). They allow the site to recognise the user on subsequent visits and remember their preferences.',
-        'Cookies do not harm the device and do not contain directly identifiable personal information, unless the user has explicitly provided such information to the site.',
+        'I cookie sono piccoli file di testo memorizzati sul tuo dispositivo quando visiti un sito. Tecnologie simili (come il local storage) funzionano allo stesso modo. Consentono al sito di ricordare azioni e preferenze.',
+        'Questo sito utilizza solo cookie di prima parte e local storage. Non utilizziamo cookie pubblicitari, di remarketing o di profilazione di terze parti.',
       ],
     },
     {
-      title: '2. Types of Cookies Used',
+      title: '2. Categorie Utilizzate',
       content: [
-        'Strictly necessary technical cookies — essential for the site to function correctly. These include: user session management, cart maintenance, language and theme preferences. No consent required (ePrivacy Directive, Recital 25).',
-        'Authentication cookies — used to keep the user logged in during navigation. They expire at session close or after a defined period.',
-        'Preference cookies — store settings chosen by the user (e.g. language, dark/light mode). Persistent for the user-chosen duration.',
-        'First-party analytics cookies — collect aggregate, anonymous data on site usage (pages visited, session duration, navigation paths) to improve the experience. Consent required.',
-        'Third-party cookies — may be present if the site integrates third-party services (e.g. maps, video, social). Each third party has its own policy. Explicit consent required.',
+        'Strettamente necessari — indispensabili al funzionamento del sito: sessione e autenticazione, carrello, preferenze di lingua e tema, registrazione della scelta sui cookie. Non richiedono consenso.',
+        'Analitici (facoltativi) — statistiche di prima parte, aggregate e anonime che ci aiutano a migliorare lo store. Disattivati per impostazione predefinita, si attivano solo se acconsenti.',
+        'Al momento non eseguiamo alcun cookie non essenziale fino a quando non presti il consenso.',
       ],
     },
     {
-      title: '3. Site-Specific Technical Cookies',
+      title: '3. Cookie / Storage Specifici di Prima Parte',
       content: [
-        'commercejet-theme —stores theme preference (light/dark/system). Duration: persistent. First party. No consent required.',
-        'commercejet-preferences —stores the user\'s selected language. Duration: persistent. First party. No consent required.',
-        'commercejet-cart —maintains the cart contents for unauthenticated users. Duration: session. First party. No consent required.',
-        'commercejet-cookie-consent —stores the user\'s cookie choice. Duration: 12 months. First party. No consent required.',
-        'Supabase session cookies — manage secure user authentication. Duration: session / JWT token. First party. No consent required.',
+        'commercejet-theme — memorizza il tema chiaro/scuro/sistema. Persistente. Strettamente necessario.',
+        'commercejet-preferences — memorizza la lingua selezionata. Persistente. Strettamente necessario.',
+        'commercejet-cart — mantiene il contenuto del carrello. Sessione/persistente. Strettamente necessario.',
+        'commercejet-cookie-consent — registra la scelta sui cookie. Persistente (fino a 12 mesi). Strettamente necessario.',
+        'Sessione Supabase — token di autenticazione sicuri che ti mantengono connesso. Sessione. Strettamente necessario.',
+        'Stripe — al checkout, Stripe può impostare cookie tecnici per la sicurezza dei pagamenti e la prevenzione frodi sulle proprie pagine. Vedi stripe.com/privacy.',
       ],
     },
     {
-      title: '4. Third-Party Cookies',
+      title: '4. Gestione delle Preferenze',
       content: [
-        'Stripe — the payment gateway may use technical cookies for transaction security. They do not collect browsing data on our site. Policy: stripe.com/privacy.',
-        'Analytics cookies (if activated) — used only with the user\'s explicit consent to improve the service in anonymous, aggregate form.',
-        'We do not use advertising, remarketing or commercial profiling cookies.',
+        'Alla prima visita, il nostro banner consente di Accettare tutti, Rifiutare tutti o Personalizzare. Rifiutare è facile quanto accettare e il rifiuto dei cookie non essenziali non pregiudica la navigazione né l\'acquisto.',
+        'Puoi modificare la scelta in qualsiasi momento tramite il pulsante cookie flottante (in basso a destra) o il pulsante "Gestisci preferenze cookie" in questa pagina.',
+        'Puoi anche bloccare o eliminare i cookie dalle impostazioni del browser; ciò potrebbe influire su alcune funzionalità del sito.',
       ],
     },
     {
-      title: '5. Legal Basis and Consent',
+      title: '5. Residenti USA — Do Not Sell/Share e Global Privacy Control',
       content: [
-        'Strictly necessary technical cookies: no consent required, as they are strictly necessary to provide the service requested by the user (ePrivacy Directive, Recital 25).',
-        'Analytics and third-party cookies: require explicit, informed consent prior to installation. Consent is collected via the cookie banner on first visit.',
-        'Consent is always revocable: the user can change their preferences at any time via the dedicated panel (the "Manage cookie preferences" button on this page or the icon at the bottom right of the site).',
-        'Refusing non-technical cookies does not affect browsing or purchasing on the site.',
+        'Non vendiamo i tuoi dati personali e non li condividiamo per pubblicità comportamentale cross-context. Non vi è quindi alcun tracciamento pubblicitario da disattivare.',
+        'Rispettiamo i segnali di opt-out riconosciuti, incluso il Global Privacy Control (GPC), quale valida opposizione ove applicabile. Per i diritti del tuo stato vedi la Privacy Policy.',
       ],
     },
     {
-      title: '6. Cookie Duration',
+      title: '6. Residenti UE/EEE — Consenso Preventivo',
       content: [
-        'Session cookies: automatically deleted when the browser is closed.',
-        'Persistent cookies: remain on the device for the specified duration (maximum 12 months for consent cookies).',
-        'The Controller does not use cookies with a duration exceeding 12 months, except where indicated for strictly necessary technical cookies.',
+        'Per i visitatori nell\'UE/EEE, i cookie non essenziali (es. analitici) vengono attivati solo dopo che hai prestato un consenso preventivo e informato tramite il banner, in linea con la Direttiva ePrivacy e le linee guida EDPB/Garante.',
+        'Il consenso è registrato fino a 12 mesi, trascorsi i quali ti verrà richiesto nuovamente. Puoi revocare il consenso in qualsiasi momento con la stessa facilità con cui lo hai prestato.',
       ],
     },
     {
-      title: '7. How to Manage Cookies',
+      title: '7. Aggiornamenti',
       content: [
-        'Via the site preference panel: click "Manage cookie preferences" on this page or the consent management icon at the bottom right of the site.',
-        'Via browser settings: every browser allows you to block, delete or restrict cookies. Changing browser settings may affect some site features.',
-        'Google Chrome: Settings > Privacy and security > Cookies and other site data.',
-        'Mozilla Firefox: Settings > Privacy & Security > Cookies and Site Data.',
-        'Safari: Preferences > Privacy > Manage Website Data.',
-        'Microsoft Edge: Settings > Cookies and site permissions.',
-      ],
-    },
-    {
-      title: '8. Updates to this Cookie Policy',
-      content: [
-        'This Cookie Policy may be updated following technical, regulatory or service changes.',
-        'If material changes require new consent, the cookie banner will be displayed again to users.',
-        'The version in force is always the one published on this page with the date of the last update.',
-        'Last revised: May 2026.',
-        'Data Controller: [INSERT_STORE_NAME_HERE] — [INSERT_PRIVACY_EMAIL].',
+        'Possiamo aggiornare la presente Cookie Policy a seguito di modifiche tecniche, normative o di servizio. La versione vigente è quella pubblicata qui con la relativa data di aggiornamento.',
+        'In caso di modifiche sostanziali che richiedano un nuovo consenso, il banner verrà ripresentato.',
+        'Domande: [PRIVACY_EMAIL].',
       ],
     },
   ],
 };
 
 const es: PolicyData = {
-  lastUpdated: 'Mayo 2026',
+  lastUpdated: 'Junio 2026',
   sections: [
     {
-      title: '1. Qué son las Cookies',
+      title: '1. Qué Son las Cookies',
       content: [
-        'Las cookies son pequeños archivos de texto que los sitios web envían al navegador del usuario y que se almacenan en su dispositivo (ordenador, smartphone, tableta). Permiten al sitio reconocer al usuario en visitas posteriores y recordar sus preferencias.',
-        'Las cookies no dañan el dispositivo y no contienen información personal directamente identificable, salvo que el usuario haya proporcionado explícitamente dicha información al sitio.',
+        'Las cookies son pequeños archivos de texto que se guardan en tu dispositivo al visitar un sitio. Tecnologías similares (como el almacenamiento local) funcionan igual. Permiten al sitio recordar acciones y preferencias.',
+        'Este sitio usa solo cookies de origen y almacenamiento local. No usamos cookies publicitarias, de remarketing ni de elaboración de perfiles de terceros.',
       ],
     },
     {
-      title: '2. Tipos de Cookies Utilizadas',
+      title: '2. Categorías que Utilizamos',
       content: [
-        'Cookies técnicas estrictamente necesarias — imprescindibles para el correcto funcionamiento del sitio. Incluyen: gestión de sesión de usuario, mantenimiento del carrito, preferencias de idioma y tema. No requieren consentimiento (Directiva ePrivacy, Considerando 25).',
-        'Cookies de autenticación — se utilizan para mantener al usuario conectado durante la navegación. Expiran al cerrar la sesión o tras un período definido.',
-        'Cookies de preferencias — almacenan configuraciones elegidas por el usuario (p. ej. idioma, modo oscuro/claro). Persistentes durante la duración elegida por el usuario.',
-        'Cookies analíticas de primera parte — recopilan datos agregados y anónimos sobre el uso del sitio (páginas visitadas, duración de sesión, rutas de navegación) para mejorar la experiencia. Requieren consentimiento.',
-        'Cookies de terceros — pueden estar presentes si el sitio integra servicios de terceros (p. ej. mapas, vídeo, redes sociales). Cada tercero tiene su propia política. Requieren consentimiento explícito.',
+        'Estrictamente necesarias — imprescindibles para el funcionamiento: sesión y autenticación, carrito, preferencias de idioma y tema, y registro de tu elección de cookies. No requieren consentimiento.',
+        'Analíticas (opcionales) — estadísticas de origen, agregadas y anónimas que nos ayudan a mejorar la tienda. Desactivadas por defecto, se cargan solo si das tu consentimiento.',
+        'Actualmente no ejecutamos ninguna cookie no esencial hasta que prestes tu consentimiento.',
       ],
     },
     {
-      title: '3. Cookies Técnicas Específicas del Sitio',
+      title: '3. Cookies / Almacenamiento de Origen Específicos',
       content: [
-        'commercejet-theme —almacena la preferencia de tema (claro/oscuro/sistema). Duración: persistente. Primera parte. No requiere consentimiento.',
-        'commercejet-preferences —almacena el idioma seleccionado por el usuario. Duración: persistente. Primera parte. No requiere consentimiento.',
-        'commercejet-cart —mantiene el contenido del carrito para usuarios no autenticados. Duración: sesión. Primera parte. No requiere consentimiento.',
-        'commercejet-cookie-consent —almacena la elección del usuario respecto a las cookies. Duración: 12 meses. Primera parte. No requiere consentimiento.',
-        'Cookies de sesión de Supabase — gestionan la autenticación segura del usuario. Duración: sesión / token JWT. Primera parte. No requieren consentimiento.',
+        'commercejet-theme — guarda el tema claro/oscuro/sistema. Persistente. Estrictamente necesaria.',
+        'commercejet-preferences — guarda el idioma seleccionado. Persistente. Estrictamente necesaria.',
+        'commercejet-cart — mantiene el contenido del carrito. Sesión/persistente. Estrictamente necesaria.',
+        'commercejet-cookie-consent — registra tu elección de cookies. Persistente (hasta 12 meses). Estrictamente necesaria.',
+        'Sesión de Supabase — tokens de autenticación seguros que te mantienen conectado. Sesión. Estrictamente necesaria.',
+        'Stripe — en el pago, Stripe puede establecer cookies técnicas para la seguridad de los pagos y la prevención del fraude en sus propias páginas. Ver stripe.com/privacy.',
       ],
     },
     {
-      title: '4. Cookies de Terceros',
+      title: '4. Gestión de tus Preferencias',
       content: [
-        'Stripe — la pasarela de pago puede usar cookies técnicas para la seguridad de las transacciones. No recopilan datos de navegación en nuestro sitio. Política: stripe.com/privacy.',
-        'Cookies analíticas (si se activan) — se usan únicamente con el consentimiento explícito del usuario para mejorar el servicio de forma anónima y agregada.',
-        'No utilizamos cookies publicitarias, de remarketing ni de elaboración de perfiles comerciales.',
+        'En tu primera visita, nuestro banner te permite Aceptar todo, Rechazar todo o Personalizar. Rechazar es tan fácil como aceptar y rechazar las cookies no esenciales no afecta a la navegación ni a la compra.',
+        'Puedes cambiar tu elección en cualquier momento con el botón flotante de cookies (abajo a la derecha) o el botón "Gestionar preferencias de cookies" de esta página.',
+        'También puedes bloquear o eliminar cookies en la configuración del navegador; esto puede afectar a algunas funciones del sitio.',
       ],
     },
     {
-      title: '5. Base Jurídica y Consentimiento',
+      title: '5. Residentes en EE. UU. — Do Not Sell/Share y Global Privacy Control',
       content: [
-        'Cookies técnicas estrictamente necesarias: no requieren consentimiento, ya que son imprescindibles para prestar el servicio solicitado por el usuario (Directiva ePrivacy, Considerando 25).',
-        'Cookies analíticas y de terceros: requieren consentimiento explícito e informado, previo a su instalación. El consentimiento se recoge mediante el banner de cookies en la primera visita.',
-        'El consentimiento es siempre revocable: el usuario puede modificar sus preferencias en cualquier momento a través del panel dedicado (botón "Gestionar preferencias de cookies" en esta página o icono en la parte inferior derecha del sitio).',
-        'El rechazo de cookies no técnicas no afecta a la navegación ni a la compra en el sitio.',
+        'No vendemos tus datos personales ni los compartimos para publicidad comportamental cross-context. Por tanto, no hay seguimiento publicitario del que excluirse.',
+        'Respetamos las señales de exclusión reconocidas, incluido el Global Privacy Control (GPC), como exclusión válida cuando proceda. Consulta la Política de Privacidad para tus derechos estatales.',
       ],
     },
     {
-      title: '6. Duración de las Cookies',
+      title: '6. Residentes en la UE/EEE — Consentimiento Previo',
       content: [
-        'Cookies de sesión: se eliminan automáticamente al cerrar el navegador.',
-        'Cookies persistentes: permanecen en el dispositivo durante la duración especificada (máximo 12 meses para las cookies de consentimiento).',
-        'El Responsable no utiliza cookies con una duración superior a 12 meses, salvo indicación contraria para cookies técnicas estrictamente necesarias.',
+        'Para los visitantes en la UE/EEE, las cookies no esenciales (p. ej., analíticas) se activan solo tras prestar un consentimiento previo e informado mediante el banner, conforme a la Directiva ePrivacy y a las directrices del EDPB/Garante.',
+        'El consentimiento se registra hasta 12 meses, tras los cuales se te volverá a solicitar. Puedes retirar el consentimiento en cualquier momento con la misma facilidad con la que lo diste.',
       ],
     },
     {
-      title: '7. Cómo Gestionar las Cookies',
+      title: '7. Actualizaciones',
       content: [
-        'A través del panel de preferencias del sitio: haz clic en "Gestionar preferencias de cookies" en esta página o en el icono de gestión del consentimiento en la parte inferior derecha del sitio.',
-        'A través de la configuración del navegador: cada navegador permite bloquear, eliminar o restringir las cookies. Cambiar la configuración del navegador puede afectar a algunas funciones del sitio.',
-        'Google Chrome: Configuración > Privacidad y seguridad > Cookies y otros datos de sitios.',
-        'Mozilla Firefox: Ajustes > Privacidad y seguridad > Cookies y datos del sitio.',
-        'Safari: Preferencias > Privacidad > Gestionar datos de sitios web.',
-        'Microsoft Edge: Configuración > Cookies y permisos del sitio.',
-      ],
-    },
-    {
-      title: '8. Actualizaciones de la Política de Cookies',
-      content: [
-        'La presente Política de Cookies puede actualizarse tras cambios técnicos, normativos o de servicio.',
-        'Si los cambios sustanciales requieren un nuevo consentimiento, el banner de cookies se mostrará de nuevo a los usuarios.',
-        'La versión vigente es siempre la publicada en esta página con la fecha de la última actualización.',
-        'Última revisión: mayo 2026.',
-        'Responsable del tratamiento: [INSERTAR_NOMBRE_TIENDA_AQUI] — [INSERTAR_EMAIL_PRIVACIDAD].',
+        'Podemos actualizar esta Política de Cookies tras cambios técnicos, normativos o de servicio. La versión vigente es la publicada aquí con su fecha de actualización.',
+        'Si cambios sustanciales requieren un nuevo consentimiento, el banner se mostrará de nuevo.',
+        'Consultas: [PRIVACY_EMAIL].',
       ],
     },
   ],
 };
 
 const fr: PolicyData = {
-  lastUpdated: 'Mai 2026',
+  lastUpdated: 'Juin 2026',
   sections: [
     {
-      title: '1. Que sont les Cookies',
+      title: '1. Que Sont les Cookies',
       content: [
-        'Les cookies sont de petits fichiers texte que les sites web envoient au navigateur de l\'utilisateur et qui sont stockés sur son appareil (ordinateur, smartphone, tablette). Ils permettent au site de reconnaître l\'utilisateur lors de visites ultérieures et de mémoriser ses préférences.',
-        'Les cookies n\'endommagent pas l\'appareil et ne contiennent pas d\'informations personnelles directement identifiables, sauf si l\'utilisateur a explicitement fourni ces informations au site.',
+        'Les cookies sont de petits fichiers texte déposés sur votre appareil lors de la visite d\'un site. Des technologies similaires (comme le stockage local) fonctionnent de la même façon. Ils permettent au site de mémoriser actions et préférences.',
+        'Ce site utilise uniquement des cookies de première partie et le stockage local. Nous n\'utilisons pas de cookies publicitaires, de reciblage ou de profilage tiers.',
       ],
     },
     {
-      title: '2. Types de Cookies Utilisés',
+      title: '2. Catégories Utilisées',
       content: [
-        'Cookies techniques strictement nécessaires — indispensables au bon fonctionnement du site. Comprennent : gestion de session utilisateur, maintien du panier, préférences de langue et de thème. Pas de consentement requis (Directive ePrivacy, Considérant 25).',
-        'Cookies d\'authentification — utilisés pour maintenir l\'utilisateur connecté pendant la navigation. Ils expirent à la fermeture de la session ou après une période définie.',
-        'Cookies de préférences — stockent les paramètres choisis par l\'utilisateur (ex. langue, mode sombre/clair). Persistants pour la durée choisie par l\'utilisateur.',
-        'Cookies analytiques de première partie — collectent des données agrégées et anonymes sur l\'utilisation du site (pages visitées, durée de session, parcours de navigation) pour améliorer l\'expérience. Consentement requis.',
-        'Cookies tiers — peuvent être présents si le site intègre des services tiers (ex. cartes, vidéo, réseaux sociaux). Chaque tiers dispose de sa propre politique. Consentement explicite requis.',
+        'Strictement nécessaires — indispensables au fonctionnement : session et authentification, panier, préférences de langue et de thème, et enregistrement de votre choix de cookies. Sans consentement requis.',
+        'Analytiques (facultatifs) — statistiques de première partie, agrégées et anonymes qui nous aident à améliorer la boutique. Désactivés par défaut, ils ne se chargent que si vous y consentez.',
+        'Nous n\'exécutons actuellement aucun cookie non essentiel tant que vous n\'avez pas donné votre consentement.',
       ],
     },
     {
-      title: '3. Cookies Techniques Spécifiques au Site',
+      title: '3. Cookies / Stockage de Première Partie Spécifiques',
       content: [
-        'commercejet-theme —stocke la préférence de thème (clair/sombre/système). Durée : persistant. Première partie. Pas de consentement requis.',
-        'commercejet-preferences —stocke la langue sélectionnée par l\'utilisateur. Durée : persistant. Première partie. Pas de consentement requis.',
-        'commercejet-cart —maintient le contenu du panier pour les utilisateurs non authentifiés. Durée : session. Première partie. Pas de consentement requis.',
-        'commercejet-cookie-consent —stocke le choix de l\'utilisateur concernant les cookies. Durée : 12 mois. Première partie. Pas de consentement requis.',
-        'Cookies de session Supabase — gèrent l\'authentification sécurisée de l\'utilisateur. Durée : session / jeton JWT. Première partie. Pas de consentement requis.',
+        'commercejet-theme — mémorise le thème clair/sombre/système. Persistant. Strictement nécessaire.',
+        'commercejet-preferences — mémorise la langue sélectionnée. Persistant. Strictement nécessaire.',
+        'commercejet-cart — conserve le contenu du panier. Session/persistant. Strictement nécessaire.',
+        'commercejet-cookie-consent — enregistre votre choix de cookies. Persistant (jusqu\'à 12 mois). Strictement nécessaire.',
+        'Session Supabase — jetons d\'authentification sécurisés qui vous maintiennent connecté. Session. Strictement nécessaire.',
+        'Stripe — au paiement, Stripe peut déposer des cookies techniques pour la sécurité des paiements et la prévention de la fraude sur ses propres pages. Voir stripe.com/privacy.',
       ],
     },
     {
-      title: '4. Cookies Tiers',
+      title: '4. Gestion de vos Préférences',
       content: [
-        'Stripe — la passerelle de paiement peut utiliser des cookies techniques pour la sécurité des transactions. Ils ne collectent pas de données de navigation sur notre site. Politique : stripe.com/privacy.',
-        'Cookies analytiques (si activés) — utilisés uniquement avec le consentement explicite de l\'utilisateur pour améliorer le service de manière anonyme et agrégée.',
-        'Nous n\'utilisons pas de cookies publicitaires, de remarketing ou de profilage commercial.',
+        'Lors de votre première visite, notre bandeau vous permet de Tout accepter, Tout refuser ou Personnaliser. Refuser est aussi simple qu\'accepter, et refuser les cookies non essentiels n\'affecte ni la navigation ni l\'achat.',
+        'Vous pouvez modifier votre choix à tout moment via le bouton cookie flottant (en bas à droite) ou le bouton « Gérer les préférences de cookies » sur cette page.',
+        'Vous pouvez aussi bloquer ou supprimer les cookies dans les paramètres de votre navigateur ; cela peut affecter certaines fonctionnalités du site.',
       ],
     },
     {
-      title: '5. Base Juridique et Consentement',
+      title: '5. Résidents Américains — Do Not Sell/Share et Global Privacy Control',
       content: [
-        'Cookies techniques strictement nécessaires : pas de consentement requis, car ils sont indispensables à la fourniture du service demandé par l\'utilisateur (Directive ePrivacy, Considérant 25).',
-        'Cookies analytiques et tiers : nécessitent un consentement explicite et éclairé, préalable à leur installation. Le consentement est recueilli via le bandeau cookies lors de la première visite.',
-        'Le consentement est toujours révocable : l\'utilisateur peut modifier ses préférences à tout moment via le panneau dédié (bouton "Gérer les préférences de cookies" sur cette page ou icône en bas à droite du site).',
-        'Le refus des cookies non techniques n\'affecte pas la navigation ni les achats sur le site.',
+        'Nous ne vendons pas vos données personnelles et ne les partageons pas à des fins de publicité comportementale cross-context. Il n\'y a donc aucun suivi publicitaire à désactiver.',
+        'Nous respectons les signaux d\'exclusion reconnus, y compris le Global Privacy Control (GPC), comme opposition valable le cas échéant. Voir la Politique de Confidentialité pour vos droits selon votre État.',
       ],
     },
     {
-      title: '6. Durée des Cookies',
+      title: '6. Résidents de l\'UE/EEE — Consentement Préalable',
       content: [
-        'Cookies de session : supprimés automatiquement à la fermeture du navigateur.',
-        'Cookies persistants : restent sur l\'appareil pendant la durée spécifiée (12 mois maximum pour les cookies de consentement).',
-        'Le Responsable n\'utilise pas de cookies d\'une durée supérieure à 12 mois, sauf indication contraire pour les cookies techniques strictement nécessaires.',
+        'Pour les visiteurs de l\'UE/EEE, les cookies non essentiels (ex. analytiques) ne sont déposés qu\'après un consentement préalable et éclairé via le bandeau, conformément à la directive ePrivacy et aux lignes directrices de l\'EDPB/Garante.',
+        'Le consentement est enregistré jusqu\'à 12 mois, après quoi il vous sera redemandé. Vous pouvez retirer votre consentement à tout moment aussi facilement que vous l\'avez donné.',
       ],
     },
     {
-      title: '7. Comment Gérer les Cookies',
+      title: '7. Mises à Jour',
       content: [
-        'Via le panneau de préférences du site : cliquez sur "Gérer les préférences de cookies" sur cette page ou sur l\'icône de gestion du consentement en bas à droite du site.',
-        'Via les paramètres du navigateur : chaque navigateur permet de bloquer, supprimer ou restreindre les cookies. La modification des paramètres du navigateur peut affecter certaines fonctionnalités du site.',
-        'Google Chrome : Paramètres > Confidentialité et sécurité > Cookies et autres données des sites.',
-        'Mozilla Firefox : Paramètres > Vie privée et sécurité > Cookies et données du site.',
-        'Safari : Préférences > Confidentialité > Gérer les données des sites web.',
-        'Microsoft Edge : Paramètres > Cookies et autorisations des sites.',
-      ],
-    },
-    {
-      title: '8. Mises à Jour de la Politique de Cookies',
-      content: [
-        'La présente Politique de Cookies peut être mise à jour suite à des changements techniques, réglementaires ou de service.',
-        'Si des changements substantiels nécessitent un nouveau consentement, le bandeau cookies sera à nouveau affiché aux utilisateurs.',
-        'La version en vigueur est toujours celle publiée sur cette page avec la date de la dernière mise à jour.',
-        'Dernière révision : mai 2026.',
-        'Responsable du traitement : [INSÉRER_NOM_BOUTIQUE_ICI] — [INSÉRER_EMAIL_CONFIDENTIALITÉ].',
+        'Nous pouvons mettre à jour la présente Politique de Cookies à la suite de changements techniques, réglementaires ou de service. La version en vigueur est celle publiée ici avec sa date de mise à jour.',
+        'Si des changements substantiels nécessitent un nouveau consentement, le bandeau sera affiché de nouveau.',
+        'Questions : [PRIVACY_EMAIL].',
       ],
     },
   ],
