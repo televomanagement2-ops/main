@@ -84,6 +84,36 @@ this step the API is open to `*` — fine for local dev, **not acceptable in pro
 > include both. Do not include local dev URLs in production (they'd be ignored by browsers
 > anyway due to CORS, but it is cleaner not to list them).
 
+### Vercel preview domains (optional flag)
+
+If you deploy on Vercel, the preview/production subdomain (e.g. `xxxx.vercel.app`) changes
+on almost every deploy. To avoid editing `ALLOWED_ORIGINS` each time, any `*.vercel.app`
+origin is accepted automatically. To turn this off once you are on your final custom domain,
+add a second secret:
+
+```
+ALLOW_VERCEL_PREVIEWS=false
+```
+
+When `false`, only the exact origins in `ALLOWED_ORIGINS` are accepted. (Default is `true`.)
+
+> Note: CORS is not the security boundary here — every privileged call still requires a valid
+> login token and passes server-side role/ownership checks. The allowlist just limits which
+> sites a browser may call your API from.
+
+### Step 3b — Supabase Auth: update the redirect URLs (required when the domain changes)
+
+This is separate from CORS and is what controls where users land **after** login, Google
+sign-in, or email confirmation. If it still points at an old domain, logins will bounce there.
+
+1. Supabase → **Authentication** → **URL Configuration**.
+2. **Site URL**: set to your current site, e.g. `https://your-store.vercel.app`.
+3. **Redirect URLs**: add `https://your-store.vercel.app/**` (and your custom domain `/**`).
+   Remove any old/stale domain.
+4. Save.
+
+> Symptom if skipped: after signing in you get redirected to the **previous** domain.
+
 Other security notes (already built in): customer prices are recomputed server-side from
 the database (no price tampering), card data never touches your servers (Stripe), Row Level
 Security is enforced on all tables. See [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md).
@@ -126,6 +156,7 @@ Admins access `/admin` (dashboard, orders, catalog, finance).
 - [ ] Footer contact details updated.
 - [ ] Supabase migrations applied; RLS enabled on every table.
 - [ ] All four Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`.
+- [ ] Supabase Auth **Site URL** + **Redirect URLs** point at your current domain (Step 3b).
 - [ ] Stripe in **live** mode; webhook endpoint + events configured; test purchase verified.
 - [ ] First admin account promoted.
 - [ ] Legal pages reviewed; (EU) GPSR responsible person + accessibility statement in place.

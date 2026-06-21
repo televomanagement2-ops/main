@@ -49,6 +49,15 @@ should appear here AND a row should appear in `public.profiles`.
 6. Paste Client ID + Secret → Save
 7. Verify: try "Continue with Google" in the app
 
+### Auth URL Configuration (controls post-login redirects)
+
+Supabase Dashboard → **Authentication** → **URL Configuration**:
+- **Site URL**: your live site origin, e.g. `https://your-domain.com`.
+- **Redirect URLs**: add `https://your-domain.com/**` (and any extra domains/preview URLs).
+
+> If this points at an old/stale domain, users get redirected there after sign-in,
+> Google login, or email confirmation. Update it whenever the site domain changes.
+
 ---
 
 ## 3. Environment Variables
@@ -69,11 +78,20 @@ RESEND_API_KEY=re_...
 # (comma-separated). STRONGLY recommended in production.
 ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
 # Optional
+# Auto-allow any *.vercel.app origin (handy while the Vercel preview domain
+# changes between deploys). Set to "false" once on your final custom domain.
+ALLOW_VERCEL_PREVIEWS=true
 RESEND_FROM_EMAIL=CommerceJet <support@your-domain.com>
 ```
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 If `ALLOWED_ORIGINS` is left unset, CORS falls back to `*` (fine for local dev,
-not recommended in production).
+not recommended in production). When set, only those origins (plus `*.vercel.app`
+unless `ALLOW_VERCEL_PREVIEWS=false`) are accepted; a non-matching origin gets no
+`Access-Control-Allow-Origin` header and the browser reports "Failed to fetch".
+
+> **If your site domain changes** (e.g. a new Vercel URL), you must update
+> `ALLOWED_ORIGINS` here **and** the Supabase Auth URL Configuration below, then
+> redeploy the three browser-facing functions.
 
 ---
 

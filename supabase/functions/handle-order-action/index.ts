@@ -9,10 +9,30 @@ const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Vercel preview/production subdomains change on every deploy and per licensee,
+// so allow *.vercel.app automatically unless explicitly disabled in production.
+const allowVercelPreviews = (Deno.env.get('ALLOW_VERCEL_PREVIEWS') ?? 'true').toLowerCase() !== 'false';
+
 const corsHeadersBase = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+// Returns the value to echo in Access-Control-Allow-Origin, or null if the
+// origin is not authorized (in which case NO such header should be emitted).
+function resolveAllowedOrigin(origin: string | null): string | null {
+  if (allowedOrigins.includes('*')) return '*';
+  if (!origin) return null;
+  if (allowedOrigins.includes(origin)) return origin;
+  if (allowVercelPreviews) {
+    try {
+      if (new URL(origin).hostname.endsWith('.vercel.app')) return origin;
+    } catch {
+      // malformed origin → not authorized
+    }
+  }
+  return null;
+}
 
 class OrderActionError extends Error {
   status: number;
@@ -28,16 +48,16 @@ class OrderActionError extends Error {
 }
 
 function getCorsHeaders(origin: string | null) {
-  const allowOrigin = allowedOrigins.includes('*')
-    ? '*'
-    : (origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0]);
-
-  return {
+  const allowOrigin = resolveAllowedOrigin(origin);
+  const headers: Record<string, string> = {
     ...corsHeadersBase,
-    'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
-  } as Record<string, string>;
+  };
+  // Only emit Allow-Origin when the origin is authorized; never echo a different
+  // origin (that would break the request with a misleading CORS error).
+  if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
+  return headers;
 }
 
 function jsonResponse(payload: unknown, status = 200, origin: string | null = null) {
