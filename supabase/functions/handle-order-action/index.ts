@@ -233,10 +233,15 @@ Deno.serve(async (req) => {
       }
 
       // Full refund only — never trust any client-supplied amount on cancel.
+      // The idempotency key (derived from the order) guarantees that two
+      // concurrent requests (double-click / race) create exactly ONE Stripe
+      // refund: the second call returns the same refund object instead of
+      // issuing a second real refund.
       const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION });
-      const refund = await stripe.refunds.create({
-        payment_intent: order.stripe_payment_intent_id,
-      });
+      const refund = await stripe.refunds.create(
+        { payment_intent: order.stripe_payment_intent_id },
+        { idempotencyKey: `refund_${orderId}` },
+      );
 
       const refundValue = Math.round(
         (refund.amount ?? Math.round(Number(order.total) * 100)) / 100 * 100,
@@ -347,11 +352,17 @@ Deno.serve(async (req) => {
         refundAmountCents = Math.round(rounded * 100);
       }
 
+      // Idempotency key (derived from the order) guarantees that two concurrent
+      // admin refund requests create exactly ONE Stripe refund instead of two
+      // real refunds. After the first refund the order is locked via refund_id.
       const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION });
-      const refund = await stripe.refunds.create({
-        payment_intent: order.stripe_payment_intent_id,
-        ...(refundAmountCents ? { amount: refundAmountCents } : {}),
-      });
+      const refund = await stripe.refunds.create(
+        {
+          payment_intent: order.stripe_payment_intent_id,
+          ...(refundAmountCents ? { amount: refundAmountCents } : {}),
+        },
+        { idempotencyKey: `refund_${orderId}` },
+      );
 
       const refundValue = refundAmount ?? Math.round((refund.amount ?? 0) / 100 * 100) / 100;
 

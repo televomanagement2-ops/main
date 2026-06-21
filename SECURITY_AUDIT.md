@@ -3,8 +3,11 @@
 **Data:** Giugno 2026
 **Ambito:** Frontend (React 19 + Vite + TS), backend Supabase (Postgres + RLS, Edge Functions Deno),
 integrazione pagamenti Stripe, email Resend.
-**Esito sintetico:** impianto solido. Risolta **1 vulnerabilità critica** (manomissione prezzi) e
-applicato hardening (CORS, logging, pulizia). Restano alcune voci di verifica/operatività pre-go-live.
+**Esito sintetico:** impianto solido. Risolte **2 vulnerabilità critiche** (manomissione prezzi,
+annullamento senza rimborso) e diverse medie (race doppio-rimborso, CORS), più hardening (logging,
+pulizia). **Audit money-flow end-to-end superato**: prezzi/tax/spedizione server-side, webhook firmato e
+idempotente, immutabilità ordine post-pagamento, stock coerente, anti-doppio-rimborso. Restano alcune voci
+di verifica/operatività pre-go-live.
 
 ---
 
@@ -63,6 +66,27 @@ applicato hardening (CORS, logging, pulizia). Restano alcune voci di verifica/op
 - **Fix:** in `handle-order-action` l'azione `cancel` su un ordine `paid` ora emette un **refund Stripe
   totale**, imposta `refund_id`/`refund_amount`/`refunded_at` e stato **`refunded`** (idempotente coi
   webhook), ripristina lo stock (trigger) e invia l'email di conferma. Ignora qualsiasi `amount` dal client.
+
+### 2.5 🟠 MEDIO — Race condition sul doppio rimborso — RISOLTO
+- **Problema:** due richieste di rimborso **simultanee** sullo stesso ordine (doppio click del cliente, o
+  due admin contemporanei) potevano leggere entrambe `refund_id = null`, superare la guardia applicativa e
+  chiamare entrambe `stripe.refunds.create` → **due rimborsi Stripe reali** (denaro restituito due volte) e
+  un record orfano.
+- **Fix:** entrambe le chiamate `stripe.refunds.create` (azioni `cancel` e `refund`) ora passano una
+  **idempotency key** derivata dall'ordine (`refund_${orderId}`). Stripe garantisce **un solo** refund per
+  chiave: la seconda richiesta concorrente riceve lo *stesso* oggetto refund invece di emetterne un secondo.
+  Restano in piedi la guardia `if (order.refund_id)` (early-exit nel caso non concorrente) e il vincolo DB
+  `orders_refund_id_unique`.
+- **File:** `supabase/functions/handle-order-action/index.ts`.
+
+### 2.6 🟠 MEDIO — Fallback CORS che rifletteva un'origine errata — RISOLTO
+- **Problema:** quando l'origine del browser non era in `ALLOWED_ORIGINS`, le funzioni rispondevano
+  comunque con la **prima** origine della lista in `Access-Control-Allow-Origin` → il browser rilevava un
+  mismatch e bloccava la risposta ("Failed to fetch"); una sola origine errata rompeva tutte le altre.
+- **Fix:** se l'origine non è autorizzata, **nessun** header `Access-Control-Allow-Origin` viene emesso
+  (errore onesto, isolato). Aggiunto inoltre il flag `ALLOW_VERCEL_PREVIEWS` (default on) che accetta i
+  sottodomini `*.vercel.app` — il dominio di anteprima Vercel cambia ad ogni deploy e per ogni licenziatario.
+- **File:** `create-checkout-session`, `handle-order-action`, `update-tracking`.
 
 ---
 

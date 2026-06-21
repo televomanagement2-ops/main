@@ -33,8 +33,8 @@ function StarRating({
           width="18"
           height="18"
           viewBox="0 0 24 24"
-          fill={n <= display ? '#F5A623' : 'none'}
-          stroke={n <= display ? '#F5A623' : 'var(--gray-300)'}
+          fill={n <= display ? 'var(--color-rating)' : 'none'}
+          stroke={n <= display ? 'var(--color-rating)' : 'var(--gray-300)'}
           strokeWidth="1.5"
           onMouseEnter={() => !readonly && setHovered(n)}
           onMouseLeave={() => !readonly && setHovered(0)}
