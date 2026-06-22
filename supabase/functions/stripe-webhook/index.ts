@@ -92,6 +92,52 @@ async function updateOrderByPaymentIntentId(
   return data.id as string;
 }
 
+/**
+ * Look up the order total (in cents) for reconciliation, by whichever identifier
+ * the incoming event carries. Returns null when the order or its total can't be found,
+ * in which case the caller should skip reconciliation rather than block the payment.
+ */
+async function fetchOrderTotalCents(
+  client: SupabaseClient,
+  ids: { orderId?: string | null; sessionId?: string | null; paymentIntentId?: string | null }
+): Promise<{ id: string; totalCents: number } | null> {
+  let query = client.from('orders').select('id, total');
+  if (ids.orderId) query = query.eq('id', ids.orderId);
+  else if (ids.sessionId) query = query.eq('stripe_session_id', ids.sessionId);
+  else if (ids.paymentIntentId) query = query.eq('stripe_payment_intent_id', ids.paymentIntentId);
+  else return null;
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`Order lookup failed: ${error.message}`);
+  if (!data || data.total == null) return null;
+  return { id: data.id as string, totalCents: Math.round(Number(data.total) * 100) };
+}
+
+/**
+ * Defense in depth: the amount Stripe actually charged (cents) must match the order
+ * total we recorded at checkout. If they diverge by more than a rounding cent, the
+ * order is held in `requires_action` for manual review instead of being silently
+ * marked paid — guarding against price/tax drift or client tampering.
+ * Returns the status the caller should persist.
+ */
+function reconcileStatus(
+  intendedStatus: string,
+  chargedCents: number | null | undefined,
+  target: { id: string; totalCents: number } | null,
+  context: string
+): string {
+  if (intendedStatus !== 'paid') return intendedStatus;
+  if (typeof chargedCents !== 'number' || !target) return intendedStatus;
+  if (Math.abs(chargedCents - target.totalCents) > 1) {
+    console.error(
+      `[webhook] AMOUNT MISMATCH (${context}) order=${target.id} ` +
+        `charged=${chargedCents} expected=${target.totalCents} — holding for manual review`,
+    );
+    return 'requires_action';
+  }
+  return intendedStatus;
+}
+
 Deno.serve(async (req) => {
   const missing: string[] = [];
   if (!stripeSecret) missing.push('STRIPE_SECRET_KEY');
@@ -149,8 +195,18 @@ Deno.serve(async (req) => {
         const orderId = session.metadata?.order_id ?? session.client_reference_id ?? null;
         const paymentStatus = session.payment_status;
         const isPaid = paymentStatus === 'paid' || paymentStatus === 'no_payment_required';
-        const newStatus = isPaid ? 'paid' : 'requires_action';
         const paymentIntentId = toId(session.payment_intent);
+
+        const reconcileTarget = await fetchOrderTotalCents(client, {
+          orderId,
+          sessionId: session.id,
+        });
+        const newStatus = reconcileStatus(
+          isPaid ? 'paid' : 'requires_action',
+          session.amount_total,
+          reconcileTarget,
+          'checkout.session.completed',
+        );
 
         const updates: Record<string, unknown> = { status: newStatus };
         if (paymentIntentId) updates.stripe_payment_intent_id = paymentIntentId;
@@ -169,8 +225,20 @@ Deno.serve(async (req) => {
       case 'payment_intent.succeeded': {
         const pi = event.data.object as Stripe.PaymentIntent;
         const orderId = pi.metadata?.order_id ?? null;
+
+        const reconcileTarget = await fetchOrderTotalCents(client, {
+          orderId,
+          paymentIntentId: pi.id,
+        });
+        const status = reconcileStatus(
+          'paid',
+          pi.amount_received,
+          reconcileTarget,
+          'payment_intent.succeeded',
+        );
+
         const updates: Record<string, unknown> = {
-          status: 'paid',
+          status,
           stripe_payment_intent_id: pi.id,
         };
 

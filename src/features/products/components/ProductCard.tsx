@@ -29,6 +29,8 @@ export function ProductCard({ product, showActionButton = true }: Props) {
           alt={primaryImage?.alt_text ?? product.name}
           className="product-card__img"
           loading="lazy"
+          ref={(node) => { if (node?.complete) node.classList.add('is-loaded'); }}
+          onLoad={(e) => e.currentTarget.classList.add('is-loaded')}
         />
         {isClothing && hasVariants && (
           <span className="product-card__variant-hint">{t('products.card.selectSize')}</span>

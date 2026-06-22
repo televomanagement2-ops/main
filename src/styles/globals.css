@@ -297,7 +297,9 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
   height: var(--topbar-h);
   display: flex; align-items: center; gap: var(--sp-4);
   padding: 0 var(--sp-5);
-  background: linear-gradient(180deg, #f6f8fb 0%, #edf1f6 100%);
+  background: linear-gradient(180deg, rgba(246,248,251,.82) 0%, rgba(237,241,246,.82) 100%);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
   color: var(--color-text);
   border-bottom: 1px solid var(--color-border);
   box-shadow: 0 8px 20px rgba(15,23,42,.08);
@@ -789,6 +791,26 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
     linear-gradient(180deg, var(--color-surface) 0%, var(--color-bg) 100%);
   border-bottom: 1px solid var(--color-border);
 }
+/* Soft drifting "aurora" behind the hero copy — warm palette, very low opacity,
+   sits below the content layer (which is z-index 2) so text stays crisp. */
+.home-hero::after {
+  content: '';
+  position: absolute;
+  inset: -24% -12% auto;
+  height: 150%;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.5;
+  background:
+    radial-gradient(360px 300px at 16% 26%, rgba(255, 158, 84, 0.16) 0%, transparent 70%),
+    radial-gradient(440px 340px at 84% 6%, rgba(20, 17, 14, 0.10) 0%, transparent 72%);
+  filter: blur(6px);
+  animation: heroAurora 18s ease-in-out infinite alternate;
+}
+@keyframes heroAurora {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(-3%, 2%, 0) scale(1.08); }
+}
 .home-hero__inner {
   position: relative;
   z-index: 2;
@@ -1132,6 +1154,9 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
   .home-feed__grid .product-card {
     animation: none;
   }
+  .home-hero::after { animation: none; }
+  .product-card__img-wrap::after { display: none; }
+  .product-card__img { opacity: 1; transition: none; }
   .profile-hero,
   .profile-promo,
   .profile-orders-grid .profile-order-card,
@@ -1508,13 +1533,23 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
 .product-card__img-wrap {
   position: relative; aspect-ratio: 1; overflow: hidden; background: var(--color-surface-2);
 }
+/* Diagonal light sheen that sweeps across the image on hover */
+.product-card__img-wrap::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background: linear-gradient(115deg, transparent 32%, rgba(255,255,255,.28) 48%, transparent 64%);
+  transform: translateX(-130%);
+  transition: transform 720ms var(--ease);
+}
+.product-card:hover .product-card__img-wrap::after { transform: translateX(130%); }
 .product-card__img {
   width: 100%; height: 100%; object-fit: cover;
-  transition: transform 500ms var(--ease);
+  opacity: 0;
+  transition: transform 500ms var(--ease), opacity 600ms var(--ease);
 }
+.product-card__img.is-loaded { opacity: 1; }
 .product-card:hover .product-card__img { transform: scale(1.06); }
 .product-card__variant-hint {
-  position: absolute; bottom: var(--sp-3); left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: var(--sp-3); left: 50%; transform: translateX(-50%); z-index: 3;
   background: rgba(0,0,0,.55); backdrop-filter: blur(8px);
   color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .04em;
   padding: 4px 10px; border-radius: var(--r-full); white-space: nowrap;
@@ -1674,7 +1709,7 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.54) 0%, rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0.2) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.04) 46%, rgba(255, 255, 255, 0.12) 100%);
 }
 
 .profile-avatar {
@@ -1694,6 +1729,8 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
 }
 
 .profile-hero__content {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1712,7 +1749,7 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
 
 .profile-identity__email {
   font-size: 13px;
-  color: var(--color-text-3);
+  color: var(--color-text-2);
 }
 
 .profile-promo {
@@ -2072,12 +2109,14 @@ p, h1, h2, h3, h4, h5 { overflow-wrap: break-word; }
 .gallery__main:hover img { transform: scale(1.04); }
 .gallery__thumbs {
   display: flex; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth;
 }
 .gallery__thumbs::-webkit-scrollbar { display: none; }
 .gallery__thumb {
   flex-shrink: 0; width: 64px; height: 64px;
   border-radius: var(--r-md); overflow: hidden;
   border: 1.5px solid var(--color-border); cursor: pointer;
+  scroll-snap-align: start;
   transition: border-color var(--dur-fast), transform var(--dur-fast);
 }
 .gallery__thumb:hover { transform: scale(1.05); }
@@ -2782,7 +2821,7 @@ html.dark .sidebar-lang-list {
 
 /* ── 2. Desktop top nav ────────────────────────────────────── */
 html.dark .desktop-nav {
-  background: linear-gradient(180deg, #12151c 0%, #0f1219 100%);
+  background: linear-gradient(180deg, rgba(18,21,28,.82) 0%, rgba(15,18,25,.82) 100%);
   border-bottom-color: var(--color-border);
   box-shadow: none;
 }
@@ -2938,7 +2977,7 @@ html.dark .buy-again-card:hover {
 }
 .cookie-consent__card {
   background: var(--color-surface);
-  color: var(--color-text-1);
+  color: var(--color-text);
   border: 1px solid var(--color-border-2);
   border-radius: 16px;
   padding: var(--sp-5);
@@ -2948,7 +2987,7 @@ html.dark .buy-again-card:hover {
   font-size: 16px;
   font-weight: 700;
   margin: 0 0 var(--sp-2);
-  color: var(--color-text-1);
+  color: var(--color-text);
 }
 .cookie-consent__body {
   font-size: 13px;
@@ -2957,7 +2996,7 @@ html.dark .buy-again-card:hover {
   margin: 0 0 var(--sp-4);
 }
 .cookie-consent__link {
-  color: var(--color-accent);
+  color: var(--accent);
   text-decoration: underline;
 }
 .cookie-consent__categories {
@@ -2975,7 +3014,7 @@ html.dark .buy-again-card:hover {
   border-radius: 12px;
 }
 .cookie-cat__text { display: grid; gap: 2px; }
-.cookie-cat__title { font-size: 13px; font-weight: 600; color: var(--color-text-1); }
+.cookie-cat__title { font-size: 13px; font-weight: 600; color: var(--color-text); }
 .cookie-cat__desc { font-size: 12px; line-height: 1.5; color: var(--color-text-3); }
 .cookie-cat__always {
   font-size: 12px;
@@ -2987,7 +3026,7 @@ html.dark .buy-again-card:hover {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  accent-color: var(--color-accent);
+  accent-color: var(--accent);
   cursor: pointer;
 }
 .cookie-consent__actions {
@@ -3005,17 +3044,17 @@ html.dark .buy-again-card:hover {
   border-radius: 10px;
   border: 1px solid var(--color-border-2);
   background: transparent;
-  color: var(--color-text-1);
+  color: var(--color-text);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 .cookie-btn:hover { background: var(--color-surface-2); }
 .cookie-btn--primary {
-  background: var(--color-text-1);
+  background: var(--color-text);
   color: var(--color-bg);
-  border-color: var(--color-text-1);
+  border-color: var(--color-text);
 }
-.cookie-btn--primary:hover { opacity: 0.9; background: var(--color-text-1); }
+.cookie-btn--primary:hover { opacity: 0.9; background: var(--color-text); }
 
 /* Floating re-open button for cookie preferences */
 .cookie-fab {

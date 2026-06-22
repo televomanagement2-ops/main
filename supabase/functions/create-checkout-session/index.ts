@@ -365,6 +365,24 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Charge tax as an explicit line item so the amount Stripe collects equals the
+    // order.total we recorded above. Without this, Stripe would charge only
+    // (subtotal + shipping) while the order claims tax was collected — an accounting
+    // and legal discrepancy.
+    // NOTE: this is a flat estimate. For jurisdiction-correct US sales tax, migrate to
+    // Stripe Tax (`automatic_tax: { enabled: true }` + product tax codes + address
+    // collection) and persist `session.total_details.amount_tax` from the webhook.
+    if (tax > 0) {
+      lineItems.push({
+        price_data: {
+          currency: 'usd',
+          product_data: { name: 'Estimated sales tax' },
+          unit_amount: Math.round(tax * 100),
+        },
+        quantity: 1,
+      });
+    }
+
     let session;
     try {
       console.log('[checkout] phase=stripe.create_session');

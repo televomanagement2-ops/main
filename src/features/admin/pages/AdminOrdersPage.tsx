@@ -221,7 +221,7 @@ export function AdminOrdersPage() {
                         {tCount('orders.items', order.order_items?.length ?? 0)}
                       </p>
                       {order.status === 'refunded' && order.refund_amount && (
-                        <p className="caption" style={{ color: 'var(--color-accent)', marginTop: 'var(--sp-1)' }}>
+                        <p className="caption" style={{ color: 'var(--accent)', marginTop: 'var(--sp-1)' }}>
                           {t('admin.orders.refundedAmount', { amount: formatCurrency(order.refund_amount) })}
                         </p>
                       )}
