@@ -104,7 +104,7 @@ const translations: Translations = {
       size: 'Size',
       subtotal: 'Subtotal',
       shipping: 'Shipping',
-      tax: 'Tax (10%)',
+      tax: 'Tax',
       total: 'Total',
       shippingAddress: 'Shipping address',
       shippingMethod: 'Shipping method',
@@ -185,7 +185,7 @@ const translations: Translations = {
       orderSummary: 'Order summary',
       subtotal: 'Subtotal',
       shipping: 'Shipping',
-      tax: 'Tax (10%)',
+      tax: 'Tax',
       total: 'Total',
       proceedCheckout: 'Proceed to checkout',
       continueShopping: 'Continue shopping',
@@ -379,7 +379,7 @@ const translations: Translations = {
         line1: '[Company name]',
         line2: '[Registered address]',
         line3: 'VAT: [Insert VAT]',
-        line4: 'Email: privacy@commercejet.com',
+        line4: 'Email: privacy@example.com',
       },
       dataTypes: {
         title: 'Types of Data Collected',
@@ -417,7 +417,7 @@ const translations: Translations = {
       },
       userRights: {
         title: 'User Rights',
-        body: 'The user may request access, rectification, deletion, restriction, objection, and data portability by writing to privacy@commercejet.com.',
+        body: 'The user may request access, rectification, deletion, restriction, objection, and data portability by writing to privacy@example.com.',
       },
       cookies: {
         title: 'Cookie Policy',
@@ -777,7 +777,7 @@ const translations: Translations = {
       size: 'Taglia',
       subtotal: 'Subtotale',
       shipping: 'Spedizione',
-      tax: 'Tasse (10%)',
+      tax: 'Tasse',
       total: 'Totale',
       shippingAddress: 'Indirizzo di spedizione',
       shippingMethod: 'Metodo di spedizione',
@@ -858,7 +858,7 @@ const translations: Translations = {
       orderSummary: 'Riepilogo ordine',
       subtotal: 'Subtotale',
       shipping: 'Spedizione',
-      tax: 'Tasse (10%)',
+      tax: 'Tasse',
       total: 'Totale',
       proceedCheckout: 'Procedi al checkout',
       continueShopping: 'Continua lo shopping',
@@ -1052,7 +1052,7 @@ const translations: Translations = {
         line1: '[Ragione sociale]',
         line2: '[Sede legale]',
         line3: 'P.IVA: [Inserire P.IVA]',
-        line4: 'Email: privacy@commercejet.com',
+        line4: 'Email: privacy@example.com',
       },
       dataTypes: {
         title: 'Tipologia di dati raccolti',
@@ -1090,7 +1090,7 @@ const translations: Translations = {
       },
       userRights: {
         title: 'Diritti dell utente',
-        body: 'L utente puo richiedere accesso, rettifica, cancellazione, limitazione del trattamento, opposizione e portabilita dei dati scrivendo a privacy@commercejet.com.',
+        body: 'L utente puo richiedere accesso, rettifica, cancellazione, limitazione del trattamento, opposizione e portabilita dei dati scrivendo a privacy@example.com.',
       },
       cookies: {
         title: 'Cookie policy',
@@ -1450,7 +1450,7 @@ const translations: Translations = {
       size: 'Talla',
       subtotal: 'Subtotal',
       shipping: 'Envio',
-      tax: 'Impuesto (10%)',
+      tax: 'Impuesto',
       total: 'Total',
       shippingAddress: 'Direccion de envio',
       shippingMethod: 'Metodo de envio',
@@ -1531,7 +1531,7 @@ const translations: Translations = {
       orderSummary: 'Resumen del pedido',
       subtotal: 'Subtotal',
       shipping: 'Envio',
-      tax: 'Impuesto (10%)',
+      tax: 'Impuesto',
       total: 'Total',
       proceedCheckout: 'Ir al checkout',
       continueShopping: 'Seguir comprando',
@@ -1725,7 +1725,7 @@ const translations: Translations = {
         line1: '[Razon social]',
         line2: '[Domicilio legal]',
         line3: 'NIF: [Insertar NIF]',
-        line4: 'Email: privacy@commercejet.com',
+        line4: 'Email: privacy@example.com',
       },
       dataTypes: {
         title: 'Tipo de datos recopilados',
@@ -1763,7 +1763,7 @@ const translations: Translations = {
       },
       userRights: {
         title: 'Derechos del usuario',
-        body: 'El usuario puede solicitar acceso, rectificacion, eliminacion, limitacion, oposicion y portabilidad escribiendo a privacy@commercejet.com.',
+        body: 'El usuario puede solicitar acceso, rectificacion, eliminacion, limitacion, oposicion y portabilidad escribiendo a privacy@example.com.',
       },
       cookies: {
         title: 'Politica de cookies',
@@ -2123,7 +2123,7 @@ const translations: Translations = {
       size: 'Taille',
       subtotal: 'Sous-total',
       shipping: 'Livraison',
-      tax: 'Taxe (10%)',
+      tax: 'Taxe',
       total: 'Total',
       shippingAddress: 'Adresse de livraison',
       shippingMethod: 'Mode de livraison',
@@ -2204,7 +2204,7 @@ const translations: Translations = {
       orderSummary: 'Resume de la commande',
       subtotal: 'Sous-total',
       shipping: 'Livraison',
-      tax: 'Taxe (10%)',
+      tax: 'Taxe',
       total: 'Total',
       proceedCheckout: 'Aller au checkout',
       continueShopping: 'Continuer vos achats',
@@ -2398,7 +2398,7 @@ const translations: Translations = {
         line1: '[Raison sociale]',
         line2: '[Adresse legale]',
         line3: 'TVA: [Inserer TVA]',
-        line4: 'Email: privacy@commercejet.com',
+        line4: 'Email: privacy@example.com',
       },
       dataTypes: {
         title: 'Types de donnees collectees',
@@ -2436,7 +2436,7 @@ const translations: Translations = {
       },
       userRights: {
         title: 'Droits de l utilisateur',
-        body: 'L utilisateur peut demander acces, rectification, suppression, limitation, opposition et portabilite en ecrivant a privacy@commercejet.com.',
+        body: 'L utilisateur peut demander acces, rectification, suppression, limitation, opposition et portabilite en ecrivant a privacy@example.com.',
       },
       cookies: {
         title: 'Politique de cookies',

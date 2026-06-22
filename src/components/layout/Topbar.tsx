@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useCartStore } from '../../store/cartStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useI18n } from '../../lib/i18n';
+import { storeConfig } from '../../config/storeConfig';
 
 interface Props {
   onMenuClick: () => void;
@@ -45,7 +46,7 @@ export function Topbar({ onMenuClick }: Props) {
 
       {/* Logo */}
       <Link to="/" className="topbar__logo">
-        Commerce<span>Jet</span>
+        {storeConfig.storeName}
       </Link>
 
       {/* Search */}

@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useCartStore } from '../../store/cartStore';
 import { supabase } from '../../lib/supabaseClient';
 import { useI18n } from '../../lib/i18n';
+import { storeConfig } from '../../config/storeConfig';
 
 interface Props {
   mini: boolean;
@@ -77,7 +78,7 @@ export function Sidebar({ mini, onToggleMini, mobileOpen, onCloseMobile }: Props
       {!mini && (
         <div className="sidebar-brand">
           <Link to="/" className="sidebar-brand__logo">
-            Commerce<span>Jet</span>
+            {storeConfig.storeName}
           </Link>
           <button
             className="sidebar-brand__toggle"

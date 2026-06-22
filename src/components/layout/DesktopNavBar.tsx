@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LANGUAGE_OPTIONS, usePreferencesStore, type AppLanguageCode } from '../../store/preferencesStore';
 import { useI18n } from '../../lib/i18n';
+import { storeConfig } from '../../config/storeConfig';
 
 interface Props {
   onMenuClick: () => void;
@@ -37,7 +38,7 @@ export function DesktopNavBar({ onMenuClick }: Props) {
       </button>
 
       <Link to="/" className="desktop-nav__brand">
-        Commerce<span>Jet</span>
+        {storeConfig.storeName}
       </Link>
 
       <div className="desktop-nav__actions">

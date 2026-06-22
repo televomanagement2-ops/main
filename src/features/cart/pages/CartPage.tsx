@@ -3,8 +3,7 @@ import { useCartStore } from '../../../store/cartStore';
 import { CartItemRow } from '../components/CartItemRow';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
-
-const TAX_RATE = 0.1;
+import { computeOrderTotals } from '../../../lib/pricing';
 
 export function CartPage() {
   const items     = useCartStore((s) => s.items);
@@ -31,9 +30,7 @@ export function CartPage() {
     );
   }
 
-  const shipping = 0;
-  const tax      = subtotal * TAX_RATE;
-  const total    = subtotal + shipping + tax;
+  const { tax, total } = computeOrderTotals(subtotal, 0);
 
   return (
     <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
@@ -67,10 +64,12 @@ export function CartPage() {
             <span>{t('cart.shipping')}</span>
             <span className="summary-line--free">{t('common.free')}</span>
           </div>
-          <div className="summary-line">
-            <span>{t('cart.tax')}</span>
-            <span>{formatCurrency(tax)}</span>
-          </div>
+          {tax > 0 && (
+            <div className="summary-line">
+              <span>{t('cart.tax')}</span>
+              <span>{formatCurrency(tax)}</span>
+            </div>
+          )}
           <div className="summary-line summary-line--total">
             <span>{t('cart.total')}</span>
             <span>{formatCurrency(total)}</span>

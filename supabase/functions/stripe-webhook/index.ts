@@ -92,16 +92,20 @@ async function updateOrderByPaymentIntentId(
   return data.id as string;
 }
 
+const FINAL_STATUSES = ['paid', 'shipped', 'delivered'];
+const dollars = (cents: number) => Math.round(cents) / 100;
+
 /**
- * Look up the order total (in cents) for reconciliation, by whichever identifier
- * the incoming event carries. Returns null when the order or its total can't be found,
- * in which case the caller should skip reconciliation rather than block the payment.
+ * Look up an order's current state by whichever identifier the event carries.
+ * Used to (a) avoid touching financial fields after the order is already paid —
+ * the DB immutability trigger forbids it — and (b) adopt Stripe's authoritative
+ * amount as the order total. Returns null if the order can't be found.
  */
-async function fetchOrderTotalCents(
+async function fetchOrder(
   client: SupabaseClient,
   ids: { orderId?: string | null; sessionId?: string | null; paymentIntentId?: string | null }
-): Promise<{ id: string; totalCents: number } | null> {
-  let query = client.from('orders').select('id, total');
+): Promise<{ id: string; status: string; total: number | null } | null> {
+  let query = client.from('orders').select('id, status, total');
   if (ids.orderId) query = query.eq('id', ids.orderId);
   else if (ids.sessionId) query = query.eq('stripe_session_id', ids.sessionId);
   else if (ids.paymentIntentId) query = query.eq('stripe_payment_intent_id', ids.paymentIntentId);
@@ -109,33 +113,12 @@ async function fetchOrderTotalCents(
 
   const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Order lookup failed: ${error.message}`);
-  if (!data || data.total == null) return null;
-  return { id: data.id as string, totalCents: Math.round(Number(data.total) * 100) };
-}
-
-/**
- * Defense in depth: the amount Stripe actually charged (cents) must match the order
- * total we recorded at checkout. If they diverge by more than a rounding cent, the
- * order is held in `requires_action` for manual review instead of being silently
- * marked paid — guarding against price/tax drift or client tampering.
- * Returns the status the caller should persist.
- */
-function reconcileStatus(
-  intendedStatus: string,
-  chargedCents: number | null | undefined,
-  target: { id: string; totalCents: number } | null,
-  context: string
-): string {
-  if (intendedStatus !== 'paid') return intendedStatus;
-  if (typeof chargedCents !== 'number' || !target) return intendedStatus;
-  if (Math.abs(chargedCents - target.totalCents) > 1) {
-    console.error(
-      `[webhook] AMOUNT MISMATCH (${context}) order=${target.id} ` +
-        `charged=${chargedCents} expected=${target.totalCents} — holding for manual review`,
-    );
-    return 'requires_action';
-  }
-  return intendedStatus;
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    status: data.status as string,
+    total: data.total == null ? null : Number(data.total),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -197,20 +180,35 @@ Deno.serve(async (req) => {
         const isPaid = paymentStatus === 'paid' || paymentStatus === 'no_payment_required';
         const paymentIntentId = toId(session.payment_intent);
 
-        const reconcileTarget = await fetchOrderTotalCents(client, {
-          orderId,
-          sessionId: session.id,
-        });
-        const newStatus = reconcileStatus(
-          isPaid ? 'paid' : 'requires_action',
-          session.amount_total,
-          reconcileTarget,
-          'checkout.session.completed',
-        );
+        // This is the authoritative event for fulfillment: it carries the final
+        // amount charged and (with Stripe Tax) the tax breakdown.
+        const order = await fetchOrder(client, { orderId, sessionId: session.id });
+        const alreadyFinal = !!order && FINAL_STATUSES.includes(order.status);
 
-        const updates: Record<string, unknown> = { status: newStatus };
+        const updates: Record<string, unknown> = {};
         if (paymentIntentId) updates.stripe_payment_intent_id = paymentIntentId;
         if (session.id) updates.stripe_session_id = session.id;
+
+        // Don't downgrade an order another event already finalized; only set status
+        // while it's still pre-payment (the immutability trigger also forbids it).
+        if (!alreadyFinal) {
+          updates.status = isPaid ? 'paid' : 'requires_action';
+
+          // Adopt Stripe's amount as the source of truth — the line items were built
+          // server-side from DB prices, so the charged amount can't be tampered. With
+          // Stripe Tax this is where the per-jurisdiction tax lands on the order.
+          if (isPaid && typeof session.amount_total === 'number') {
+            updates.total = dollars(session.amount_total);
+            if (typeof session.total_details?.amount_tax === 'number') {
+              updates.tax_amount = dollars(session.total_details.amount_tax);
+            }
+            if (order && order.total != null && Math.abs((updates.total as number) - order.total) > 0.01) {
+              console.log(
+                `[webhook] order ${order.id} total ${order.total} → ${updates.total} (authoritative from Stripe)`,
+              );
+            }
+          }
+        }
 
         if (orderId) {
           updatedOrderId = await updateOrderById(client, orderId, updates);
@@ -226,21 +224,20 @@ Deno.serve(async (req) => {
         const pi = event.data.object as Stripe.PaymentIntent;
         const orderId = pi.metadata?.order_id ?? null;
 
-        const reconcileTarget = await fetchOrderTotalCents(client, {
-          orderId,
-          paymentIntentId: pi.id,
-        });
-        const status = reconcileStatus(
-          'paid',
-          pi.amount_received,
-          reconcileTarget,
-          'payment_intent.succeeded',
-        );
+        // Backup confirmation. checkout.session.completed normally owns the paid
+        // transition + totals; here we always record the payment_intent id, and only
+        // mark paid (adopting the captured amount as the total) if no other event has
+        // already finalized the order — so we never fight the immutability trigger.
+        const order = await fetchOrder(client, { orderId, paymentIntentId: pi.id });
+        const alreadyFinal = !!order && FINAL_STATUSES.includes(order.status);
 
-        const updates: Record<string, unknown> = {
-          status,
-          stripe_payment_intent_id: pi.id,
-        };
+        const updates: Record<string, unknown> = { stripe_payment_intent_id: pi.id };
+        if (!alreadyFinal) {
+          updates.status = 'paid';
+          if (typeof pi.amount_received === 'number') {
+            updates.total = dollars(pi.amount_received);
+          }
+        }
 
         if (orderId) {
           updatedOrderId = await updateOrderById(client, orderId, updates);

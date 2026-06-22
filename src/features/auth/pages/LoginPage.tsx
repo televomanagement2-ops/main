@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from '../../../lib/supabaseClient';
 import { useI18n } from '../../../lib/i18n';
+import { storeConfig } from '../../../config/storeConfig';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -72,7 +73,7 @@ export function LoginPage() {
         <div className="auth-card__inner">
           {/* Brand */}
           <div className="auth-card__brand">
-            <Link to="/" className="logo">Shop<span>Base</span></Link>
+            <Link to="/" className="logo">{storeConfig.storeName}</Link>
           </div>
 
           <h1 className="auth-card__title">

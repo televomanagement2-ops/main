@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { useCartStore } from '../../store/cartStore';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabaseClient';
+import { storeConfig } from '../../config/storeConfig';
 
 export function Header() {
   const itemCount = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
@@ -13,7 +14,7 @@ export function Header() {
     <header className="header">
       <div className="container header-inner">
         <Link to="/" className="logo">
-          Commerce<span>Jet</span>
+          {storeConfig.storeName}
         </Link>
 
         <nav className="nav">

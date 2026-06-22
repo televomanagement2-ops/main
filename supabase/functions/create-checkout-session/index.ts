@@ -13,6 +13,19 @@ const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
 // so allow *.vercel.app automatically unless explicitly disabled in production.
 const allowVercelPreviews = (Deno.env.get('ALLOW_VERCEL_PREVIEWS') ?? 'true').toLowerCase() !== 'false';
 
+// ── Tax configuration ────────────────────────────────────────────────────────
+// STRIPE_TAX_ENABLED=true uses Stripe Tax to compute the correct per-jurisdiction
+// US sales tax at checkout (requires Stripe Tax configured in the dashboard). When
+// false (default), a flat estimate of TAX_RATE (fraction, e.g. 0.07) is charged as
+// an explicit line item. TAX_RATE defaults to 0 — a fresh template charges no tax
+// until the operator either sets a rate or enables Stripe Tax. Keep TAX_RATE in
+// sync with the frontend VITE_TAX_RATE.
+const stripeTaxEnabled = (Deno.env.get('STRIPE_TAX_ENABLED') ?? 'false').toLowerCase() === 'true';
+const TAX_RATE = (() => {
+  const n = Number(Deno.env.get('TAX_RATE') ?? '0');
+  return Number.isFinite(n) && n > 0 ? n : 0;
+})();
+
 // Returns the value to echo in Access-Control-Allow-Origin, or null if the
 // origin is not authorized (in which case NO such header should be emitted).
 function resolveAllowedOrigin(origin: string | null): string | null {
@@ -281,7 +294,12 @@ Deno.serve(async (req) => {
     const subtotal = Math.round(
       resolvedItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) * 100,
     ) / 100;
-    const tax = Math.round((subtotal + resolvedShippingCost) * 0.1 * 100) / 100;
+    // When Stripe Tax is on, Stripe computes the real tax at payment and the
+    // webhook writes the authoritative tax_amount/total back to the order. Until
+    // then we record tax as 0 (estimate). Otherwise apply the flat TAX_RATE.
+    const tax = stripeTaxEnabled
+      ? 0
+      : Math.round((subtotal + resolvedShippingCost) * TAX_RATE * 100) / 100;
     const orderTotal = Math.round((subtotal + resolvedShippingCost + tax) * 100) / 100;
     let orderId: string | null = null;
 
@@ -365,14 +383,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Charge tax as an explicit line item so the amount Stripe collects equals the
-    // order.total we recorded above. Without this, Stripe would charge only
-    // (subtotal + shipping) while the order claims tax was collected — an accounting
-    // and legal discrepancy.
-    // NOTE: this is a flat estimate. For jurisdiction-correct US sales tax, migrate to
-    // Stripe Tax (`automatic_tax: { enabled: true }` + product tax codes + address
-    // collection) and persist `session.total_details.amount_tax` from the webhook.
-    if (tax > 0) {
+    // Flat-rate mode only: charge the estimated tax as an explicit line item so the
+    // amount Stripe collects equals the order.total we recorded above. With Stripe
+    // Tax enabled, tax is 0 here and Stripe adds the real tax itself.
+    if (!stripeTaxEnabled && tax > 0) {
       lineItems.push({
         price_data: {
           currency: 'usd',
@@ -386,7 +400,7 @@ Deno.serve(async (req) => {
     let session;
     try {
       console.log('[checkout] phase=stripe.create_session');
-      session = await stripe.checkout.sessions.create({
+      const sessionParams: Stripe.Checkout.SessionCreateParams = {
         payment_method_types: ['card'],
         line_items: lineItems,
         mode: 'payment',
@@ -397,8 +411,30 @@ Deno.serve(async (req) => {
         payment_intent_data: {
           metadata: { order_id: order.id, user_id: user.id },
         },
-        automatic_tax: { enabled: false },
-      });
+        automatic_tax: { enabled: stripeTaxEnabled },
+      };
+
+      if (stripeTaxEnabled) {
+        // Stripe Tax needs a customer address to compute jurisdiction tax. Reuse the
+        // shipping address the buyer already entered so they don't re-type it, and let
+        // Stripe update it if they edit it on the hosted page.
+        const customer = await stripe.customers.create({
+          email: user.email ?? undefined,
+          name: addr.full_name,
+          address: {
+            line1: addr.line1,
+            line2: addr.line2 ?? undefined,
+            city: addr.city,
+            state: addr.state,
+            postal_code: addr.postal_code,
+            country: addr.country,
+          },
+        });
+        sessionParams.customer = customer.id;
+        sessionParams.customer_update = { address: 'auto' };
+      }
+
+      session = await stripe.checkout.sessions.create(sessionParams);
       console.log('[checkout] Stripe session created:', session.id);
     } catch (stripeErr) {
       const msg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);

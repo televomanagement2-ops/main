@@ -7,6 +7,7 @@ import { useAddresses } from '../../../hooks/useAddresses';
 import { useShippingMethods } from '../../../hooks/useShippingMethods';
 import { supabase } from '../../../lib/supabaseClient';
 import { useI18n } from '../../../lib/i18n';
+import { computeOrderTotals } from '../../../lib/pricing';
 import type { Address, ShippingMethod } from '../../../types';
 
 type CheckoutBody = {
@@ -344,8 +345,7 @@ export function CheckoutPage() {
 
   const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const shippingCost = selectedMethod?.price ?? 0;
-  const tax = (subtotal + shippingCost) * 0.1;
-  const total = subtotal + shippingCost + tax;
+  const { tax, total } = computeOrderTotals(subtotal, shippingCost);
 
   const formatDays = (min: number | null, max: number | null) => {
     if (min == null || max == null) return null;
@@ -584,10 +584,12 @@ export function CheckoutPage() {
               {shippingCost === 0 ? t('common.free') : formatCurrency(shippingCost)}
             </span>
           </div>
-          <div className="summary-line">
-            <span>{t('cart.tax')}</span>
-            <span>{formatCurrency(tax)}</span>
-          </div>
+          {tax > 0 && (
+            <div className="summary-line">
+              <span>{t('cart.tax')}</span>
+              <span>{formatCurrency(tax)}</span>
+            </div>
+          )}
           <div className="summary-line summary-line--total">
             <span>{t('cart.total')}</span>
             <span>{formatCurrency(total)}</span>

@@ -65,8 +65,7 @@ INSERT INTO public.shipping_methods (id, name, description, price, estimated_day
 VALUES
   ('c1000000-0000-0000-0000-000000000001', 'Standard',   'Regular postal delivery',           0.00, 5,  10, 1),
   ('c1000000-0000-0000-0000-000000000002', 'Express',    'Fast tracked delivery',             9.99, 2,   3, 2),
-  ('c1000000-0000-0000-0000-000000000003', 'Overnight',  'Next business day guaranteed',     19.99, 1,   1, 3),
-  ('c1000000-0000-0000-0000-000000000004', 'Poste',      'Poste Italiane standard delivery',  4.99, 7,  14, 4)
+  ('c1000000-0000-0000-0000-000000000003', 'Overnight',  'Next business day guaranteed',     19.99, 1,   1, 3)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================

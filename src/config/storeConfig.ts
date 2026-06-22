@@ -14,6 +14,11 @@ export const storeConfig = {
   /** Public store / brand name shown to customers. */
   storeName: 'CommerceJet',
 
+  /** Two-letter country code shown in the footer (operator's location). */
+  countryCode: 'US',
+  /** Country name shown in the footer (operator's location). */
+  countryName: 'United States',
+
   /** Registered legal name of the seller (the entity on invoices/contracts). */
   sellerLegalName: '[SELLER_LEGAL_NAME]',
   /** Entity type, e.g. "LLC", "Inc.", "Ltd", "Sole Proprietor". */
@@ -21,12 +26,14 @@ export const storeConfig = {
   /** Full registered business address. */
   businessAddress: '[BUSINESS_ADDRESS]',
 
+  // Customer-facing contact. Generic placeholders (example.com / 555) — replace
+  // before launch. They render cleanly on the demo while signaling "fill me".
   /** General customer-facing contact email (orders, returns, support). */
-  contactEmail: '[CONTACT_EMAIL]',
+  contactEmail: 'support@example.com',
   /** Support phone number. */
-  supportPhone: '[SUPPORT_PHONE]',
+  supportPhone: '+1 (555) 123-4567',
   /** Privacy / data-protection contact email. */
-  privacyEmail: '[PRIVACY_EMAIL]',
+  privacyEmail: 'privacy@example.com',
 
   /** U.S. state whose law governs the Terms (e.g. "Delaware", "California"). */
   governingState: '[GOVERNING_STATE]',

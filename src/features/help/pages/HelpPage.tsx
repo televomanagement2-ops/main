@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
+import { storeConfig } from '../../../config/storeConfig';
 
 type FAQSection = {
   title: string;
@@ -52,8 +53,8 @@ export function HelpPage() {
     const form = event.currentTarget;
     const email = (form.elements.namedItem('help-email') as HTMLInputElement).value;
     const message = (form.elements.namedItem('help-message') as HTMLTextAreaElement).value;
-    const subject = `Richiesta Supporto da CommerceJet (${email})`;
-    const mailtoUrl = `mailto:support@commercejet.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
+    const subject = `Support request from ${storeConfig.storeName} (${email})`;
+    const mailtoUrl = `mailto:${storeConfig.contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
     window.location.href = mailtoUrl;
     setSent(true);
   };
@@ -89,8 +90,8 @@ export function HelpPage() {
       <section className="help-contact" aria-label={t('help.contactAria')}>
         <div>
           <h2 className="heading-2" style={{ marginBottom: 'var(--sp-2)' }}>{t('help.contactTitle')}</h2>
-          <p className="body-sm">{t('help.contactEmail')}: <a href="mailto:support@commercejet.com">support@commercejet.com</a></p>
-          <p className="body-sm">{t('help.contactPhone')}: <a href="tel:+390000000000">+39 000 000 0000</a></p>
+          <p className="body-sm">{t('help.contactEmail')}: <a href={`mailto:${storeConfig.contactEmail}`}>{storeConfig.contactEmail}</a></p>
+          <p className="body-sm">{t('help.contactPhone')}: <a href={`tel:${storeConfig.supportPhone.replace(/[^+\d]/g, '')}`}>{storeConfig.supportPhone}</a></p>
           <p className="body-sm">{t('help.contactHours')}</p>
         </div>
 

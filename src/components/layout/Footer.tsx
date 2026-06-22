@@ -1,23 +1,25 @@
 import { Link } from 'react-router-dom';
 import { useI18n } from '../../lib/i18n';
+import { storeConfig } from '../../config/storeConfig';
 
 export function Footer() {
   const year = new Date().getFullYear();
   const { t } = useI18n();
+  const telHref = `tel:${storeConfig.supportPhone.replace(/[^+\d]/g, '')}`;
 
   return (
     <footer className="footer">
       <div className="container footer-inner">
         <div className="footer-brand-block">
           <Link to="/" className="footer-brand">
-            Commerce<span>Jet</span>
+            {storeConfig.storeName}
           </Link>
           <p className="footer-brand-copy">
             {t('footer.tagline')}
           </p>
           <div className="footer-contact-pill">
             <span>{t('footer.support')}</span>
-            <a href="mailto:support@commercejet.com">support@commercejet.com</a>
+            <a href={`mailto:${storeConfig.contactEmail}`}>{storeConfig.contactEmail}</a>
           </div>
         </div>
 
@@ -25,8 +27,8 @@ export function Footer() {
           <div className="footer-column">
             <p className="footer-column__title">{t('footer.contact')}</p>
             <Link to="/help" className="footer-link">{t('footer.liveChat')}</Link>
-            <a href="mailto:support@commercejet.com" className="footer-link">{t('footer.emailSupport')}</a>
-            <a href="tel:+390000000000" className="footer-link">+39 000 000 0000</a>
+            <a href={`mailto:${storeConfig.contactEmail}`} className="footer-link">{t('footer.emailSupport')}</a>
+            <a href={telHref} className="footer-link">{storeConfig.supportPhone}</a>
           </div>
 
           <div className="footer-column">
@@ -52,10 +54,10 @@ export function Footer() {
         </div>
 
         <div className="footer-bottom">
-          <p className="footer-copy">&copy; {year} CommerceJet</p>
+          <p className="footer-copy">&copy; {year} {storeConfig.storeName}</p>
           <div className="footer-bottom__meta">
-            <span>{t('footer.countryCode')}</span>
-            <span>{t('footer.countryName')}</span>
+            <span>{storeConfig.countryCode}</span>
+            <span>{storeConfig.countryName}</span>
           </div>
         </div>
       </div>
