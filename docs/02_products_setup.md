@@ -7,7 +7,7 @@
 1. Understand the data model
 2. Remove the demo (mock) products
 3. Set up your categories
-4. Add real products (two methods)
+4. Add real products (three methods)
 5. Add product images
 6. Verify on the storefront
 
@@ -71,10 +71,28 @@ VALUES ('Shoes', 'shoes', TRUE, 1);
 
 ## 4. Add real products
 
-**Method A — Supabase Table Editor (no SQL).** Dashboard → Table Editor → `products` →
+**Method A — Admin UI (easiest, no SQL).** Log in as admin and go to `/admin/catalog`.
+Click **"New Product"** (top right). A modal opens with all the fields you need:
+
+| Field | Notes |
+|---|---|
+| Name | Required. The slug is generated automatically. |
+| Category | Required. You can create a new category on the spot. |
+| Price | Required. |
+| Stock Quantity | Defaults to 0. |
+| SKU | Optional — unique identifier. |
+| Description | Optional. |
+| Active / Featured | Checkboxes. "Featured" shows the product on the home page. |
+| Images | Multi-file upload — goes directly to Supabase Storage. The first image you upload becomes the primary thumbnail automatically. |
+
+> **Note —** You need to be promoted to admin first (see `HANDOVER_GUIDE.md` Step 4).
+> Enable the `product-images` storage bucket in Supabase Storage before uploading images
+> (Dashboard → Storage → New bucket, name it `product-images`, set to Public).
+
+**Method B — Supabase Table Editor (no SQL).** Dashboard → Table Editor → `products` →
 Insert row. Fill `name`, `slug`, `price`, `stock_quantity`, pick a `category_id`, save.
 
-**Method B — SQL (faster for many products):**
+**Method C — SQL (fastest for bulk imports):**
 
 ```sql
 INSERT INTO public.products
@@ -90,11 +108,16 @@ VALUES
 ```
 
 > **Tip —** Using `(SELECT id FROM categories WHERE slug = '…')` means you don't have to copy
-> category UUIDs by hand.
+> category UUIDs by hand. Use Method C when importing many products at once; for a handful,
+> Method A is faster.
 
 ---
 
 ## 5. Add product images
+
+> **Note —** If you used **Method A** (Admin UI), images were already uploaded via the modal
+> and stored in Supabase Storage. Skip this section. The SQL below is for Method B/C bulk imports
+> where you host images on an external CDN.
 
 ```sql
 INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_primary)

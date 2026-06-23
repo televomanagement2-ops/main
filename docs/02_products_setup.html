@@ -52,7 +52,7 @@
   <li>Understand the data model</li>
   <li>Remove the demo (mock) products</li>
   <li>Set up your categories</li>
-  <li>Add real products (two methods)</li>
+  <li>Add real products (three methods)</li>
   <li>Add product images</li>
   <li>Verify on the storefront</li>
 </ol>
@@ -116,10 +116,31 @@ hyphens (e.g. <code>home-garden</code>).</p></blockquote>
 
 <h2>4. Add real products</h2>
 
-<p><strong>Method A — Supabase Table Editor (no SQL).</strong> Dashboard → Table Editor → <code>products</code> →
+<p><strong>Method A — Admin UI (easiest, no SQL).</strong> Log in as admin and go to <code>/admin/catalog</code>.
+Click <strong>"New Product"</strong> (top right). A modal opens with all the fields you need:</p>
+
+<table>
+  <thead><tr><th>Field</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Name</td><td>Required. The slug is generated automatically.</td></tr>
+    <tr><td>Category</td><td>Required. You can create a new category on the spot.</td></tr>
+    <tr><td>Price</td><td>Required.</td></tr>
+    <tr><td>Stock Quantity</td><td>Defaults to 0.</td></tr>
+    <tr><td>SKU</td><td>Optional — unique identifier.</td></tr>
+    <tr><td>Description</td><td>Optional.</td></tr>
+    <tr><td>Active / Featured</td><td>Checkboxes. "Featured" shows the product on the home page.</td></tr>
+    <tr><td>Images</td><td>Multi-file upload — goes directly to Supabase Storage. The first image you upload becomes the primary thumbnail automatically.</td></tr>
+  </tbody>
+</table>
+
+<blockquote><p><strong>Note —</strong> You need to be promoted to admin first (see <code>HANDOVER_GUIDE.md</code> Step 4).
+Enable the <code>product-images</code> storage bucket in Supabase Storage before uploading images
+(Dashboard → Storage → New bucket, name it <code>product-images</code>, set to Public).</p></blockquote>
+
+<p><strong>Method B — Supabase Table Editor (no SQL).</strong> Dashboard → Table Editor → <code>products</code> →
 Insert row. Fill <code>name</code>, <code>slug</code>, <code>price</code>, <code>stock_quantity</code>, pick a <code>category_id</code>, save.</p>
 
-<p><strong>Method B — SQL (faster for many products):</strong></p>
+<p><strong>Method C — SQL (fastest for bulk imports):</strong></p>
 
 <pre><code>INSERT INTO public.products
   (category_id, name, slug, description, price, sku, stock_quantity, is_featured, is_active)
@@ -133,11 +154,16 @@ VALUES
   );</code></pre>
 
 <blockquote><p><strong>Tip —</strong> Using <code>(SELECT id FROM categories WHERE slug = '…')</code> means you don't have to copy
-category UUIDs by hand.</p></blockquote>
+category UUIDs by hand. Use Method C when importing many products at once; for a handful,
+Method A is faster.</p></blockquote>
 
 <hr>
 
 <h2>5. Add product images</h2>
+
+<blockquote><p><strong>Note —</strong> If you used <strong>Method A</strong> (Admin UI), images were already uploaded via the modal
+and stored in Supabase Storage. Skip this section. The SQL below is for Method B/C bulk imports
+where you host images on an external CDN.</p></blockquote>
 
 <pre><code>INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_primary)
 VALUES
