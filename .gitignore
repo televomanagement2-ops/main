@@ -20,6 +20,9 @@ dist-ssr
 # Vercel
 .vercel
 
+# Supabase CLI local cache (leaks your project ref / org IDs — never ship)
+supabase/.temp
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

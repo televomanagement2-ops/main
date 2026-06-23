@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommerceJet — Buyer Guides</title>
+<style>
+  :root { --ink:#14110E; --muted:#6b6660; --line:#e6e2dc; --bg:#ffffff; --code-bg:#f6f4f1; --note:#f4f2ef; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.6;
+    max-width: 820px; margin: 0 auto; padding: 56px 48px 80px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h1 + p.subtitle { color: var(--muted); font-size: 17px; margin: 0 0 28px; font-weight: 500; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 8px; letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { font-size: 15.5px; }
+  a { color: #1a5fb4; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; font-size: 13.5px;
+         background: var(--code-bg); padding: 1.5px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--note); font-weight: 600; }
+  blockquote { margin: 16px 0; padding: 12px 18px; background: var(--note);
+               border-left: 3px solid var(--ink); border-radius: 0 8px 8px 0; }
+  blockquote p { margin: 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin: 4px 0; }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: var(--ink); }
+    pre, blockquote, table { page-break-inside: avoid; }
+    h1, h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CommerceJet — Buyer Guides</h1>
+
+<p>These are the <strong>source files</strong> for the buyer setup guides (export each to PDF for
+distribution). They are kept in the repo so they stay in sync with the code.</p>
+
+<p>Recommended reading order:</p>
+
+<ol>
+  <li><a href="00_start_here.html">00 — Start Here</a> — roadmap and what you need.</li>
+  <li><a href="03_supabase_setup.html">03 — Supabase Setup</a> — database, login, backend functions. <strong>Do first.</strong></li>
+  <li><a href="06_stripe_setup.html">06 — Stripe Setup</a> — payments, webhook, and sales tax.</li>
+  <li><a href="04_github_vercel_deploy.html">04 — GitHub &amp; Vercel Deploy</a> — put the site online.</li>
+  <li><a href="05_domain_and_cors.html">05 — Domain &amp; CORS</a> — custom domain + lock down the API.</li>
+  <li><a href="01_brand_customization.html">01 — Brand Customization</a> — name, logo, colors, emails, languages.</li>
+  <li><a href="02_products_setup.html">02 — Products Setup</a> — replace the demo catalog.</li>
+</ol>
+
+<p>For the full technical reference see <code>../README.md</code>,
+<code>../HANDOVER_GUIDE.md</code>, and
+<code>../supabase/SETUP_CHECKLIST.md</code>.</p>
+
+</body>
+</html>

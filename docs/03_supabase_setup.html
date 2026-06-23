@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommerceJet — Supabase Setup</title>
+<style>
+  :root { --ink:#14110E; --muted:#6b6660; --line:#e6e2dc; --bg:#ffffff; --code-bg:#f6f4f1; --note:#f4f2ef; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.6;
+    max-width: 820px; margin: 0 auto; padding: 56px 48px 80px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h1 + p.subtitle { color: var(--muted); font-size: 17px; margin: 0 0 28px; font-weight: 500; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 8px; letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { font-size: 15.5px; }
+  a { color: #1a5fb4; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; font-size: 13.5px;
+         background: var(--code-bg); padding: 1.5px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--note); font-weight: 600; }
+  blockquote { margin: 16px 0; padding: 12px 18px; background: var(--note);
+               border-left: 3px solid var(--ink); border-radius: 0 8px 8px 0; }
+  blockquote p { margin: 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin: 4px 0; }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: var(--ink); }
+    pre, blockquote, table { page-break-inside: avoid; }
+    h1, h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CommerceJet — Supabase Setup</h1>
+<p class="subtitle">Database, login (incl. Google), and backend functions.</p>
+
+<h2>Contents</h2>
+<ol>
+  <li>Create the Supabase project</li>
+  <li>Create the database (run the SQL files)</li>
+  <li>Get your frontend keys</li>
+  <li>Enable login (email + Google)</li>
+  <li>Set the backend secrets</li>
+  <li>Deploy the Edge Functions</li>
+  <li>Quick test</li>
+</ol>
+
+<blockquote><p><strong>Note —</strong> Supabase is your backend: database, user authentication, and serverless Edge
+Functions for checkout, webhooks, and emails. Do this guide first.</p></blockquote>
+
+<hr>
+
+<h2>1. Create the Supabase project</h2>
+
+<p>Go to <a href="https://supabase.com">supabase.com</a> → New Project. Choose a name and a strong database
+password (save it). Wait ~2 minutes for it to provision. Your project gets a URL like
+<code>https://&lt;project-ref&gt;.supabase.co</code>. You'll use <code>&lt;project-ref&gt;</code> repeatedly.</p>
+
+<hr>
+
+<h2>2. Create the database</h2>
+
+<p>Open Dashboard → SQL Editor and run, <strong>in this exact order</strong> (paste each file's contents and
+click Run):</p>
+
+<ol>
+  <li><code>supabase/schema.sql</code> — tables &amp; types</li>
+  <li><code>supabase/rls.sql</code> — security policies</li>
+  <li><strong>Every file in <code>supabase/migrations/</code> in numeric order</strong> — <code>001_fixes.sql</code> through
+    <code>012_us_shipping_cleanup.sql</code>. Run each one. (There are two <code>004_*</code> files — run both.)</li>
+  <li><code>supabase/seeds/002_mock_products.sql</code> — optional demo catalog (skip if you'll add your
+    own products right away)</li>
+</ol>
+
+<blockquote><p><strong>Important —</strong> Run the migrations in order. They build on each other; skipping one can
+leave the checkout schema incomplete.</p></blockquote>
+
+<blockquote><p><strong>Tip —</strong> <code>supabase/SETUP_CHECKLIST.md</code> contains verification queries to confirm every
+required column exists.</p></blockquote>
+
+<hr>
+
+<h2>3. Get your frontend keys</h2>
+
+<p>Dashboard → Project Settings → API. Copy:</p>
+
+<ul>
+  <li><strong>Project URL</strong> → <code>VITE_SUPABASE_URL</code></li>
+  <li><strong>anon / public key</strong> → <code>VITE_SUPABASE_ANON_KEY</code></li>
+</ul>
+
+<p>Put them in your local <code>.env</code> (copy from <code>.env.example</code>). You'll also add them to Vercel later.</p>
+
+<blockquote><p><strong>Important —</strong> The <code>service_role</code> key is a secret with full database access. Never put it
+in the frontend <code>.env</code> or the browser — it's only used by Edge Functions, where Supabase
+injects it automatically.</p></blockquote>
+
+<hr>
+
+<h2>4. Enable login (email + Google)</h2>
+
+<p><strong>Email/password</strong> works out of the box (optionally require email confirmation under
+Authentication → Providers → Email).</p>
+
+<p><strong>Google login (OAuth):</strong></p>
+<ol>
+  <li>Google Cloud Console → create a project → APIs &amp; Services → Credentials → OAuth client ID
+    (Web application).</li>
+  <li>Authorized redirect URI (exactly): <code>https://&lt;project-ref&gt;.supabase.co/auth/v1/callback</code></li>
+  <li>Copy the Client ID + Secret.</li>
+  <li>Supabase → Authentication → Providers → Google → enable, paste Client ID + Secret → Save.</li>
+</ol>
+
+<blockquote><p><strong>Note —</strong> After you connect a custom domain (see guide 05), also set your Site URL +
+Redirect URLs under Authentication → URL Configuration, because the app redirects back using
+your live domain.</p></blockquote>
+
+<hr>
+
+<h2>5. Set the backend secrets</h2>
+
+<p>Dashboard → Project Settings → Edge Functions → Secrets. Add:</p>
+
+<pre><code>STRIPE_SECRET_KEY=sk_test_...        # from Stripe (see guide 06)
+STRIPE_WEBHOOK_SECRET=whsec_...       # from Stripe webhook (see guide 06)
+SUPABASE_ANON_KEY=eyJ...              # same anon key as the frontend
+ALLOWED_ORIGINS=https://yourstore.com # see guide 05 (CORS)
+ALLOW_VERCEL_PREVIEWS=true            # "false" once on your final domain
+# Sales tax (see guide 06)
+TAX_RATE=0
+STRIPE_TAX_ENABLED=false
+# Email (optional, for shipping/refund/delivery notifications)
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=Your Store &lt;support@yourstore.com&gt;
+STORE_NAME=Your Store
+SUPPORT_EMAIL=support@yourstore.com</code></pre>
+
+<blockquote><p><strong>Note —</strong> <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> are injected automatically by
+Supabase — you do not add them yourself.</p></blockquote>
+
+<hr>
+
+<h2>6. Deploy the Edge Functions</h2>
+
+<p>Install the Supabase CLI, log in, link your project, and deploy the <strong>four</strong> functions:</p>
+
+<pre><code>npm install -g supabase
+supabase login
+supabase link --project-ref &lt;project-ref&gt;
+supabase functions deploy create-checkout-session
+supabase functions deploy stripe-webhook
+supabase functions deploy update-tracking
+supabase functions deploy handle-order-action</code></pre>
+
+<table>
+  <thead><tr><th>Function</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>create-checkout-session</code></td><td>Starts a Stripe payment for the cart.</td></tr>
+    <tr><td><code>stripe-webhook</code></td><td>Confirms payment &amp; updates the order status.</td></tr>
+    <tr><td><code>update-tracking</code></td><td>Saves tracking info &amp; emails the customer.</td></tr>
+    <tr><td><code>handle-order-action</code></td><td>Order actions (cancel, refund, mark delivered) + emails.</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>7. Quick test</h2>
+
+<ul>
+  <li>Sign up in the app → a row appears in Authentication → Users and in the <code>profiles</code> table.</li>
+  <li>Try "Continue with Google".</li>
+  <li>Confirm each table shows <strong>RLS enabled</strong> in the Table Editor.</li>
+</ul>
+
+<blockquote><p><strong>Tip —</strong> Common pitfalls and fixes are listed in <code>supabase/SETUP_CHECKLIST.md</code>.</p></blockquote>
+
+</body>
+</html>

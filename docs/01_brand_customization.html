@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommerceJet — Brand Customization</title>
+<style>
+  :root { --ink:#14110E; --muted:#6b6660; --line:#e6e2dc; --bg:#ffffff; --code-bg:#f6f4f1; --note:#f4f2ef; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.6;
+    max-width: 820px; margin: 0 auto; padding: 56px 48px 80px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h1 + p.subtitle { color: var(--muted); font-size: 17px; margin: 0 0 28px; font-weight: 500; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 8px; letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { font-size: 15.5px; }
+  a { color: #1a5fb4; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; font-size: 13.5px;
+         background: var(--code-bg); padding: 1.5px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--note); font-weight: 600; }
+  blockquote { margin: 16px 0; padding: 12px 18px; background: var(--note);
+               border-left: 3px solid var(--ink); border-radius: 0 8px 8px 0; }
+  blockquote p { margin: 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin: 4px 0; }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: var(--ink); }
+    pre, blockquote, table { page-break-inside: avoid; }
+    h1, h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CommerceJet — Brand Customization</h1>
+<p class="subtitle">Name, logo, colors, emails &amp; languages.</p>
+
+<h2>Contents</h2>
+<ol>
+  <li>Change the store name &amp; contact details</li>
+  <li>Change the logo &amp; favicon</li>
+  <li>Change the brand colors (light &amp; dark mode)</li>
+  <li>Personalize the automatic emails</li>
+  <li>Languages &amp; translations</li>
+  <li>Rebuild and verify</li>
+</ol>
+
+<hr>
+
+<h2>1. Change the store name &amp; contact details</h2>
+
+<p>The brand name and customer-facing contact details are <strong>centralized in one file</strong>:
+<code>src/config/storeConfig.ts</code>. Edit it once — the values flow
+into the navbar, sidebar, footer, login page, Help page, and the legal pages (in all
+languages). You do <strong>not</strong> need to edit individual components.</p>
+
+<table>
+  <thead><tr><th>Field</th><th>What to put</th></tr></thead>
+  <tbody>
+    <tr><td><code>storeName</code></td><td>Your public brand name (shown across the UI)</td></tr>
+    <tr><td><code>contactEmail</code></td><td>Customer support email</td></tr>
+    <tr><td><code>supportPhone</code></td><td>Support phone number</td></tr>
+    <tr><td><code>privacyEmail</code></td><td>Privacy/data-protection email</td></tr>
+    <tr><td><code>countryCode</code> / <code>countryName</code></td><td>Shown in the footer (your location)</td></tr>
+    <tr><td><code>sellerLegalName</code>, <code>businessAddress</code>, <code>governingState</code>, …</td><td>Legal <code>[PLACEHOLDER]</code> fields injected into Terms / Privacy / Cookie pages</td></tr>
+  </tbody>
+</table>
+
+<blockquote><p><strong>Note —</strong> The default <code>contactEmail</code>/<code>privacyEmail</code> are <code>example.com</code> placeholders and the
+legal fields are <code>[PLACEHOLDER]</code> tokens, so unfilled values are obvious. Fill them all
+before going live.</p></blockquote>
+
+<p>The browser tab <strong>title</strong> is in <code>index.html</code> (<code>&lt;title&gt;</code>).</p>
+
+<hr>
+
+<h2>2. Change the logo &amp; favicon</h2>
+
+<p>The favicon (browser-tab logo) is <code>public/favicon.svg</code>, referenced
+in <code>index.html</code>. Replace the file (keep the same name, or update the <code>&lt;link rel="icon"&gt;</code> tag
+if you rename it).</p>
+
+<p>The in-app wordmark is rendered from <code>storeConfig.storeName</code> as text, so changing the store
+name in step 1 updates it everywhere automatically.</p>
+
+<hr>
+
+<h2>3. Change the brand colors</h2>
+
+<p>All colors are CSS custom properties in
+<code>src/styles/globals.css</code>. The primary accent is <code>--accent</code>
+near the top of the file:</p>
+
+<pre><code>--accent:        #14110E;  /* primary brand ink */
+--accent-hover:  #000000;
+--accent-subtle: #F4F2EF;  /* light accent wash */</code></pre>
+
+<p>The site has a full <strong>dark theme</strong>; its overrides live further down the same file under the
+<code>html.dark { … }</code> block — update the dark <code>--accent</code> there too so both themes match.</p>
+
+<blockquote><p><strong>Note —</strong> Light/dark/system mode is controlled by
+<code>src/store/themeStore.ts</code> and remembered in the browser. You
+don't need to touch it to change colors.</p></blockquote>
+
+<hr>
+
+<h2>4. Personalize the automatic emails</h2>
+
+<p>Transactional emails (shipped, refund, delivered) are sent by the Edge Functions and are
+<strong>English by default</strong>. Because Edge Functions run in Deno and can't read <code>storeConfig.ts</code>,
+their branding is configured with <strong>Edge Function secrets</strong> (Supabase → Project Settings →
+Edge Functions → Secrets). All have safe defaults, so set only what you want to change:</p>
+
+<pre><code>STORE_NAME=Your Store
+SUPPORT_EMAIL=support@yourstore.com
+RESEND_FROM_EMAIL=Your Store &lt;support@yourstore.com&gt;
+STORE_CURRENCY=USD
+STORE_LOCALE=en-US
+STORE_BRAND_COLOR=#111111</code></pre>
+
+<p>The shared email template lives in
+<code>supabase/functions/_shared/store.ts</code> if you want to
+customize the layout itself. Redeploy <code>update-tracking</code> and <code>handle-order-action</code> after code
+changes (secret changes need no redeploy).</p>
+
+<blockquote><p><strong>Note —</strong> Sign-up confirmation, password-reset, and magic-link emails are sent by
+<strong>Supabase Auth</strong>, not this code. Customize them under Supabase → Authentication → Email
+Templates.</p></blockquote>
+
+<hr>
+
+<h2>5. Languages &amp; translations</h2>
+
+<p>The store ships with <strong>4 languages</strong>: English (default), Italian, Spanish, French. All UI
+text lives in <code>src/lib/i18n.ts</code>, organized by language. To change
+wording, edit the values in the relevant language section. The default language and the
+language selector options are in
+<code>src/store/preferencesStore.ts</code>.</p>
+
+<p>To add a language, copy an existing block in <code>i18n.ts</code>, translate it, and add it to
+<code>LANGUAGE_OPTIONS</code> / <code>AppLanguageCode</code> in <code>preferencesStore.ts</code>.</p>
+
+<hr>
+
+<h2>6. Rebuild and verify</h2>
+
+<pre><code>npm install
+npm run dev    # preview locally at http://localhost:5173
+npm run build  # production build, must finish with no errors</code></pre>
+
+<p>Click through the navbar, footer, mobile menu, and a product page to confirm the new name,
+logo, and colors appear everywhere.</p>
+
+</body>
+</html>

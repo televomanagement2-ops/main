@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommerceJet — GitHub &amp; Vercel Deploy</title>
+<style>
+  :root { --ink:#14110E; --muted:#6b6660; --line:#e6e2dc; --bg:#ffffff; --code-bg:#f6f4f1; --note:#f4f2ef; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.6;
+    max-width: 820px; margin: 0 auto; padding: 56px 48px 80px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h1 + p.subtitle { color: var(--muted); font-size: 17px; margin: 0 0 28px; font-weight: 500; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 8px; letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { font-size: 15.5px; }
+  a { color: #1a5fb4; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; font-size: 13.5px;
+         background: var(--code-bg); padding: 1.5px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--note); font-weight: 600; }
+  blockquote { margin: 16px 0; padding: 12px 18px; background: var(--note);
+               border-left: 3px solid var(--ink); border-radius: 0 8px 8px 0; }
+  blockquote p { margin: 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin: 4px 0; }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: var(--ink); }
+    pre, blockquote, table { page-break-inside: avoid; }
+    h1, h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CommerceJet — GitHub &amp; Vercel Deploy</h1>
+<p class="subtitle">Put your store online.</p>
+
+<h2>Contents</h2>
+<ol>
+  <li>Test the build locally</li>
+  <li>Push the code to GitHub</li>
+  <li>Import the project into Vercel</li>
+  <li>Add environment variables</li>
+  <li>Deploy &amp; verify</li>
+  <li>How updates work</li>
+</ol>
+
+<blockquote><p><strong>Note —</strong> Vercel hosts the frontend. It connects to your GitHub repo and rebuilds
+automatically every time you push. Do the Supabase guide (03) first — you'll need your
+Supabase URL and anon key here.</p></blockquote>
+
+<hr>
+
+<h2>1. Test the build locally first</h2>
+
+<pre><code>npm install
+npm run build</code></pre>
+
+<p>This must finish with no errors before you deploy. If it builds locally, it builds on Vercel.</p>
+
+<hr>
+
+<h2>2. Push the code to GitHub</h2>
+
+<p>Create a repository at <a href="https://github.com/new">github.com/new</a> (private is fine). Then:</p>
+
+<pre><code>git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/YOUR-REPO.git
+git push -u origin main</code></pre>
+
+<blockquote><p><strong>Important —</strong> Make sure your real <code>.env</code> is <strong>not</strong> committed. The included <code>.gitignore</code>
+already excludes it — keep it that way. Only <code>.env.example</code> (placeholders) should be in the
+repo. If you ever distribute the project as a ZIP, delete <code>.env</code> first.</p></blockquote>
+
+<hr>
+
+<h2>3. Import the project into Vercel</h2>
+
+<p>Go to <a href="https://vercel.com">vercel.com</a> → Add New… → Project → import your GitHub repo. Vercel
+auto-detects Vite. Confirm (usually auto-filled): <strong>Framework</strong> = Vite, <strong>Build Command</strong> =
+<code>npm run build</code>, <strong>Output Directory</strong> = <code>dist</code>, <strong>Install Command</strong> = <code>npm install</code>.</p>
+
+<blockquote><p><strong>Note —</strong> The included <code>vercel.json</code> adds the SPA rewrite rule (all routes → <code>/index.html</code>)
+so React Router deep links work. No manual config needed.</p></blockquote>
+
+<hr>
+
+<h2>4. Add environment variables</h2>
+
+<p>In the Vercel import screen (or later under Project → Settings → Environment Variables), add:</p>
+
+<pre><code>VITE_SUPABASE_URL=https://&lt;project-ref&gt;.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJ...your-anon-key...
+VITE_TAX_RATE=0</code></pre>
+
+<blockquote><p><strong>Important —</strong> Only variables starting with <code>VITE_</code> are exposed to the frontend. Never put
+secret keys (Stripe secret, <code>service_role</code>) in Vercel frontend variables — those belong in
+Supabase Edge Function secrets.</p></blockquote>
+
+<hr>
+
+<h2>5. Deploy &amp; verify</h2>
+
+<p>Click <strong>Deploy</strong>. After ~1 minute you'll get a live URL like <code>your-repo.vercel.app</code>.</p>
+
+<ul>
+  <li>Open the URL — the storefront loads.</li>
+  <li>Sign in / sign up — confirms it reaches Supabase.</li>
+  <li>Browse products and add to cart.</li>
+</ul>
+
+<blockquote><p><strong>Note —</strong> Checkout won't fully work until Stripe is configured (guide 06) and, ideally,
+your custom domain + CORS are set (guide 05).</p></blockquote>
+
+<hr>
+
+<h2>6. How updates work</h2>
+
+<p>Any change you push to the <code>main</code> branch triggers an automatic rebuild and redeploy on Vercel:</p>
+
+<pre><code>git add .
+git commit -m "Describe your change"
+git push</code></pre>
+
+</body>
+</html>

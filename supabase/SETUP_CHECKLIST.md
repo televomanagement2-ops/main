@@ -6,18 +6,11 @@
 
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
-3. `supabase/migrations/001_fixes.sql`
-4. `supabase/migrations/002_rls_hardening.sql`
-5. `supabase/migrations/003_payment_hardening.sql`
-6. `supabase/migrations/004_variants_reviews_shipping.sql`
-7. `supabase/migrations/005_admin_tracking_refunds.sql`
-8. `supabase/migrations/006_remove_order_limit.sql`
-9. `supabase/migrations/007_refund_status.sql`
-10. `supabase/migrations/008_refund_id_unique.sql`
-11. `supabase/migrations/009_delivered_at.sql`
-12. `supabase/migrations/010_reviews_verified_purchase.sql`  ← reviews only by buyers
-13. `supabase/migrations/011_product_storage.sql`  ← product-images storage bucket + policies
-14. `supabase/seeds/002_mock_products.sql` ← optional sample products
+3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
+   `012_us_shipping_cleanup.sql`. Run each one. Note there are two `004_*` files
+   (`004_cart_rls_nullguard.sql` and `004_variants_reviews_shipping.sql`) — run both.
+   The latest, `012_us_shipping_cleanup.sql`, removes the non-US "Poste" shipping method.
+4. `supabase/seeds/002_mock_products.sql` ← optional sample products
 
 ### Verify tables exist
 Go to **Table Editor** and confirm these tables are present:
@@ -81,7 +74,18 @@ ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
 # Auto-allow any *.vercel.app origin (handy while the Vercel preview domain
 # changes between deploys). Set to "false" once on your final custom domain.
 ALLOW_VERCEL_PREVIEWS=true
-RESEND_FROM_EMAIL=CommerceJet <support@your-domain.com>
+# Sales tax. Flat fraction (e.g. 0.07) used when Stripe Tax is OFF; default 0.
+# Set STRIPE_TAX_ENABLED=true to use Stripe Tax (real per-state US sales tax;
+# requires Stripe Tax configured in the Stripe dashboard).
+TAX_RATE=0
+STRIPE_TAX_ENABLED=false
+# Transactional email branding (shipping/refund/delivery emails). Defaults are
+# demo-safe; override to rebrand. RESEND_FROM_EMAIL sets the "from" header.
+RESEND_FROM_EMAIL=Your Store <support@your-domain.com>
+STORE_NAME=Your Store
+SUPPORT_EMAIL=support@your-domain.com
+# Optional: STORE_CURRENCY (default USD), STORE_LOCALE (default en-US),
+# STORE_BRAND_COLOR (default #111111).
 ```
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 If `ALLOWED_ORIGINS` is left unset, CORS falls back to `*` (fine for local dev,

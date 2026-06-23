@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { FROM_EMAIL, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
 
 // Origins allowed to call this function from a browser. Set ALLOWED_ORIGINS
 // (comma-separated) as a secret; falls back to "*" only when unset.
@@ -97,7 +98,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    const resendFrom = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
+    const resendFrom = FROM_EMAIL;
 
     if (!supabaseUrl || !serviceRoleKey || !anonKey || !resendApiKey) {
       const missing: string[] = [];
@@ -189,15 +190,19 @@ Deno.serve(async (req) => {
     const shipping = updated.shipping_address as Record<string, string> | null;
     const displayName = customerName ?? shipping?.full_name ?? 'Customer';
     const subject = 'Your order is on the way';
-    const text = `Hi ${displayName},\n\nYour order ${updated.id} has shipped.\nTracking ID: ${trackingId}\n\nThanks for shopping with us.`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
-        <p>Hi ${displayName},</p>
-        <p>Your order <strong>${updated.id}</strong> has shipped.</p>
-        <p><strong>Tracking ID:</strong> ${trackingId}</p>
-        <p>Thanks for shopping with us.</p>
-      </div>
-    `;
+    const text = `Hi ${displayName},\n\nYour order ${updated.id} has shipped.\nTracking ID: ${trackingId}\n\nThanks for shopping with ${STORE_NAME}.`;
+    const html = renderEmail({
+      eyebrow: 'Order shipped',
+      heading: `Your order is on the way, ${escapeHtml(displayName)}.`,
+      bodyHtml: `
+        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+          Good news — order <strong>${escapeHtml(String(updated.id))}</strong> has shipped.
+        </p>
+        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0;">
+          <strong>Tracking ID:</strong> ${escapeHtml(trackingId)}
+        </p>
+      `,
+    });
 
     await sendResendEmail({
       apiKey: resendApiKey,

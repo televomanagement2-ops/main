@@ -30,9 +30,14 @@ Terms of Service, Privacy Policy, and Cookie Policy in all four languages automa
 | `euResponsiblePerson` / `euResponsibleContact` | **Required only if you sell to the EU** (GPSR) |
 | `euRepresentative` | GDPR Art. 27 EU/UK representative, if appointed |
 
-Also update brand contact details in the site footer
-([`src/components/layout/Footer.tsx`](src/components/layout/Footer.tsx)): support email,
-phone, and copyright name.
+The store name and contact details (`storeName`, `contactEmail`, `supportPhone`,
+`privacyEmail`, `countryCode`/`countryName`) all live in this one file — the navbar, footer,
+login, Help page, and legal pages read from it, so there is **no need to edit individual
+components** like the footer.
+
+> Transactional emails (shipping/refund/delivery) are branded separately, via Edge Function
+> secrets (`STORE_NAME`, `SUPPORT_EMAIL`, `RESEND_FROM_EMAIL`) — see Step 2. Supabase Auth
+> emails (sign-up, password reset) are customized in the Supabase dashboard.
 
 > Tip: any value you leave as `[...]` will appear literally on the legal pages, so it is
 > obvious what is still missing. Do not go live with `[PLACEHOLDER]` values visible.
@@ -50,7 +55,9 @@ Follow [`supabase/SETUP_CHECKLIST.md`](supabase/SETUP_CHECKLIST.md):
 3. Create a Stripe account; add the webhook endpoint and events.
 4. Set the Edge Function **secrets** (Supabase → Settings → Edge Functions → Secrets):
    `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_ANON_KEY`, `RESEND_API_KEY`,
-   and **`ALLOWED_ORIGINS`** (see Step 3).
+   **`ALLOWED_ORIGINS`** (see Step 3), the tax settings **`TAX_RATE`** / **`STRIPE_TAX_ENABLED`**
+   (see Stripe guide), and the email-branding values **`STORE_NAME`** / **`SUPPORT_EMAIL`** /
+   **`RESEND_FROM_EMAIL`**.
 5. Deploy **all four** Edge Functions: `create-checkout-session`, `stripe-webhook`,
    `update-tracking`, `handle-order-action`.
 
@@ -152,10 +159,11 @@ Admins access `/admin` (dashboard, orders, catalog, finance).
 
 ## Step 6 — Go-live checklist
 
-- [ ] `src/config/storeConfig.ts` fully filled (no `[...]` left).
-- [ ] Footer contact details updated.
-- [ ] Supabase migrations applied; RLS enabled on every table.
-- [ ] All four Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`.
+- [ ] `src/config/storeConfig.ts` fully filled (no `[...]` left) — name, contacts, legal.
+- [ ] All migrations applied in order (through `012_us_shipping_cleanup.sql`); RLS enabled on every table.
+- [ ] All four Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`, tax
+      (`TAX_RATE`/`STRIPE_TAX_ENABLED`), and email branding (`STORE_NAME`/`RESEND_FROM_EMAIL`).
+- [ ] Sent a test order email (shipping/refund/delivery) and confirmed it shows your brand.
 - [ ] Supabase Auth **Site URL** + **Redirect URLs** point at your current domain (Step 3b).
 - [ ] Stripe in **live** mode; webhook endpoint + events configured; test purchase verified.
 - [ ] First admin account promoted.

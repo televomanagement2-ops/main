@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CommerceJet — Products Setup</title>
+<style>
+  :root { --ink:#14110E; --muted:#6b6660; --line:#e6e2dc; --bg:#ffffff; --code-bg:#f6f4f1; --note:#f4f2ef; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.6;
+    max-width: 820px; margin: 0 auto; padding: 56px 48px 80px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h1 + p.subtitle { color: var(--muted); font-size: 17px; margin: 0 0 28px; font-weight: 500; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 8px; letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 24px 0 8px; }
+  p, li { font-size: 15.5px; }
+  a { color: #1a5fb4; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "SF Mono", "Cascadia Code", Consolas, Menlo, monospace; font-size: 13.5px;
+         background: var(--code-bg); padding: 1.5px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+  pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--note); font-weight: 600; }
+  blockquote { margin: 16px 0; padding: 12px 18px; background: var(--note);
+               border-left: 3px solid var(--ink); border-radius: 0 8px 8px 0; }
+  blockquote p { margin: 0; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 32px 0; }
+  ol, ul { padding-left: 24px; }
+  li { margin: 4px 0; }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: var(--ink); }
+    pre, blockquote, table { page-break-inside: avoid; }
+    h1, h2, h3 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CommerceJet — Products Setup</h1>
+<p class="subtitle">Remove the demo catalog &amp; add your real products.</p>
+
+<h2>Contents</h2>
+<ol>
+  <li>Understand the data model</li>
+  <li>Remove the demo (mock) products</li>
+  <li>Set up your categories</li>
+  <li>Add real products (two methods)</li>
+  <li>Add product images</li>
+  <li>Verify on the storefront</li>
+</ol>
+
+<blockquote><p><strong>Note —</strong> The store ships pre-loaded with a demo catalog so you can see it working
+immediately. Before going live, replace it with your own.</p></blockquote>
+
+<hr>
+
+<h2>1. Understand the data model</h2>
+
+<p>Products live in three database tables in Supabase:</p>
+
+<table>
+  <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>categories</code></td><td>Product categories (e.g. Electronics, Clothing).</td></tr>
+    <tr><td><code>products</code></td><td>The products themselves.</td></tr>
+    <tr><td><code>product_images</code></td><td>One or more images per product.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Required product fields:</strong> <code>category_id</code> (must reference an existing category), <code>name</code>,
+<code>slug</code> (must be unique — used in the URL), <code>price</code> (≥ 0), <code>stock_quantity</code> (≥ 0).</p>
+
+<p><strong>Useful optional fields:</strong> <code>sku</code> (unique if set), <code>description</code>, <code>compare_at_price</code> (the
+struck-through "before" price), <code>is_featured</code> (<code>TRUE</code> to show on the home page), <code>is_active</code>
+(<code>FALSE</code> to hide without deleting).</p>
+
+<blockquote><p><strong>Important —</strong> For images, exactly <strong>one</strong> image per product should have
+<code>is_primary = TRUE</code> — that's the main thumbnail.</p></blockquote>
+
+<hr>
+
+<h2>2. Remove the demo products</h2>
+
+<p>In Supabase Dashboard → SQL Editor, run this (delete images first because they reference
+products):</p>
+
+<pre><code>DELETE FROM public.product_images;
+DELETE FROM public.products;</code></pre>
+
+<blockquote><p><strong>Tip —</strong> To start categories from scratch too, also run
+<code>DELETE FROM public.categories;</code> — but then insert your own categories <strong>before</strong> inserting
+products (products reference a category).</p></blockquote>
+
+<hr>
+
+<h2>3. Set up your categories</h2>
+
+<p>The demo ships with these category slugs: <code>electronics</code>, <code>clothing</code>, <code>home-garden</code>,
+<code>smartphones</code>. Keep, rename, or replace them. To add one via SQL:</p>
+
+<pre><code>INSERT INTO public.categories (name, slug, is_active, sort_order)
+VALUES ('Shoes', 'shoes', TRUE, 1);</code></pre>
+
+<blockquote><p><strong>Note —</strong> The category <code>slug</code> is used in URLs and filters, so keep it lowercase with
+hyphens (e.g. <code>home-garden</code>).</p></blockquote>
+
+<hr>
+
+<h2>4. Add real products</h2>
+
+<p><strong>Method A — Supabase Table Editor (no SQL).</strong> Dashboard → Table Editor → <code>products</code> →
+Insert row. Fill <code>name</code>, <code>slug</code>, <code>price</code>, <code>stock_quantity</code>, pick a <code>category_id</code>, save.</p>
+
+<p><strong>Method B — SQL (faster for many products):</strong></p>
+
+<pre><code>INSERT INTO public.products
+  (category_id, name, slug, description, price, sku, stock_quantity, is_featured, is_active)
+VALUES
+  (
+    (SELECT id FROM public.categories WHERE slug = 'shoes'),
+    'Running Shoes Pro',
+    'running-shoes-pro',
+    'Lightweight running shoes with breathable mesh.',
+    119.00, 'RSP-001', 40, TRUE, TRUE
+  );</code></pre>
+
+<blockquote><p><strong>Tip —</strong> Using <code>(SELECT id FROM categories WHERE slug = '…')</code> means you don't have to copy
+category UUIDs by hand.</p></blockquote>
+
+<hr>
+
+<h2>5. Add product images</h2>
+
+<pre><code>INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_primary)
+VALUES
+  ((SELECT id FROM public.products WHERE slug = 'running-shoes-pro'),
+   'https://your-cdn.com/shoes-front.jpg', 'Running shoes front view', 0, TRUE),
+  ((SELECT id FROM public.products WHERE slug = 'running-shoes-pro'),
+   'https://your-cdn.com/shoes-side.jpg', 'Running shoes side view', 1, FALSE);</code></pre>
+
+<p>Host images anywhere public (your CDN or Supabase Storage). Only one row per product gets
+<code>is_primary = TRUE</code>.</p>
+
+<hr>
+
+<h2>6. Verify on the storefront</h2>
+
+<ul>
+  <li>Home page — featured products (<code>is_featured = TRUE</code>) appear.</li>
+  <li>Category page — your products are listed.</li>
+  <li>Product page — image, price, and description are correct.</li>
+  <li>Add to cart — quantity respects <code>stock_quantity</code>.</li>
+</ul>
+
+<blockquote><p><strong>Note —</strong> If you changed category slugs, also review the home-page category icons in
+<code>src/features/products/pages/HomePage.tsx</code> so
+the icons match your new slugs.</p></blockquote>
+
+</body>
+</html>

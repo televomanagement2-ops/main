@@ -1,5 +1,6 @@
 import Stripe from 'npm:stripe@14';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { FROM_EMAIL, formatMoney, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
 
 const STRIPE_API_VERSION = '2024-06-20';
 // Origins allowed to call this function from a browser. Set ALLOWED_ORIGINS
@@ -95,9 +96,10 @@ async function sendRefundEmail(params: {
   refundAmount: number;
   currency?: string;
 }) {
-  const { resendApiKey, fromEmail, toEmail, customerName, orderId, refundAmount, currency = 'EUR' } = params;
+  const { resendApiKey, fromEmail, toEmail, customerName, orderId, refundAmount, currency } = params;
   const shortOrderId = orderId.slice(0, 8).toUpperCase();
-  const formattedAmount = new Intl.NumberFormat('it-IT', { style: 'currency', currency }).format(refundAmount);
+  const formattedAmount = formatMoney(refundAmount, currency);
+  const safeName = escapeHtml(customerName);
 
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -108,18 +110,23 @@ async function sendRefundEmail(params: {
     body: JSON.stringify({
       from: fromEmail,
       to: toEmail,
-      subject: `Rimborso confermato per il tuo ordine #${shortOrderId}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #111;">
-          <h2 style="margin-bottom: 8px;">Rimborso in corso</h2>
-          <p>Ciao ${customerName},</p>
-          <p>Il tuo rimborso di <strong>${formattedAmount}</strong> per l'ordine <strong>#${shortOrderId}</strong> è stato elaborato con successo.</p>
-          <p>I fondi saranno accreditati sul tuo metodo di pagamento originale entro <strong>3–5 giorni lavorativi</strong>, a seconda della tua banca.</p>
-          <p style="margin-top: 32px; color: #666; font-size: 13px;">Se hai domande, contattaci rispondendo a questa email.</p>
-          <p style="color: #666; font-size: 13px;">Grazie per aver acquistato da noi.</p>
-        </div>
-      `,
-      text: `Ciao ${customerName},\n\nIl tuo rimborso di ${formattedAmount} per l'ordine #${shortOrderId} è stato elaborato.\n\nI fondi arriveranno entro 3-5 giorni lavorativi.\n\nGrazie.`,
+      subject: `Refund confirmed for your order #${shortOrderId}`,
+      html: renderEmail({
+        eyebrow: 'Refund processed',
+        heading: `Your refund is on its way, ${safeName}.`,
+        bodyHtml: `
+          <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+            Your refund of <strong>${formattedAmount}</strong> for order <strong>#${shortOrderId}</strong> has been processed successfully.
+          </p>
+          <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+            The funds will be credited back to your original payment method within <strong>3–5 business days</strong>, depending on your bank.
+          </p>
+          <p style="font-size: 14px; color: #666; line-height: 1.7; margin: 0;">
+            Questions? Just reply to this email and our team will help.
+          </p>
+        `,
+      }),
+      text: `Hi ${customerName},\n\nYour refund of ${formattedAmount} for order #${shortOrderId} has been processed.\n\nThe funds will arrive within 3-5 business days, depending on your bank.\n\nThanks for shopping with ${STORE_NAME}.`,
     }),
   });
 }
@@ -272,9 +279,9 @@ Deno.serve(async (req) => {
 
       // Refund confirmation email (non-blocking: failure does not affect the response)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
+      const fromEmail = FROM_EMAIL;
       const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
-      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Cliente';
+      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Customer';
 
       if (resendApiKey && customerEmail) {
         sendRefundEmail({
@@ -395,9 +402,9 @@ Deno.serve(async (req) => {
 
       // Send refund confirmation email (non-blocking: failure does not affect the refund response)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
+      const fromEmail = FROM_EMAIL;
       const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
-      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Cliente';
+      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Customer';
 
       if (resendApiKey && customerEmail) {
         sendRefundEmail({
@@ -457,9 +464,9 @@ Deno.serve(async (req) => {
 
       // Send delivery notification email (non-blocking)
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') ?? 'CommerceJet <support@commercejet.com>';
+      const fromEmail = FROM_EMAIL;
       const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
-      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Cliente';
+      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Customer';
 
       if (resendApiKey && customerEmail) {
         fetch('https://api.resend.com/emails', {
@@ -471,29 +478,20 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             from: fromEmail,
             to: customerEmail,
-            subject: 'Il tuo ordine CommerceJet è stato consegnato',
-            html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff;">
-                <div style="background: #000; padding: 24px 32px;">
-                  <p style="color: #ffffff; font-size: 20px; font-weight: 700; margin: 0; letter-spacing: 0.05em;">COMMERCEJET</p>
-                </div>
-                <div style="padding: 40px 32px; color: #111;">
-                  <p style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px;">Consegna confermata</p>
-                  <h1 style="font-size: 24px; font-weight: 700; margin: 0 0 24px; line-height: 1.3;">Il tuo ordine è arrivato, ${customerName}.</h1>
-                  <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
-                    Il corriere ha completato la consegna. Speriamo che i tuoi nuovi capi siano esattamente come te li aspettavi.
-                  </p>
-                  <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 32px;">
-                    Se hai domande sulla tua spedizione, hai ricevuto un prodotto diverso da quello ordinato, o hai bisogno di assistenza, rispondi direttamente a questa email — il nostro team ti risponde entro 24 ore.
-                  </p>
-                  <div style="border-top: 1px solid #eee; padding-top: 24px; margin-top: 8px;">
-                    <p style="font-size: 13px; color: #888; margin: 0;">Grazie per aver scelto CommerceJet.</p>
-                    <p style="font-size: 13px; color: #bbb; margin: 4px 0 0;">© ${new Date().getFullYear()} CommerceJet. Tutti i diritti riservati.</p>
-                  </div>
-                </div>
-              </div>
-            `,
-            text: `Ciao ${customerName},\n\nIl tuo ordine CommerceJet è stato consegnato.\n\nSperiamo che i tuoi nuovi capi siano esattamente come te li aspettavi.\n\nSe hai domande o problemi, rispondi a questa email — il nostro team ti risponde entro 24 ore.\n\nGrazie per aver scelto CommerceJet.`,
+            subject: `Your ${STORE_NAME} order has been delivered`,
+            html: renderEmail({
+              eyebrow: 'Delivery confirmed',
+              heading: `Your order has arrived, ${escapeHtml(customerName)}.`,
+              bodyHtml: `
+                <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+                  The carrier has completed delivery. We hope everything is exactly as you expected.
+                </p>
+                <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0;">
+                  If you have any questions about your order, received the wrong item, or need help, just reply to this email — our team responds within 24 hours.
+                </p>
+              `,
+            }),
+            text: `Hi ${customerName},\n\nYour ${STORE_NAME} order has been delivered.\n\nWe hope everything is exactly as you expected.\n\nIf you have any questions or problems, just reply to this email — our team responds within 24 hours.\n\nThanks for shopping with ${STORE_NAME}.`,
           }),
         }).catch((emailErr) => {
           console.error('Delivery email failed (non-blocking):', emailErr);

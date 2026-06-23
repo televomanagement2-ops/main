@@ -192,6 +192,17 @@ US sales tax varies by state, so the template supports two modes via Edge Functi
   first enable Stripe Tax in the Stripe dashboard (register your origin address and set
   product tax codes), otherwise checkout will error.
 
+## Transactional emails
+
+Shipping, refund, and delivery emails are sent from the Edge Functions (via Resend) and are
+**English by default, in USD/en-US**. Because Edge Functions can't read
+[`storeConfig.ts`](src/config/storeConfig.ts) (it's frontend-only), their branding is set with
+Edge Function secrets, all with demo-safe defaults:
+`STORE_NAME`, `SUPPORT_EMAIL`, `RESEND_FROM_EMAIL`, `STORE_CURRENCY`, `STORE_LOCALE`,
+`STORE_BRAND_COLOR`. The shared template lives in
+[`supabase/functions/_shared/store.ts`](supabase/functions/_shared/store.ts). Sign-up /
+password-reset emails are sent by Supabase Auth and are customized in the Supabase dashboard.
+
 ## Build and Quality Checks
 
 ```bash

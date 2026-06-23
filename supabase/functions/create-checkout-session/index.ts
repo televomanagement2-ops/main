@@ -2,7 +2,7 @@ import Stripe from 'npm:stripe@14';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 // Origins allowed to call this function from a browser. Set the ALLOWED_ORIGINS
-// secret to a comma-separated list (e.g. "https://commercejet.com,https://www.commercejet.com").
+// secret to a comma-separated list (e.g. "https://yourstore.com,https://www.yourstore.com").
 // Falls back to "*" only if unset, so local dev keeps working before deploy config.
 const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
   .split(',')
