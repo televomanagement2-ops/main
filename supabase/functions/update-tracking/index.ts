@@ -1,85 +1,13 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { FROM_EMAIL, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
-
-// Origins allowed to call this function from a browser. Set ALLOWED_ORIGINS
-// (comma-separated) as a secret; falls back to "*" only when unset.
-const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-// Vercel preview/production subdomains change on every deploy and per licensee,
-// so allow *.vercel.app automatically unless explicitly disabled in production.
-const allowVercelPreviews = (Deno.env.get('ALLOW_VERCEL_PREVIEWS') ?? 'true').toLowerCase() !== 'false';
-
-const corsHeadersBase = {
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-// Returns the value to echo in Access-Control-Allow-Origin, or null if the
-// origin is not authorized (in which case NO such header should be emitted).
-function resolveAllowedOrigin(origin: string | null): string | null {
-  if (allowedOrigins.includes('*')) return '*';
-  if (!origin) return null;
-  if (allowedOrigins.includes(origin)) return origin;
-  if (allowVercelPreviews) {
-    try {
-      if (new URL(origin).hostname.endsWith('.vercel.app')) return origin;
-    } catch {
-      // malformed origin → not authorized
-    }
-  }
-  return null;
-}
-
-function getCorsHeaders(origin: string | null) {
-  const allowOrigin = resolveAllowedOrigin(origin);
-  const headers: Record<string, string> = {
-    ...corsHeadersBase,
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-  // Only emit Allow-Origin when the origin is authorized; never echo a different
-  // origin (that would break the request with a misleading CORS error).
-  if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
-  return headers;
-}
+import { renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { sendEmail } from '../_shared/email.ts';
 
 function jsonResponse(payload: unknown, status = 200, origin: string | null = null) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json' },
   });
-}
-
-async function sendResendEmail(params: {
-  apiKey: string;
-  from: string;
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-}) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: params.from,
-      to: [params.to],
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-    }),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Resend error: ${errorText || res.statusText}`);
-  }
 }
 
 Deno.serve(async (req) => {
@@ -97,15 +25,12 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const resendApiKey = Deno.env.get('RESEND_API_KEY');
-    const resendFrom = FROM_EMAIL;
 
-    if (!supabaseUrl || !serviceRoleKey || !anonKey || !resendApiKey) {
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) {
       const missing: string[] = [];
       if (!supabaseUrl) missing.push('SUPABASE_URL');
       if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
       if (!anonKey) missing.push('SUPABASE_ANON_KEY');
-      if (!resendApiKey) missing.push('RESEND_API_KEY');
       return jsonResponse({
         error: `Missing required Edge Function secrets: ${missing.join(', ')}`,
         code: 'CONFIG_MISSING_SECRETS',
@@ -129,10 +54,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const orderId = String(body?.orderId ?? body?.order_id ?? '').trim();
     const trackingId = String(body?.trackingId ?? body?.tracking_id ?? '').trim();
-    const status = String(body?.status ?? '').trim();
 
-    if (!orderId || !trackingId || !status) {
-      return jsonResponse({ error: 'Missing orderId, trackingId, or status.' }, 400, origin);
+    if (!orderId || !trackingId) {
+      return jsonResponse({ error: 'Missing orderId or trackingId.' }, 400, origin);
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -150,12 +74,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Admin access required.' }, 403, origin);
     }
 
+    // Adding tracking means the order shipped — the status is never taken from
+    // the client (an arbitrary client status could corrupt the order lifecycle).
     const { data: updated, error: updateError } = await supabase
       .from('orders')
       .update({
         tracking_id: trackingId,
         tracking_updated_at: new Date().toISOString(),
-        status,
+        status: 'shipped',
       })
       .eq('id', orderId)
       .select('*, order_items(*), profiles(full_name, email, phone)')
@@ -173,45 +99,45 @@ Deno.serve(async (req) => {
     let customerEmail = updated.profiles?.email ?? null;
     let customerName = updated.profiles?.full_name ?? null;
     if (!customerEmail) {
-      const { data: customer, error: customerError } = await supabase
+      const { data: customer } = await supabase
         .from('profiles')
         .select('email, full_name')
         .eq('id', updated.user_id)
         .single();
 
-      if (customerError || !customer?.email) {
-        return jsonResponse({ error: 'Customer email not available.' }, 400, origin);
-      }
-
-      customerEmail = customer.email;
-      customerName = customerName ?? customer.full_name;
+      customerEmail = customer?.email ?? null;
+      customerName = customerName ?? customer?.full_name ?? null;
     }
 
-    const shipping = updated.shipping_address as Record<string, string> | null;
-    const displayName = customerName ?? shipping?.full_name ?? 'Customer';
-    const subject = 'Your order is on the way';
-    const text = `Hi ${displayName},\n\nYour order ${updated.id} has shipped.\nTracking ID: ${trackingId}\n\nThanks for shopping with ${STORE_NAME}.`;
-    const html = renderEmail({
-      eyebrow: 'Order shipped',
-      heading: `Your order is on the way, ${escapeHtml(displayName)}.`,
-      bodyHtml: `
-        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
-          Good news — order <strong>${escapeHtml(String(updated.id))}</strong> has shipped.
-        </p>
-        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0;">
-          <strong>Tracking ID:</strong> ${escapeHtml(trackingId)}
-        </p>
-      `,
-    });
+    // Shipping email is fire-and-forget: the order is already committed as
+    // shipped, so a Resend failure must not turn the response into an error
+    // (the admin would retry and hit the shipped→shipped no-op confusingly).
+    if (customerEmail) {
+      const shipping = updated.shipping_address as Record<string, string> | null;
+      const displayName = customerName ?? shipping?.full_name ?? 'Customer';
 
-    await sendResendEmail({
-      apiKey: resendApiKey,
-      from: resendFrom,
-      to: customerEmail,
-      subject,
-      html,
-      text,
-    });
+      sendEmail({
+        to: customerEmail,
+        subject: 'Your order is on the way',
+        html: renderEmail({
+          eyebrow: 'Order shipped',
+          heading: `Your order is on the way, ${escapeHtml(displayName)}.`,
+          bodyHtml: `
+            <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+              Good news — order <strong>${escapeHtml(String(updated.id))}</strong> has shipped.
+            </p>
+            <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0;">
+              <strong>Tracking ID:</strong> ${escapeHtml(trackingId)}
+            </p>
+          `,
+        }),
+        text: `Hi ${displayName},\n\nYour order ${updated.id} has shipped.\nTracking ID: ${trackingId}\n\nThanks for shopping with ${STORE_NAME}.`,
+      }).catch((emailErr) => {
+        console.error('Shipping email failed (non-blocking):', emailErr);
+      });
+    } else {
+      console.warn(`[update-tracking] order ${orderId}: no customer email — skipping notification`);
+    }
 
     return jsonResponse({ order: updated }, 200, origin);
   } catch (err) {

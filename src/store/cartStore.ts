@@ -8,6 +8,13 @@ interface CartState {
   removeItem: (productId: string, selectedSize?: string | null) => void;
   updateQuantity: (productId: string, quantity: number, selectedSize?: string | null) => void;
   clearCart: () => void;
+  /**
+   * Reconcile the persisted cart with fresh catalog rows: adopt current
+   * price/stock/images, drop items whose product is gone or inactive, and
+   * clamp quantities to current stock. Returns true when anything changed
+   * in a way the shopper should be told about (price change or removal).
+   */
+  syncWithCatalog: (products: Product[]) => boolean;
   itemCount: () => number;
   subtotal: () => number;
 }
@@ -75,6 +82,35 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: () => set({ items: [] }),
+
+      syncWithCatalog: (products) => {
+        const freshById = new Map(products.map((p) => [p.id, p]));
+        let changed = false;
+
+        const nextItems: CartItemLocal[] = [];
+        for (const item of get().items) {
+          const fresh = freshById.get(item.product.id);
+
+          // Product deleted or deactivated since it was added → drop the line.
+          if (!fresh || fresh.is_active === false) {
+            changed = true;
+            continue;
+          }
+
+          if (fresh.price !== item.product.price) changed = true;
+
+          const quantity = Math.min(item.quantity, Math.max(fresh.stock_quantity, 0));
+          if (quantity === 0) {
+            changed = true;
+            continue;
+          }
+
+          nextItems.push({ ...item, product: fresh, quantity });
+        }
+
+        set({ items: nextItems });
+        return changed;
+      },
 
       itemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
 

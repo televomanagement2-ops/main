@@ -148,7 +148,7 @@ function ReviewsSection({ productId }: { productId: string }) {
       ) : (
         <div className="reviews-list">
           {reviews.map((r) => {
-            const author = r.profiles?.full_name || r.profiles?.email || t('product.reviews.anonymous');
+            const author = r.author_name || t('product.reviews.anonymous');
             return (
               <div key={r.id} className="review-card">
                 <div className="review-card__head">
@@ -208,7 +208,8 @@ export function ProductDetailPage() {
     );
   }
 
-  const isClothing = product.categories?.slug === 'clothing';
+  // Any product with active variants gets the size selector — no category
+  // hardcoding (a new "shoes" category with sizes must work out of the box).
   const variants: ProductVariant[] = product.product_variants
     ? [...product.product_variants].sort((a, b) => a.sort_order - b.sort_order)
     : [];
@@ -223,7 +224,7 @@ export function ProductDetailPage() {
   const isLowStock = !isOutOfStock && product.stock_quantity <= product.low_stock_threshold;
 
   const handleAddToCart = () => {
-    if (isClothing && hasVariants && !selectedSize) {
+    if (hasVariants && !selectedSize) {
       setSizeError(true);
       return;
     }
@@ -234,7 +235,7 @@ export function ProductDetailPage() {
   };
 
   const handleBuyNow = () => {
-    if (isClothing && hasVariants && !selectedSize) {
+    if (hasVariants && !selectedSize) {
       setSizeError(true);
       return;
     }
@@ -322,8 +323,8 @@ export function ProductDetailPage() {
 
           <div className="product-info__divider" />
 
-          {/* Size selector for clothing */}
-          {isClothing && hasVariants && (
+          {/* Size selector (any product with variants) */}
+          {hasVariants && (
             <div className="size-selector">
               <div className="size-selector__label">
                 {t('cart.size')}
@@ -408,7 +409,7 @@ export function ProductDetailPage() {
             </button>
           )}
 
-          {product.weight_grams && (
+          {product.weight_grams != null && (
             <p style={{ fontSize: 12.5, color: 'var(--color-text-3)', marginTop: 'var(--sp-2)' }}>
               {t('product.weight', { grams: product.weight_grams })}
             </p>

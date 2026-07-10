@@ -94,6 +94,20 @@ export function AdminDashboardPage() {
               <span className="admin-ops-item__label">{t('admin.dashboard.shippedToday')}</span>
               <span className="admin-ops-item__value">{shippedCount}</span>
             </div>
+            <div className="admin-ops-item">
+              <span
+                className="admin-ops-item__label"
+                style={data.needsReview > 0 ? { color: 'var(--color-danger)' } : undefined}
+              >
+                {t('admin.dashboard.needsReview')}
+              </span>
+              <span
+                className="admin-ops-item__value"
+                style={data.needsReview > 0 ? { color: 'var(--color-danger)' } : undefined}
+              >
+                {data.needsReview}
+              </span>
+            </div>
           </div>
           <div className="divider" style={{ margin: 'var(--sp-5) 0' }} />
           <div className="admin-ops-statuses">

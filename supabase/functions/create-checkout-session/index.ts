@@ -1,17 +1,19 @@
-import Stripe from 'npm:stripe@14';
+import Stripe from 'npm:stripe@18';
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { resolveAllowedOrigin, getCorsHeaders } from '../_shared/cors.ts';
 
-// Origins allowed to call this function from a browser. Set the ALLOWED_ORIGINS
-// secret to a comma-separated list (e.g. "https://yourstore.com,https://www.yourstore.com").
-// Falls back to "*" only if unset, so local dev keeps working before deploy config.
-const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+const STRIPE_API_VERSION = '2025-03-31.basil';
 
-// Vercel preview/production subdomains change on every deploy and per licensee,
-// so allow *.vercel.app automatically unless explicitly disabled in production.
-const allowVercelPreviews = (Deno.env.get('ALLOW_VERCEL_PREVIEWS') ?? 'true').toLowerCase() !== 'false';
+// Abuse limits: a legitimate shopper never needs more than this.
+const MAX_LINE_ITEMS = 50;
+const MAX_QUANTITY_PER_ITEM = 100;
+const MAX_ORDERS_PER_HOUR = 10;
+
+// Checkout sessions expire after 1 hour (Stripe minimum is 30 minutes). This
+// MUST stay below the 2-hour window of expire_stale_pending_orders(): the cron
+// can then never cancel an order whose session is still payable — the race that
+// used to produce paid-but-cancelled orders.
+const SESSION_TTL_SECONDS = 60 * 60;
 
 // ── Tax configuration ────────────────────────────────────────────────────────
 // STRIPE_TAX_ENABLED=true uses Stripe Tax to compute the correct per-jurisdiction
@@ -25,36 +27,6 @@ const TAX_RATE = (() => {
   const n = Number(Deno.env.get('TAX_RATE') ?? '0');
   return Number.isFinite(n) && n > 0 ? n : 0;
 })();
-
-// Returns the value to echo in Access-Control-Allow-Origin, or null if the
-// origin is not authorized (in which case NO such header should be emitted).
-function resolveAllowedOrigin(origin: string | null): string | null {
-  if (allowedOrigins.includes('*')) return '*';
-  if (!origin) return null;
-  if (allowedOrigins.includes(origin)) return origin;
-  if (allowVercelPreviews) {
-    try {
-      if (new URL(origin).hostname.endsWith('.vercel.app')) return origin;
-    } catch {
-      // malformed origin → not authorized
-    }
-  }
-  return null;
-}
-
-function getCorsHeaders(origin: string | null) {
-  const allowOrigin = resolveAllowedOrigin(origin);
-  const headers: Record<string, string> = {
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-  // Only emit Allow-Origin when the origin is authorized; never echo a different
-  // origin (that would break the request with a misleading CORS error).
-  if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
-  return headers;
-}
 
 class CheckoutHttpError extends Error {
   status: number;
@@ -121,8 +93,21 @@ Deno.serve(async (req) => {
       }, 500);
     }
 
+    // ── SECURITY: redirect URLs are built server-side from the request Origin,
+    // never taken from the request body. The origin must be explicitly allowed
+    // (fail closed) — otherwise a forged request could bounce the buyer, and
+    // the Stripe success URL, to an attacker-controlled site.
+    const trustedOrigin = resolveAllowedOrigin(origin);
+    if (!trustedOrigin) {
+      return jsonResponse({
+        error: 'Origin not allowed.',
+        code: 'ORIGIN_NOT_ALLOWED',
+        phase: 'request.validate_origin',
+      }, 403);
+    }
+
     console.log('[checkout] phase=client.init');
-    const stripe = new Stripe(stripeSecret, { apiVersion: '2024-06-20' });
+    const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION });
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const supabaseAnon = createClient(supabaseUrl, anonKey);
 
@@ -149,18 +134,19 @@ Deno.serve(async (req) => {
 
     console.log('[checkout] phase=request.parse_json');
     const body = await req.json();
-    const {
-      items,
-      success_url,
-      cancel_url,
-      shipping_address,
-      shipping_method_id,
-    } = body;
+    const { items, shipping_address, shipping_method_id } = body;
 
-    if (!items?.length) {
+    if (!Array.isArray(items) || items.length === 0) {
       return jsonResponse({
         error: 'No items provided',
         code: 'VALIDATION_NO_ITEMS',
+        phase: 'request.validate_items',
+      }, 400);
+    }
+    if (items.length > MAX_LINE_ITEMS) {
+      return jsonResponse({
+        error: `Too many line items (max ${MAX_LINE_ITEMS}).`,
+        code: 'VALIDATION_TOO_MANY_ITEMS',
         phase: 'request.validate_items',
       }, 400);
     }
@@ -179,13 +165,37 @@ Deno.serve(async (req) => {
 
     console.log('[checkout] items:', items.length);
 
-    // ── SECURITY: never trust client-supplied prices. Resolve authoritative
-    // prices, names and availability from the database (service role). The
-    // client `price`/`name`/`shipping_cost` fields are ignored entirely.
+    // ── RATE LIMIT: cap checkout attempts per user per hour. The DB
+    // pending-order-limit trigger (migration 013) is the backstop.
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentOrders, error: rateErr } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', oneHourAgo);
+
+    if (rateErr) {
+      throw new CheckoutHttpError(
+        500,
+        'DB_RATE_LIMIT_ERROR',
+        'db.rate_limit',
+        `Failed to check order rate: ${rateErr.message}`,
+      );
+    }
+    if ((recentOrders ?? 0) >= MAX_ORDERS_PER_HOUR) {
+      return jsonResponse({
+        error: 'Too many checkout attempts. Please try again later.',
+        code: 'RATE_LIMITED',
+        phase: 'request.rate_limit',
+      }, 429);
+    }
+
+    // ── SECURITY: never trust client-supplied prices, names or images.
+    // Everything is resolved from the database (service role); the client
+    // only sends product_id / quantity / selected_size.
     type CheckoutItem = {
       product_id: string;
       quantity: number;
-      image?: string | null;
       selected_size?: string | null;
     };
     const requestedItems = items as CheckoutItem[];
@@ -201,7 +211,7 @@ Deno.serve(async (req) => {
 
     const { data: dbProducts, error: productsErr } = await supabase
       .from('products')
-      .select('id, name, price, is_active, stock_quantity')
+      .select('id, name, price, is_active, stock_quantity, product_images(url, is_primary)')
       .in('id', productIds);
 
     if (productsErr) {
@@ -214,6 +224,33 @@ Deno.serve(async (req) => {
     }
 
     const productById = new Map((dbProducts ?? []).map((p) => [p.id as string, p]));
+
+    // ── Variant enforcement: a sized item must reference an active variant
+    // with sufficient stock — the size selector can't be bypassed.
+    const sizedItems = requestedItems.filter((i) => i.selected_size);
+    let variantKey = new Map<string, { stock_qty: number }>();
+    if (sizedItems.length > 0) {
+      const { data: variants, error: variantsErr } = await supabase
+        .from('product_variants')
+        .select('product_id, size, stock_qty')
+        .in('product_id', [...new Set(sizedItems.map((i) => i.product_id))])
+        .eq('is_active', true);
+
+      if (variantsErr) {
+        throw new CheckoutHttpError(
+          500,
+          'DB_VARIANT_LOOKUP_ERROR',
+          'db.fetch_variants',
+          `Failed to load product variants: ${variantsErr.message}`,
+        );
+      }
+      variantKey = new Map(
+        (variants ?? []).map((v) => [
+          `${v.product_id}::${v.size}`,
+          { stock_qty: Number(v.stock_qty) },
+        ]),
+      );
+    }
 
     // Build trusted line items from DB data only.
     const resolvedItems = requestedItems.map((i) => {
@@ -235,7 +272,7 @@ Deno.serve(async (req) => {
         );
       }
       const quantity = Math.trunc(Number(i.quantity));
-      if (!Number.isFinite(quantity) || quantity <= 0) {
+      if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY_PER_ITEM) {
         throw new CheckoutHttpError(
           400,
           'INVALID_QUANTITY',
@@ -251,13 +288,34 @@ Deno.serve(async (req) => {
           `Insufficient stock for "${product.name}".`,
         );
       }
+      if (i.selected_size) {
+        const variant = variantKey.get(`${i.product_id}::${i.selected_size}`);
+        if (!variant) {
+          throw new CheckoutHttpError(
+            409,
+            'VARIANT_NOT_FOUND',
+            'request.resolve_variants',
+            `Size "${i.selected_size}" is not available for "${product.name}".`,
+          );
+        }
+        if (variant.stock_qty < quantity) {
+          throw new CheckoutHttpError(
+            409,
+            'INSUFFICIENT_STOCK',
+            'request.resolve_variants',
+            `Insufficient stock for "${product.name}" size ${i.selected_size}.`,
+          );
+        }
+      }
       const unitPrice = Math.round(Number(product.price) * 100) / 100;
+      const images = (product.product_images ?? []) as { url: string; is_primary: boolean }[];
+      const image = images.find((img) => img.is_primary)?.url ?? images[0]?.url ?? null;
       return {
         product_id: product.id as string,
         name: product.name as string,
         unit_price: unitPrice,
         quantity,
-        image: i.image ?? null,
+        image,
         selected_size: i.selected_size ?? null,
       };
     });
@@ -323,6 +381,14 @@ Deno.serve(async (req) => {
 
     if (orderErr) {
       console.error('[checkout] order insert error:', orderErr.message);
+      // The DB pending-order-limit trigger surfaces as a P0001 error here.
+      if ((orderErr as { code?: string }).code === 'P0001') {
+        return jsonResponse({
+          error: 'Too many open orders. Complete or cancel existing orders first.',
+          code: 'RATE_LIMITED',
+          phase: 'db.insert_order',
+        }, 429);
+      }
       throw new CheckoutHttpError(
         500,
         'DB_ORDER_INSERT_ERROR',
@@ -333,7 +399,7 @@ Deno.serve(async (req) => {
     orderId = order.id;
     console.log('[checkout] order created:', order.id);
 
-    // Insert order items (prices resolved from DB, with optional selected_size)
+    // Insert order items (prices and images resolved from DB)
     const orderItems = resolvedItems.map((i) => ({
       order_id: order.id,
       product_id: i.product_id,
@@ -404,8 +470,11 @@ Deno.serve(async (req) => {
         payment_method_types: ['card'],
         line_items: lineItems,
         mode: 'payment',
-        success_url,
-        cancel_url,
+        // Server-built redirect URLs on the verified origin (never client input).
+        success_url: `${trustedOrigin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${trustedOrigin}/checkout/cancel`,
+        // Expire well before the stale-pending-order cron (2 h) fires.
+        expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
         client_reference_id: order.id,
         metadata: { order_id: order.id, user_id: user.id },
         payment_intent_data: {

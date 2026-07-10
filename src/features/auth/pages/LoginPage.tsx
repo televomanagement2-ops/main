@@ -17,12 +17,32 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const switchMode = (next: 'login' | 'signup') => {
     setMode(next);
     setError(null);
     setMessage(null);
+  };
+
+  const handleForgotPassword = async () => {
+    setError(null);
+    setMessage(null);
+    if (!email) {
+      setError(t('auth.resetNeedsEmail'));
+      return;
+    }
+    setResetLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset`,
+    });
+    setResetLoading(false);
+    if (error) {
+      setError(error.message);
+    } else {
+      setMessage(t('auth.resetEmailSent'));
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -54,11 +74,13 @@ export function LoginPage() {
   const handleGoogleSignIn = async () => {
     setError(null);
     setOauthLoading(true);
+    // Carry the pre-login destination through the OAuth round-trip so the
+    // callback can land the user where they were headed.
+    const next = from && from !== '/' ? `?next=${encodeURIComponent(from)}` : '';
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: { access_type: 'offline', prompt: 'consent' },
+        redirectTo: `${window.location.origin}/auth/callback${next}`,
       },
     });
     if (error) {
@@ -152,6 +174,17 @@ export function LoginPage() {
                 minLength={8}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               />
+              {mode === 'login' && (
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={handleForgotPassword}
+                  disabled={resetLoading || isLoading || oauthLoading}
+                  style={{ marginTop: 6, fontSize: 13, alignSelf: 'flex-start' }}
+                >
+                  {resetLoading ? t('auth.pleaseWait') : t('auth.forgotPassword')}
+                </button>
+              )}
             </div>
             <button
               type="submit"

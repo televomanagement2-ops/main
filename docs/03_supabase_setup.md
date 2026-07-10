@@ -33,15 +33,24 @@ click Run):
 1. `supabase/schema.sql` — tables & types
 2. `supabase/rls.sql` — security policies
 3. **Every file in `supabase/migrations/` in numeric order** — `001_fixes.sql` through
-   `012_us_shipping_cleanup.sql`. Run each one. (There are two `004_*` files — run both.)
+   `013_payment_reliability.sql`. Run each one.
 4. `supabase/seeds/002_mock_products.sql` — optional demo catalog (skip if you'll add your
    own products right away)
 
 > **Important —** Run the migrations in order. They build on each other; skipping one can
-> leave the checkout schema incomplete.
+> leave the checkout schema incomplete. If your database already ran 001–012, only run
+> `013_payment_reliability.sql`, then `NOTIFY pgrst, 'reload schema';`
+
+Then schedule the stale-order cleanup (**required** — otherwise abandoned checkouts stay
+`pending` forever). Dashboard → Database → Extensions → enable **pg_cron**, then run:
+
+```sql
+SELECT cron.schedule('expire-pending-orders', '*/15 * * * *',
+  $$SELECT public.expire_stale_pending_orders()$$);
+```
 
 > **Tip —** `supabase/SETUP_CHECKLIST.md` contains verification queries to confirm every
-> required column exists.
+> required column exists, plus how the `needs_review` backorder flag works.
 
 ---
 
@@ -86,8 +95,11 @@ Dashboard → Project Settings → Edge Functions → Secrets. Add:
 STRIPE_SECRET_KEY=sk_test_...        # from Stripe (see guide 06)
 STRIPE_WEBHOOK_SECRET=whsec_...       # from Stripe webhook (see guide 06)
 SUPABASE_ANON_KEY=eyJ...              # same anon key as the frontend
+# REQUIRED — CORS fails closed: with this unset, browsers cannot call the
+# functions at all, and checkout returns 403 (redirect URLs are built from the
+# caller's origin). Local dev: http://localhost:5173
 ALLOWED_ORIGINS=https://yourstore.com # see guide 05 (CORS)
-ALLOW_VERCEL_PREVIEWS=true            # "false" once on your final domain
+ALLOW_VERCEL_PREVIEWS=false           # default false; "true" only on previews
 # Sales tax (see guide 06)
 TAX_RATE=0
 STRIPE_TAX_ENABLED=false

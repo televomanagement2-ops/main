@@ -7,17 +7,33 @@
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
 3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
-   `012_us_shipping_cleanup.sql`. Run each one. Note there are two `004_*` files
-   (`004_cart_rls_nullguard.sql` and `004_variants_reviews_shipping.sql`) — run both.
-   The latest, `012_us_shipping_cleanup.sql`, removes the non-US "Poste" shipping method.
+   `013_payment_reliability.sql`. Run each one.
+   > Already-migrated database (ran 001–012 before)? Only run
+   > `013_payment_reliability.sql`, then `NOTIFY pgrst, 'reload schema';`
 4. `supabase/seeds/002_mock_products.sql` ← optional sample products
+
+### Schedule the stale-order cron (REQUIRED)
+
+Orders abandoned before payment must be auto-cancelled or they pile up as
+`pending`/`processing` forever. Dashboard → Database → Extensions → enable
+**pg_cron**, then run in the SQL Editor:
+
+```sql
+SELECT cron.schedule('expire-pending-orders', '*/15 * * * *',
+  $$SELECT public.expire_stale_pending_orders()$$);
+```
+
+(Checkout sessions expire after 1 hour; the cron cancels their orders after 2,
+so it can never cancel an order whose Stripe session is still payable.)
 
 ### Verify tables exist
 Go to **Table Editor** and confirm these tables are present:
-- profiles, categories, products, product_images
-- addresses, orders, order_items
-- carts, cart_items
+- profiles, categories, products, product_images, product_variants
+- addresses, orders, order_items, shipping_methods, product_reviews
 - processed_stripe_events
+
+(There is **no** carts/cart_items table — the storefront cart lives in
+localStorage; migration 013 drops the legacy tables.)
 
 ### Verify RLS is ON
 Dashboard → Table Editor → each table → RLS badge must show "Enabled".
@@ -67,13 +83,15 @@ STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 SUPABASE_ANON_KEY=eyJ...
 RESEND_API_KEY=re_...
-# Restrict which website origins may call the functions from a browser
-# (comma-separated). STRONGLY recommended in production.
+# REQUIRED. Which website origins may call the functions from a browser
+# (comma-separated). Checkout redirect URLs are also built from the caller's
+# origin, so an unset value means checkout returns 403.
+# Local dev: ALLOWED_ORIGINS=http://localhost:5173
 ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
-# Optional
-# Auto-allow any *.vercel.app origin (handy while the Vercel preview domain
-# changes between deploys). Set to "false" once on your final custom domain.
-ALLOW_VERCEL_PREVIEWS=true
+# Optional. Auto-allow any *.vercel.app origin (handy while the Vercel preview
+# domain changes between deploys). Defaults to false — keep it false in
+# production; set "true" only while testing on preview URLs.
+ALLOW_VERCEL_PREVIEWS=false
 # Sales tax. Flat fraction (e.g. 0.07) used when Stripe Tax is OFF; default 0.
 # Set STRIPE_TAX_ENABLED=true to use Stripe Tax (real per-state US sales tax;
 # requires Stripe Tax configured in the Stripe dashboard).
@@ -88,14 +106,23 @@ SUPPORT_EMAIL=support@your-domain.com
 # STORE_BRAND_COLOR (default #111111).
 ```
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
-If `ALLOWED_ORIGINS` is left unset, CORS falls back to `*` (fine for local dev,
-not recommended in production). When set, only those origins (plus `*.vercel.app`
-unless `ALLOW_VERCEL_PREVIEWS=false`) are accepted; a non-matching origin gets no
-`Access-Control-Allow-Origin` header and the browser reports "Failed to fetch".
+CORS **fails closed**: if `ALLOWED_ORIGINS` is unset, every browser origin is
+rejected (the functions log a warning). When set, only those origins (plus
+`*.vercel.app` when `ALLOW_VERCEL_PREVIEWS=true`) are accepted; a non-matching
+origin gets no `Access-Control-Allow-Origin` header and the browser reports
+"Failed to fetch".
 
 > **If your site domain changes** (e.g. a new Vercel URL), you must update
 > `ALLOWED_ORIGINS` here **and** the Supabase Auth URL Configuration below, then
 > redeploy the three browser-facing functions.
+
+### Key rotation
+
+If your repo (or a copy of it) ever contained real Supabase credentials or the
+project ref was exposed, rotate keys: Dashboard → Settings → API → **Reset**
+the service-role key (and anon key if leaked). Then update the Vercel env vars
+and re-deploy the Edge Functions. Never commit `.env` or ship it in a template
+ZIP — the service-role key bypasses RLS entirely.
 
 ---
 
@@ -173,9 +200,24 @@ If any column is missing, apply at least:
 2. Add products to cart → verify cart persists on refresh
 3. Go to /checkout → click Pay → should redirect to Stripe
 4. Use test card `4242 4242 4242 4242` exp `12/34` CVC `123`
-5. After payment: redirected to /checkout/success
+5. After payment: redirected to /checkout/success + order confirmation email
 6. Check orders table: status should be `paid`
-7. Check stock_quantity decreased for ordered products
+7. Check stock_quantity decreased for ordered products (and `stock_qty` on the
+   matching product_variants row when a size was selected)
+
+### Backorder policy (`needs_review`)
+
+Paid orders are **always honored** — the stock trigger never rejects a payment.
+If two buyers race for the last unit, both orders become `paid`, stock goes
+negative (the negative number = units to re-order), and the later order is
+flagged `needs_review = true` with `review_reason = 'oversold'`. Flagged orders
+show a red **Needs review** badge in Admin → Orders (with a dedicated filter)
+and a counter on the admin dashboard. Review them, restock or contact the
+customer, then clear the flag:
+
+```sql
+UPDATE public.orders SET needs_review = false, review_reason = null WHERE id = '<order-id>';
+```
 
 ---
 

@@ -79,10 +79,10 @@ export function OrderDetailPage() {
   const canCancel = CANCELLABLE_STATUSES.includes(order.status) && !order.refund_id;
 
   const subtotal = order.order_items?.reduce((s, i) => s + i.total_price, 0) ?? 0;
-  const shippingCost = (order as unknown as Record<string, unknown>).shipping_cost as number ?? 0;
-  const taxAmount = (order as unknown as Record<string, unknown>).tax_amount as number ?? 0;
+  const shippingCost = order.shipping_cost ?? 0;
+  const taxAmount = order.tax_amount ?? 0;
 
-  const addr = (order as unknown as Record<string, unknown>).shipping_address as Record<string, string> | null;
+  const addr = order.shipping_address ?? null;
   const productName = order.order_items?.[0]?.product_name || 'Order';
 
   const handleCancel = async () => {

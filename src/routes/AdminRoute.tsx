@@ -7,10 +7,14 @@ interface Props {
 }
 
 export function AdminRoute({ children }: Props) {
-  const { isAuthenticated, isLoading, isAdmin } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin, profileStatus } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  // Wait for the profile too: on a hard refresh the session arrives before
+  // the profile, and redirecting during that window bounced admins to "/".
+  const profilePending = isAuthenticated && (profileStatus === 'idle' || profileStatus === 'loading');
+
+  if (isLoading || profilePending) {
     return (
       <div className="page-loading">
         <div className="spinner" />

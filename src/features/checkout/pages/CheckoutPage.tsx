@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useCartStore } from '../../../store/cartStore';
+import { useCartSync } from '../../../hooks/useCartSync';
 import { useAuth } from '../../../hooks/useAuth';
-import { useAddresses } from '../../../hooks/useAddresses';
+import { useAddresses, addressKeys } from '../../../hooks/useAddresses';
 import { useShippingMethods } from '../../../hooks/useShippingMethods';
 import { supabase } from '../../../lib/supabaseClient';
+import { createAddress } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
 import { computeOrderTotals } from '../../../lib/pricing';
 import type { Address, ShippingMethod } from '../../../types';
@@ -13,15 +16,9 @@ import type { Address, ShippingMethod } from '../../../types';
 type CheckoutBody = {
   items: Array<{
     product_id: string;
-    name: string;
-    price: number;
     quantity: number;
-    image: string | null;
     selected_size?: string | null;
   }>;
-  user_id: string;
-  success_url: string;
-  cancel_url: string;
   shipping_address: {
     full_name: string;
     line1: string;
@@ -33,9 +30,37 @@ type CheckoutBody = {
     phone?: string | null;
   };
   shipping_method_id: string;
-  shipping_method_name: string;
-  shipping_cost: number;
 };
+
+// ISO 3166-1 alpha-2 codes the store ships to. US first (US-market template);
+// extend the list when you enable more shipping destinations in Stripe.
+const COUNTRIES = [
+  { code: 'US', name: 'United States' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'AU', name: 'Australia' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'FR', name: 'France' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'ES', name: 'Spain' },
+] as const;
+
+const POSTAL_PATTERNS: Record<string, RegExp> = {
+  US: /^\d{5}(-\d{4})?$/,
+  CA: /^[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d$/i,
+  GB: /^[A-Za-z]{1,2}\d[A-Za-z\d]? ?\d[A-Za-z]{2}$/i,
+  AU: /^\d{4}$/,
+  DE: /^\d{5}$/,
+  FR: /^\d{5}$/,
+  IT: /^\d{5}$/,
+  ES: /^\d{5}$/,
+};
+
+function isValidPostalCode(country: string, postalCode: string): boolean {
+  const pattern = POSTAL_PATTERNS[country];
+  if (!pattern) return postalCode.trim().length > 0;
+  return pattern.test(postalCode.trim());
+}
 
 async function resolveCheckoutError(err: unknown, fallback: string): Promise<string> {
   if (!err || typeof err !== 'object') return fallback;
@@ -59,7 +84,7 @@ async function resolveCheckoutError(err: unknown, fallback: string): Promise<str
   return e.message || fallback;
 }
 
-async function invokeCheckoutSessionWithFallback(
+async function invokeCheckoutSession(
   accessToken: string,
   body: CheckoutBody,
 ): Promise<{ url: string }> {
@@ -180,6 +205,8 @@ type AddressFormLabels = {
   country: string;
   phone: string;
   useThisAddress: string;
+  saveAddress: string;
+  invalidPostalCode: string;
   placeholders: {
     fullName: string;
     addressLine1: string;
@@ -187,16 +214,17 @@ type AddressFormLabels = {
     city: string;
     state: string;
     postalCode: string;
-    country: string;
     phone: string;
   };
 };
+
+type NewAddressValue = Omit<Address, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'is_default'>;
 
 function NewAddressForm({
   onSaved,
   labels,
 }: {
-  onSaved: (addr: Omit<Address, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'is_default'>) => void;
+  onSaved: (addr: NewAddressValue, saveForLater: boolean) => void;
   labels: AddressFormLabels;
 }) {
   const [form, setForm] = useState({
@@ -209,22 +237,30 @@ function NewAddressForm({
     country: 'US',
     phone: '',
   });
+  const [saveForLater, setSaveForLater] = useState(true);
+  const [postalError, setPostalError] = useState(false);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof form) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidPostalCode(form.country, form.postal_code)) {
+      setPostalError(true);
+      return;
+    }
+    setPostalError(false);
     onSaved({
       full_name: form.full_name,
       line1: form.line1,
       line2: form.line2 || null,
       city: form.city,
       state: form.state,
-      postal_code: form.postal_code,
+      postal_code: form.postal_code.trim(),
       country: form.country,
       phone: form.phone || null,
-    });
+    }, saveForLater);
   };
 
   return (
@@ -238,6 +274,7 @@ function NewAddressForm({
             value={form.full_name}
             onChange={set('full_name')}
             placeholder={labels.placeholders.fullName}
+            autoComplete="name"
           />
         </div>
         <div className="form-group" style={{ gridColumn: '1/-1' }}>
@@ -248,6 +285,7 @@ function NewAddressForm({
             value={form.line1}
             onChange={set('line1')}
             placeholder={labels.placeholders.addressLine1}
+            autoComplete="address-line1"
           />
         </div>
         <div className="form-group" style={{ gridColumn: '1/-1' }}>
@@ -257,6 +295,7 @@ function NewAddressForm({
             value={form.line2}
             onChange={set('line2')}
             placeholder={labels.placeholders.addressLine2}
+            autoComplete="address-line2"
           />
         </div>
         <div className="form-group">
@@ -267,6 +306,7 @@ function NewAddressForm({
             value={form.city}
             onChange={set('city')}
             placeholder={labels.placeholders.city}
+            autoComplete="address-level2"
           />
         </div>
         <div className="form-group">
@@ -277,6 +317,7 @@ function NewAddressForm({
             value={form.state}
             onChange={set('state')}
             placeholder={labels.placeholders.state}
+            autoComplete="address-level1"
           />
         </div>
         <div className="form-group">
@@ -287,17 +328,27 @@ function NewAddressForm({
             value={form.postal_code}
             onChange={set('postal_code')}
             placeholder={labels.placeholders.postalCode}
+            autoComplete="postal-code"
           />
+          {postalError && (
+            <p style={{ fontSize: 12.5, color: 'var(--color-danger)', marginTop: 4 }}>
+              {labels.invalidPostalCode}
+            </p>
+          )}
         </div>
         <div className="form-group">
           <label className="label">{labels.country} *</label>
-          <input
-            className="input"
+          <select
+            className="select"
             required
             value={form.country}
             onChange={set('country')}
-            placeholder={labels.placeholders.country}
-          />
+            autoComplete="country"
+          >
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
         </div>
         <div className="form-group">
           <label className="label">{labels.phone}</label>
@@ -307,9 +358,18 @@ function NewAddressForm({
             onChange={set('phone')}
             placeholder={labels.placeholders.phone}
             type="tel"
+            autoComplete="tel"
           />
         </div>
       </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', marginTop: 'var(--sp-3)', fontSize: 13.5 }}>
+        <input
+          type="checkbox"
+          checked={saveForLater}
+          onChange={(e) => setSaveForLater(e.target.checked)}
+        />
+        {labels.saveAddress}
+      </label>
       <button type="submit" className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--sp-3)' }}>
         {labels.useThisAddress}
       </button>
@@ -319,7 +379,9 @@ function NewAddressForm({
 
 export function CheckoutPage() {
   const items = useCartStore((s) => s.items);
+  const cartSync = useCartSync();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data: savedAddresses = [], isLoading: addressesLoading } = useAddresses(user?.id);
   const { data: shippingMethods = [], isLoading: shippingLoading } = useShippingMethods();
   const { t, tCount, formatCurrency } = useI18n();
@@ -328,7 +390,7 @@ export function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | 'new' | null>(null);
-  const [newAddress, setNewAddress] = useState<Omit<Address, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'is_default'> | null>(null);
+  const [newAddress, setNewAddress] = useState<NewAddressValue | null>(null);
   const [selectedMethodId, setSelectedMethodId] = useState<string | null>(null);
 
   const defaultAddress = savedAddresses.find((a) => a.is_default) ?? savedAddresses[0];
@@ -363,6 +425,8 @@ export function CheckoutPage() {
     country: t('checkout.country'),
     phone: t('checkout.phone'),
     useThisAddress: t('checkout.useThisAddress'),
+    saveAddress: t('checkout.saveAddress'),
+    invalidPostalCode: t('checkout.invalidPostalCode'),
     placeholders: {
       fullName: t('checkout.fullNamePlaceholder'),
       addressLine1: t('checkout.addressLine1Placeholder'),
@@ -370,9 +434,29 @@ export function CheckoutPage() {
       city: t('checkout.cityPlaceholder'),
       state: t('checkout.statePlaceholder'),
       postalCode: t('checkout.postalCodePlaceholder'),
-      country: t('checkout.countryPlaceholder'),
       phone: t('checkout.phonePlaceholder'),
     },
+  };
+
+  const handleNewAddress = (addr: NewAddressValue, saveForLater: boolean) => {
+    setNewAddress(addr);
+
+    // Persist for next time (best-effort — checkout proceeds regardless).
+    if (saveForLater && user) {
+      createAddress({
+        ...addr,
+        user_id: user.id,
+        is_default: savedAddresses.length === 0,
+      })
+        .then((created) => {
+          queryClient.invalidateQueries({ queryKey: addressKeys.all });
+          setSelectedAddressId(created.id);
+          setNewAddress(null);
+        })
+        .catch((err) => {
+          console.error('Saving address failed (checkout continues):', err);
+        });
+    }
   };
 
   const shippingAddressReady = effectiveAddressId === 'new' ? newAddress !== null : resolvedAddress !== null;
@@ -394,31 +478,25 @@ export function CheckoutPage() {
     setError(null);
 
     try {
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError || !refreshed.session) {
+      // The Supabase client refreshes tokens automatically; getSession() is
+      // enough (an explicit refreshSession() here raced the client's own
+      // refresh cycle and could sign the user out).
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
         throw new Error(t('checkout.sessionExpired'));
       }
-      const accessToken = refreshed.session.access_token;
-
-      const { data: authCheck, error: authCheckError } = await supabase.auth.getUser(accessToken);
-      if (authCheckError || !authCheck?.user) {
-        throw new Error(t('checkout.sessionInvalid'));
-      }
+      const accessToken = sessionData.session.access_token;
 
       const chosenMethod = selectedMethod ?? { id: '', name: t('checkout.standard'), price: 0 };
 
+      // Prices, names, images and redirect URLs are all resolved server-side —
+      // the client only identifies what to buy and where to ship it.
       const body: CheckoutBody = {
         items: items.map((i) => ({
           product_id: i.product.id,
-          name: i.product.name,
-          price: i.product.price,
           quantity: i.quantity,
-          image: i.product.product_images?.[0]?.url ?? null,
           selected_size: i.selectedSize ?? null,
         })),
-        user_id: user.id,
-        success_url: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${window.location.origin}/checkout/cancel`,
         shipping_address: {
           full_name: shippingAddr.full_name,
           line1: shippingAddr.line1,
@@ -430,11 +508,9 @@ export function CheckoutPage() {
           phone: shippingAddr.phone,
         },
         shipping_method_id: chosenMethod.id,
-        shipping_method_name: chosenMethod.name,
-        shipping_cost: chosenMethod.price,
       };
 
-      const data = await invokeCheckoutSessionWithFallback(accessToken, body);
+      const data = await invokeCheckoutSession(accessToken, body);
       window.location.href = data.url;
     } catch (err) {
       setError(await resolveCheckoutError(err, t('common.error')));
@@ -453,6 +529,15 @@ export function CheckoutPage() {
         <span className="section-eyebrow">{t('checkout.securePayment')}</span>
         <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('checkout.title')}</h1>
       </div>
+
+      {cartSync.changed && (
+        <div className="alert alert-warning" style={{ marginBottom: 'var(--sp-5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--sp-4)' }}>
+          <span>{t('cart.pricesUpdated')}</span>
+          <button className="btn btn-ghost btn-sm" onClick={cartSync.dismiss}>
+            {t('cart.dismiss')}
+          </button>
+        </div>
+      )}
 
       <div className="checkout-layout">
         <div className="checkout-main">
@@ -494,7 +579,7 @@ export function CheckoutPage() {
 
             {effectiveAddressId === 'new' && (
               <div style={{ marginTop: 'var(--sp-4)' }}>
-                <NewAddressForm onSaved={(addr) => setNewAddress(addr)} labels={addressLabels} />
+                <NewAddressForm onSaved={handleNewAddress} labels={addressLabels} />
                 {newAddress && (
                   <p style={{ fontSize: 13, color: 'var(--color-success)', marginTop: 8 }}>
                     ✓ {t('checkout.addressReady')}

@@ -1,5 +1,6 @@
-// Generated from supabase/schema.sql + migrations/001_fixes.sql
-// Re-generate with: supabase gen types typescript --project-id <ref> > src/lib/database.types.ts
+// Generated from supabase/schema.sql + migrations/001…013.
+// Re-generate against a live project with:
+//   npx supabase gen types typescript --linked > src/lib/database.types.ts
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
@@ -192,6 +193,134 @@ export type Database = {
           }
         ];
       };
+      product_variants: {
+        Row: {
+          id: string;
+          product_id: string;
+          size: string;
+          sku: string | null;
+          stock_qty: number;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          size: string;
+          sku?: string | null;
+          stock_qty?: number;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          size?: string;
+          sku?: string | null;
+          stock_qty?: number;
+          sort_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'product_variants_product_id_fkey';
+            columns: ['product_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      product_reviews: {
+        Row: {
+          id: string;
+          product_id: string;
+          user_id: string;
+          rating: number;
+          body: string | null;
+          author_name: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          user_id: string;
+          rating: number;
+          body?: string | null;
+          author_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          user_id?: string;
+          rating?: number;
+          body?: string | null;
+          author_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'product_reviews_product_id_fkey';
+            columns: ['product_id'];
+            isOneToOne: false;
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'product_reviews_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      shipping_methods: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          price: number;
+          estimated_days_min: number | null;
+          estimated_days_max: number | null;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description?: string | null;
+          price?: number;
+          estimated_days_min?: number | null;
+          estimated_days_max?: number | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string | null;
+          price?: number;
+          estimated_days_min?: number | null;
+          estimated_days_max?: number | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       addresses: {
         Row: {
           id: string;
@@ -259,8 +388,18 @@ export type Database = {
           discount_amount: number;
           total: number;
           shipping_address: Json;
+          shipping_method_id: string | null;
+          shipping_method_name: string | null;
           stripe_payment_intent_id: string | null;
           stripe_session_id: string | null;
+          tracking_id: string | null;
+          tracking_updated_at: string | null;
+          refund_id: string | null;
+          refund_amount: number | null;
+          refunded_at: string | null;
+          delivered_at: string | null;
+          needs_review: boolean;
+          review_reason: string | null;
           notes: string | null;
           created_at: string;
           updated_at: string;
@@ -275,8 +414,18 @@ export type Database = {
           discount_amount?: number;
           total: number;
           shipping_address: Json;
+          shipping_method_id?: string | null;
+          shipping_method_name?: string | null;
           stripe_payment_intent_id?: string | null;
           stripe_session_id?: string | null;
+          tracking_id?: string | null;
+          tracking_updated_at?: string | null;
+          refund_id?: string | null;
+          refund_amount?: number | null;
+          refunded_at?: string | null;
+          delivered_at?: string | null;
+          needs_review?: boolean;
+          review_reason?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -291,8 +440,18 @@ export type Database = {
           discount_amount?: number;
           total?: number;
           shipping_address?: Json;
+          shipping_method_id?: string | null;
+          shipping_method_name?: string | null;
           stripe_payment_intent_id?: string | null;
           stripe_session_id?: string | null;
+          tracking_id?: string | null;
+          tracking_updated_at?: string | null;
+          refund_id?: string | null;
+          refund_amount?: number | null;
+          refunded_at?: string | null;
+          delivered_at?: string | null;
+          needs_review?: boolean;
+          review_reason?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -303,6 +462,13 @@ export type Database = {
             columns: ['user_id'];
             isOneToOne: false;
             referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'orders_shipping_method_id_fkey';
+            columns: ['shipping_method_id'];
+            isOneToOne: false;
+            referencedRelation: 'shipping_methods';
             referencedColumns: ['id'];
           }
         ];
@@ -317,6 +483,7 @@ export type Database = {
           unit_price: number;
           quantity: number;
           total_price: number;
+          selected_size: string | null;
           created_at: string;
         };
         Insert: {
@@ -328,6 +495,7 @@ export type Database = {
           unit_price: number;
           quantity: number;
           total_price: number;
+          selected_size?: string | null;
           created_at?: string;
         };
         Update: {
@@ -339,6 +507,7 @@ export type Database = {
           unit_price?: number;
           quantity?: number;
           total_price?: number;
+          selected_size?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -351,77 +520,6 @@ export type Database = {
           },
           {
             foreignKeyName: 'order_items_product_id_fkey';
-            columns: ['product_id'];
-            isOneToOne: false;
-            referencedRelation: 'products';
-            referencedColumns: ['id'];
-          }
-        ];
-      };
-      carts: {
-        Row: {
-          id: string;
-          user_id: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          user_id: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          user_id?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'carts_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: true;
-            referencedRelation: 'profiles';
-            referencedColumns: ['id'];
-          }
-        ];
-      };
-      cart_items: {
-        Row: {
-          id: string;
-          cart_id: string;
-          product_id: string;
-          quantity: number;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          cart_id: string;
-          product_id: string;
-          quantity?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          cart_id?: string;
-          product_id?: string;
-          quantity?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'cart_items_cart_id_fkey';
-            columns: ['cart_id'];
-            isOneToOne: false;
-            referencedRelation: 'carts';
-            referencedColumns: ['id'];
-          },
-          {
-            foreignKeyName: 'cart_items_product_id_fkey';
             columns: ['product_id'];
             isOneToOne: false;
             referencedRelation: 'products';
@@ -468,6 +566,18 @@ export type Database = {
       get_my_role: {
         Args: Record<string, never>;
         Returns: Database['public']['Enums']['user_role'];
+      };
+      has_purchased: {
+        Args: { p_product_id: string };
+        Returns: boolean;
+      };
+      admin_analytics: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
+      expire_stale_pending_orders: {
+        Args: Record<string, never>;
+        Returns: number;
       };
     };
     Enums: {

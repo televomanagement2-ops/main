@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS public.product_variants (
   product_id   UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
   size         TEXT NOT NULL,          -- e.g. 'XS', 'S', 'M', 'L', 'XL', 'XXL'
   sku          TEXT,
-  stock_qty    INTEGER NOT NULL DEFAULT 0 CHECK (stock_qty >= 0),
+  -- No CHECK >= 0: paid orders are always honored, so variant stock may go
+  -- negative (backorder depth; see migration 013).
+  stock_qty    INTEGER NOT NULL DEFAULT 0,
   sort_order   INTEGER NOT NULL DEFAULT 0,
   is_active    BOOLEAN NOT NULL DEFAULT TRUE,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -35,7 +37,7 @@ VALUES
   ('b1000000-0000-0000-0000-000000000003', 'S',   'CCT-S-WHT',  80, 2),
   ('b1000000-0000-0000-0000-000000000003', 'M',   'CCT-M-WHT',  90, 3),
   ('b1000000-0000-0000-0000-000000000003', 'L',   'CCT-L-WHT',  70, 4),
-  ('b1000000-0000-0000-0000-000000000005', 'XL',  'CCT-XL-WHT', 20, 5)
+  ('b1000000-0000-0000-0000-000000000003', 'XL',  'CCT-XL-WHT', 20, 5)
 ON CONFLICT (product_id, size) DO NOTHING;
 
 -- ============================================================

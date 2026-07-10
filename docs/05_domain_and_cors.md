@@ -11,8 +11,8 @@
 5. Verify everything
 
 > **Note —** "CORS" controls which websites may call your backend functions from a browser.
-> During development the functions accept any origin (`*`); before going live, restrict them
-> to your own domain. **This is done entirely with a secret — no code editing.**
+> The functions **fail closed**: until you set `ALLOWED_ORIGINS`, every browser origin is
+> rejected — including localhost. **This is done entirely with a secret — no code editing.**
 
 ---
 
@@ -51,7 +51,9 @@ In Google Cloud Console → your OAuth client:
 
 CORS is **configured by a secret, not by editing code**. The browser-facing Edge Functions
 (`create-checkout-session`, `update-tracking`, `handle-order-action`) read the
-`ALLOWED_ORIGINS` secret at runtime.
+`ALLOWED_ORIGINS` secret at runtime. Setting it is **required** — with it unset, every
+browser origin is rejected and checkout returns 403 (the checkout redirect URLs are built
+from the caller's verified origin, so an unverifiable origin can't be trusted).
 
 1. Supabase → Project Settings → Edge Functions → Secrets → Add secret.
 2. Name: `ALLOWED_ORIGINS` — Value: your origin(s), comma-separated, no spaces, no trailing
@@ -59,13 +61,15 @@ CORS is **configured by a secret, not by editing code**. The browser-facing Edge
    ```
    https://yourstore.com,https://www.yourstore.com
    ```
-3. (Optional) While the Vercel preview subdomain keeps changing, any `*.vercel.app` origin is
-   accepted automatically. To turn that off once on your final domain, add:
+   For local development include your dev server too, e.g.
+   `http://localhost:5173,https://yourstore.com`.
+3. (Optional) While the Vercel preview subdomain keeps changing, you can accept any
+   `*.vercel.app` origin with `ALLOW_VERCEL_PREVIEWS=true`. The default is **false** —
+   leave it that way in production:
    ```
    ALLOW_VERCEL_PREVIEWS=false
    ```
-4. Save. **No redeploy needed** — secrets are read at runtime. If `ALLOWED_ORIGINS` is unset,
-   CORS falls back to `*` (fine for dev, not for production).
+4. Save. **No redeploy needed** — secrets are read at runtime.
 
 > **Note —** The `stripe-webhook` function is called by Stripe's servers (not a browser), so
 > it doesn't use CORS. CORS is not the security boundary — every privileged call still

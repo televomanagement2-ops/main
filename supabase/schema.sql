@@ -124,7 +124,9 @@ CREATE TABLE IF NOT EXISTS public.products (
   compare_at_price NUMERIC(10, 2) CHECK (compare_at_price >= 0),
   cost_price       NUMERIC(10, 2) CHECK (cost_price >= 0),
   sku              TEXT UNIQUE,
-  stock_quantity   INTEGER NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+  -- No CHECK >= 0: paid orders are always honored, so stock may go negative
+  -- (the negative value is the backorder depth; see migration 013).
+  stock_quantity   INTEGER NOT NULL DEFAULT 0,
   low_stock_threshold INTEGER NOT NULL DEFAULT 5,
   weight_grams     INTEGER CHECK (weight_grams >= 0),
   is_active        BOOLEAN NOT NULL DEFAULT TRUE,
@@ -243,45 +245,8 @@ CREATE TABLE IF NOT EXISTS public.order_items (
 CREATE INDEX IF NOT EXISTS idx_order_items_order   ON public.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_product ON public.order_items(product_id);
 
--- ============================================================
--- CARTS
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS public.carts (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id    UUID UNIQUE REFERENCES public.profiles(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_carts_user_id    ON public.carts(user_id);
-
-DROP TRIGGER IF EXISTS carts_updated_at ON public.carts;
-CREATE TRIGGER carts_updated_at
-  BEFORE UPDATE ON public.carts
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
-
--- ============================================================
--- CART ITEMS
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS public.cart_items (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  cart_id    UUID NOT NULL REFERENCES public.carts(id) ON DELETE CASCADE,
-  product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
-  quantity   INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT cart_items_unique UNIQUE (cart_id, product_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_cart_items_cart    ON public.cart_items(cart_id);
-CREATE INDEX IF NOT EXISTS idx_cart_items_product ON public.cart_items(product_id);
-
-DROP TRIGGER IF EXISTS cart_items_updated_at ON public.cart_items;
-CREATE TRIGGER cart_items_updated_at
-  BEFORE UPDATE ON public.cart_items
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+-- (No DB cart: the storefront cart lives in localStorage only — see
+-- migration 013 which drops the legacy carts/cart_items tables.)
 
 -- ============================================================
 -- STOCK RESERVATION (deduct on order, restore on cancel)

@@ -10,17 +10,6 @@ type BadgeVariant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
 type StatusFilter = 'all' | OrderStatus;
 type TrackingFeedback = { type: 'success' | 'error'; message: string };
 
-function getDeliverErrorMessage(err: unknown, fallback: string): string {
-  const raw = err instanceof Error ? err.message : '';
-  if (raw.includes('delivered_at') || raw.includes('schema cache')) {
-    return 'Errore DB: colonna delivered_at mancante. Esegui la migration 009 in Supabase e poi NOTIFY pgrst, \'reload schema\';';
-  }
-  if (raw.includes('JWT') || raw.includes('session') || raw.includes('Session')) {
-    return 'Sessione scaduta. Ricarica la pagina e riprova.';
-  }
-  return raw || fallback;
-}
-
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['processing', 'cancelled'],
   processing: ['requires_action', 'paid', 'failed', 'cancelled'],
@@ -34,17 +23,38 @@ const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 export function AdminOrdersPage() {
-  const { data: orders = [], isLoading, error } = useAdminOrders();
-  const updateStatus = useUpdateAdminOrderStatus();
-  const updateTracking = useUpdateAdminOrderTracking();
-  const markDelivered = useMarkOrderDelivered();
   const { t, tCount, formatCurrency, formatDateTime } = useI18n();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>({});
   const [trackingFeedback, setTrackingFeedback] = useState<Record<string, TrackingFeedback>>({});
   const [trackingSavingId, setTrackingSavingId] = useState<string | null>(null);
   const [deliverFeedback, setDeliverFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
+
+  const { data, isLoading, error } = useAdminOrders({
+    page,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    needsReviewOnly: needsReviewOnly || undefined,
+  });
+  const orders = useMemo(() => data?.data ?? [], [data]);
+  const totalPages = Math.max(1, Math.ceil((data?.count ?? 0) / (data?.pageSize ?? 50)));
+
+  const updateStatus = useUpdateAdminOrderStatus();
+  const updateTracking = useUpdateAdminOrderTracking();
+  const markDelivered = useMarkOrderDelivered();
+
+  const getDeliverErrorMessage = (err: unknown, fallback: string): string => {
+    const raw = err instanceof Error ? err.message : '';
+    if (raw.includes('delivered_at') || raw.includes('schema cache')) {
+      return t('admin.orders.errors.deliveredAtMissing');
+    }
+    if (raw.includes('JWT') || raw.includes('session') || raw.includes('Session')) {
+      return t('admin.orders.errors.sessionExpired');
+    }
+    return raw || fallback;
+  };
 
   const statusLabels: Record<OrderStatus, string> = {
     pending: t('status.pending'),
@@ -83,13 +93,11 @@ export function AdminOrdersPage() {
     { value: 'pending', label: statusLabels.pending },
   ];
 
+  // Search stays client-side within the fetched page.
   const filteredOrders = useMemo(() => {
     const term = search.trim().toLowerCase();
+    if (!term) return orders;
     return orders.filter((order) => {
-      const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-      if (!matchesStatus) return false;
-      if (!term) return true;
-
       const haystack = [
         order.id,
         order.profiles?.email,
@@ -100,7 +108,7 @@ export function AdminOrdersPage() {
 
       return haystack.includes(term);
     });
-  }, [orders, search, statusFilter]);
+  }, [orders, search]);
 
   if (isLoading) {
     return <div className="page-loading"><Spinner size="lg" /></div>;
@@ -129,7 +137,10 @@ export function AdminOrdersPage() {
             <select
               className="select"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+              onChange={(event) => {
+                setStatusFilter(event.target.value as StatusFilter);
+                setPage(1);
+              }}
             >
               {filters.map((filter) => (
                 <option key={filter.value} value={filter.value}>
@@ -146,6 +157,17 @@ export function AdminOrdersPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+          </label>
+          <label className="admin-filter" style={{ flexDirection: 'row', alignItems: 'center', gap: 'var(--sp-2)' }}>
+            <input
+              type="checkbox"
+              checked={needsReviewOnly}
+              onChange={(event) => {
+                setNeedsReviewOnly(event.target.checked);
+                setPage(1);
+              }}
+            />
+            <span>{t('admin.orders.filterNeedsReview')}</span>
           </label>
         </div>
       </div>
@@ -189,8 +211,21 @@ export function AdminOrdersPage() {
                       </p>
                     </div>
                   </div>
-                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                  <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {order.needs_review && (
+                      <Badge variant="danger">
+                        {t('admin.orders.needsReview')}
+                      </Badge>
+                    )}
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
+                  </div>
                 </div>
+
+                {order.needs_review && order.review_reason && (
+                  <p className="caption" style={{ color: 'var(--color-danger)', padding: '0 var(--sp-5)' }}>
+                    {t('admin.orders.reviewReasonLabel')}: {order.review_reason}
+                  </p>
+                )}
 
                 <div className="admin-order-card__body">
                   <div className="admin-order-details">
@@ -386,6 +421,26 @@ export function AdminOrdersPage() {
             );
           })}
         </div>
+      )}
+
+      {totalPages > 1 && (
+        <nav className="pagination" aria-label={t('products.paginationLabel')}>
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="btn btn-secondary btn-sm"
+          >
+            ← {t('products.prevPage')}
+          </button>
+          <span className="pagination-info">{page} / {totalPages}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="btn btn-secondary btn-sm"
+          >
+            {t('products.nextPage')} →
+          </button>
+        </nav>
       )}
     </div>
   );

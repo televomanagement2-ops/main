@@ -117,8 +117,20 @@ With Stripe in **Test mode**, check out on your site with a test card:
 | ZIP | Any value |
 
 After paying you should land on the success page, the order should show as **paid** in the
-`orders` table, and stock should decrease. (In Stripe → Developers → Webhooks you can inspect
-and resend each delivery — useful if an order stays pending.)
+`orders` table, stock should decrease, and the customer receives an order-confirmation email
+(when `RESEND_API_KEY` is configured). (In Stripe → Developers → Webhooks you can inspect
+and resend each delivery — useful if an order stays pending. Resending a processed event is
+safe: the webhook answers `duplicate: true` and changes nothing.)
+
+Good to know about the payment flow:
+
+- **Checkout sessions expire after 1 hour**; the pg_cron job (guide 03) cancels the
+  matching order after 2 hours, so it can never cancel a still-payable session.
+- **Paid orders are always honored.** If stock runs out between two concurrent checkouts,
+  both orders are marked paid, stock goes negative, and the later order is flagged
+  **needs_review** in Admin → Orders (badge + filter). See `supabase/SETUP_CHECKLIST.md`.
+- **Partial refunds** issued from the Stripe dashboard keep the order `paid` and record
+  `refund_amount`; only a full refund moves it to `refunded` (and restores stock).
 
 ---
 

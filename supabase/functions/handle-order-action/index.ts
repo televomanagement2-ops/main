@@ -1,39 +1,13 @@
-import Stripe from 'npm:stripe@14';
+import Stripe from 'npm:stripe@18';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { FROM_EMAIL, formatMoney, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
+import { formatMoney, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
+import { sendEmail } from '../_shared/email.ts';
 
-const STRIPE_API_VERSION = '2024-06-20';
-// Origins allowed to call this function from a browser. Set ALLOWED_ORIGINS
-// (comma-separated) as a secret; falls back to "*" only when unset.
-const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '*')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+const STRIPE_API_VERSION = '2025-03-31.basil';
 
-// Vercel preview/production subdomains change on every deploy and per licensee,
-// so allow *.vercel.app automatically unless explicitly disabled in production.
-const allowVercelPreviews = (Deno.env.get('ALLOW_VERCEL_PREVIEWS') ?? 'true').toLowerCase() !== 'false';
-
-const corsHeadersBase = {
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-// Returns the value to echo in Access-Control-Allow-Origin, or null if the
-// origin is not authorized (in which case NO such header should be emitted).
-function resolveAllowedOrigin(origin: string | null): string | null {
-  if (allowedOrigins.includes('*')) return '*';
-  if (!origin) return null;
-  if (allowedOrigins.includes(origin)) return origin;
-  if (allowVercelPreviews) {
-    try {
-      if (new URL(origin).hostname.endsWith('.vercel.app')) return origin;
-    } catch {
-      // malformed origin → not authorized
-    }
-  }
-  return null;
-}
+// Customer self-service cancel+refund abuse limit: max refunds per rolling 24 h.
+const MAX_SELF_REFUNDS_PER_DAY = 3;
 
 class OrderActionError extends Error {
   status: number;
@@ -46,19 +20,6 @@ class OrderActionError extends Error {
     this.code = code;
     this.phase = phase;
   }
-}
-
-function getCorsHeaders(origin: string | null) {
-  const allowOrigin = resolveAllowedOrigin(origin);
-  const headers: Record<string, string> = {
-    ...corsHeadersBase,
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
-  // Only emit Allow-Origin when the origin is authorized; never echo a different
-  // origin (that would break the request with a misleading CORS error).
-  if (allowOrigin) headers['Access-Control-Allow-Origin'] = allowOrigin;
-  return headers;
 }
 
 function jsonResponse(payload: unknown, status = 200, origin: string | null = null) {
@@ -88,46 +49,36 @@ function toOrderActionError(err: unknown): OrderActionError {
 }
 
 async function sendRefundEmail(params: {
-  resendApiKey: string;
-  fromEmail: string;
   toEmail: string;
   customerName: string;
   orderId: string;
   refundAmount: number;
   currency?: string;
 }) {
-  const { resendApiKey, fromEmail, toEmail, customerName, orderId, refundAmount, currency } = params;
+  const { toEmail, customerName, orderId, refundAmount, currency } = params;
   const shortOrderId = orderId.slice(0, 8).toUpperCase();
   const formattedAmount = formatMoney(refundAmount, currency);
   const safeName = escapeHtml(customerName);
 
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: toEmail,
-      subject: `Refund confirmed for your order #${shortOrderId}`,
-      html: renderEmail({
-        eyebrow: 'Refund processed',
-        heading: `Your refund is on its way, ${safeName}.`,
-        bodyHtml: `
-          <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
-            Your refund of <strong>${formattedAmount}</strong> for order <strong>#${shortOrderId}</strong> has been processed successfully.
-          </p>
-          <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
-            The funds will be credited back to your original payment method within <strong>3–5 business days</strong>, depending on your bank.
-          </p>
-          <p style="font-size: 14px; color: #666; line-height: 1.7; margin: 0;">
-            Questions? Just reply to this email and our team will help.
-          </p>
-        `,
-      }),
-      text: `Hi ${customerName},\n\nYour refund of ${formattedAmount} for order #${shortOrderId} has been processed.\n\nThe funds will arrive within 3-5 business days, depending on your bank.\n\nThanks for shopping with ${STORE_NAME}.`,
+  await sendEmail({
+    to: toEmail,
+    subject: `Refund confirmed for your order #${shortOrderId}`,
+    html: renderEmail({
+      eyebrow: 'Refund processed',
+      heading: `Your refund is on its way, ${safeName}.`,
+      bodyHtml: `
+        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+          Your refund of <strong>${formattedAmount}</strong> for order <strong>#${shortOrderId}</strong> has been processed successfully.
+        </p>
+        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+          The funds will be credited back to your original payment method within <strong>3–5 business days</strong>, depending on your bank.
+        </p>
+        <p style="font-size: 14px; color: #666; line-height: 1.7; margin: 0;">
+          Questions? Just reply to this email and our team will help.
+        </p>
+      `,
     }),
+    text: `Hi ${customerName},\n\nYour refund of ${formattedAmount} for order #${shortOrderId} has been processed.\n\nThe funds will arrive within 3-5 business days, depending on your bank.\n\nThanks for shopping with ${STORE_NAME}.`,
   });
 }
 
@@ -220,6 +171,32 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Rate limit: instant self-refunds are convenient but abusable
+      // (buy→cancel loops cost the store Stripe fees). Cap per rolling 24 h.
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: recentRefunds, error: refundCountErr } = await supabase
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('refunded_at', oneDayAgo);
+
+      if (refundCountErr) {
+        throw new OrderActionError(
+          500,
+          'DB_RATE_LIMIT_ERROR',
+          'cancel.rate_limit',
+          `Failed to check refund rate: ${refundCountErr.message}`,
+        );
+      }
+      if ((recentRefunds ?? 0) >= MAX_SELF_REFUNDS_PER_DAY) {
+        throw new OrderActionError(
+          429,
+          'RATE_LIMITED',
+          'cancel.rate_limit',
+          'Too many cancellations in the last 24 hours. Please contact support.',
+        );
+      }
+
       const stripeSecret = Deno.env.get('STRIPE_SECRET_KEY');
       if (!stripeSecret) {
         throw new OrderActionError(
@@ -278,17 +255,11 @@ Deno.serve(async (req) => {
       }
 
       // Refund confirmation email (non-blocking: failure does not affect the response)
-      const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = FROM_EMAIL;
-      const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
-      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Customer';
-
-      if (resendApiKey && customerEmail) {
+      const profile = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles;
+      if (profile?.email) {
         sendRefundEmail({
-          resendApiKey,
-          fromEmail,
-          toEmail: customerEmail,
-          customerName,
+          toEmail: profile.email,
+          customerName: profile.full_name ?? 'Customer',
           orderId,
           refundAmount: refundValue,
         }).catch((emailErr) => {
@@ -401,17 +372,11 @@ Deno.serve(async (req) => {
       }
 
       // Send refund confirmation email (non-blocking: failure does not affect the refund response)
-      const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = FROM_EMAIL;
-      const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
-      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Customer';
-
-      if (resendApiKey && customerEmail) {
+      const customer = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles;
+      if (customer?.email) {
         sendRefundEmail({
-          resendApiKey,
-          fromEmail,
-          toEmail: customerEmail,
-          customerName,
+          toEmail: customer.email,
+          customerName: customer.full_name ?? 'Customer',
           orderId,
           refundAmount: refundValue,
         }).catch((emailErr) => {
@@ -463,36 +428,25 @@ Deno.serve(async (req) => {
       }
 
       // Send delivery notification email (non-blocking)
-      const resendApiKey = Deno.env.get('RESEND_API_KEY');
-      const fromEmail = FROM_EMAIL;
-      const customerEmail = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.email;
-      const customerName = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles?.full_name ?? 'Customer';
-
-      if (resendApiKey && customerEmail) {
-        fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: fromEmail,
-            to: customerEmail,
-            subject: `Your ${STORE_NAME} order has been delivered`,
-            html: renderEmail({
-              eyebrow: 'Delivery confirmed',
-              heading: `Your order has arrived, ${escapeHtml(customerName)}.`,
-              bodyHtml: `
-                <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
-                  The carrier has completed delivery. We hope everything is exactly as you expected.
-                </p>
-                <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0;">
-                  If you have any questions about your order, received the wrong item, or need help, just reply to this email — our team responds within 24 hours.
-                </p>
-              `,
-            }),
-            text: `Hi ${customerName},\n\nYour ${STORE_NAME} order has been delivered.\n\nWe hope everything is exactly as you expected.\n\nIf you have any questions or problems, just reply to this email — our team responds within 24 hours.\n\nThanks for shopping with ${STORE_NAME}.`,
+      const customer = (updatedOrder as { profiles?: { email?: string; full_name?: string } }).profiles;
+      if (customer?.email) {
+        const customerName = customer.full_name ?? 'Customer';
+        sendEmail({
+          to: customer.email,
+          subject: `Your ${STORE_NAME} order has been delivered`,
+          html: renderEmail({
+            eyebrow: 'Delivery confirmed',
+            heading: `Your order has arrived, ${escapeHtml(customerName)}.`,
+            bodyHtml: `
+              <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
+                The carrier has completed delivery. We hope everything is exactly as you expected.
+              </p>
+              <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0;">
+                If you have any questions about your order, received the wrong item, or need help, just reply to this email — our team responds within 24 hours.
+              </p>
+            `,
           }),
+          text: `Hi ${customerName},\n\nYour ${STORE_NAME} order has been delivered.\n\nWe hope everything is exactly as you expected.\n\nIf you have any questions or problems, just reply to this email — our team responds within 24 hours.\n\nThanks for shopping with ${STORE_NAME}.`,
         }).catch((emailErr) => {
           console.error('Delivery email failed (non-blocking):', emailErr);
         });

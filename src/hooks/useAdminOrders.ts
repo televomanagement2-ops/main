@@ -1,11 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchAdminOrders, markOrderDelivered, refundOrder, updateOrderStatus, updateOrderTracking } from '../lib/api';
+import {
+  fetchAdminOrders,
+  markOrderDelivered,
+  refundOrder,
+  updateOrderStatus,
+  updateOrderTracking,
+  type AdminOrdersFilters,
+} from '../lib/api';
 import type { OrderStatus } from '../types';
 
-export function useAdminOrders() {
+export function useAdminOrders(filters: AdminOrdersFilters = {}) {
   return useQuery({
-    queryKey: ['admin-orders'],
-    queryFn: () => fetchAdminOrders(),
+    queryKey: ['admin-orders', filters],
+    queryFn: () => fetchAdminOrders(filters),
   });
 }
 

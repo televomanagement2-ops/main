@@ -9,8 +9,8 @@ import {
   fetchAdminCategories,
   createCategory,
   type ProductInput,
+  type ProductUpdate,
 } from '../lib/api';
-import type { Product } from '../types';
 
 export function useAdminProducts() {
   return useQuery({
@@ -22,7 +22,7 @@ export function useAdminProducts() {
 export function useUpdateAdminProduct() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ productId, updates }: { productId: string; updates: Partial<Product> }) =>
+    mutationFn: ({ productId, updates }: { productId: string; updates: ProductUpdate }) =>
       updateProduct(productId, updates),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-products'] });

@@ -8,6 +8,7 @@ import { OrdersPage } from '../features/orders/pages/OrdersPage';
 import { OrderDetailPage } from '../features/orders/pages/OrderDetailPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { AuthCallbackPage } from '../features/auth/pages/AuthCallbackPage';
+import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
 import { CheckoutPage } from '../features/checkout/pages/CheckoutPage';
 import { CheckoutSuccessPage } from '../features/checkout/pages/CheckoutSuccessPage';
 import { CheckoutCancelPage } from '../features/checkout/pages/CheckoutCancelPage';
@@ -36,6 +37,7 @@ const router = createBrowserRouter([
       { path: 'products/:slug', element: <ProductDetailPage /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'auth/callback', element: <AuthCallbackPage /> },
+      { path: 'auth/reset', element: <ResetPasswordPage /> },
       {
         path: 'cart',
         element: (

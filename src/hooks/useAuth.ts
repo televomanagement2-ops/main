@@ -3,8 +3,6 @@ import { useShallow } from 'zustand/shallow';
 import { supabase } from '../lib/supabaseClient';
 import { fetchProfile } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
-import { mergeGuestCartIntoDbCart } from '../lib/cartMerge';
-import { useCartStore } from '../store/cartStore';
 
 const PROFILE_FETCH_TIMEOUT_MS = 8000;
 
@@ -17,10 +15,23 @@ async function fetchProfileWithTimeout(userId: string) {
   ]);
 }
 
+function loadProfile(userId: string) {
+  const { setProfile, setProfileStatus } = useAuthStore.getState();
+  setProfileStatus('loading');
+  return fetchProfileWithTimeout(userId)
+    .then((profile) => {
+      setProfile(profile);
+      setProfileStatus('loaded');
+    })
+    .catch((err) => {
+      console.error('Profile fetch error:', err);
+      setProfileStatus('error');
+    });
+}
+
 export function useAuthListener() {
   useEffect(() => {
-    const { setUser, setSession, setProfile, setIsLoading, reset } =
-      useAuthStore.getState();
+    const { setUser, setSession, setIsLoading, reset } = useAuthStore.getState();
 
     // Initialise from existing session (runs once on mount)
     supabase.auth.getSession()
@@ -31,11 +42,7 @@ export function useAuthListener() {
 
         if (session?.user) {
           // Profile loading is best-effort and must never block app bootstrap.
-          void fetchProfileWithTimeout(session.user.id)
-            .then((profile) => setProfile(profile))
-            .catch((err) => {
-              console.error('Initial auth profile fetch error:', err);
-            });
+          void loadProfile(session.user.id);
         }
       })
       .catch((err) => {
@@ -47,40 +54,16 @@ export function useAuthListener() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      const { setUser, setSession, setProfile, reset } =
-        useAuthStore.getState();
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { setUser, setSession, setIsLoading, reset } = useAuthStore.getState();
 
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
 
       if (session?.user) {
-        // Avoid awaiting async work inside onAuthStateChange callback.
-        void (async () => {
-          try {
-            const profile = await fetchProfileWithTimeout(session.user.id);
-            setProfile(profile);
-
-            // Merge guest cart only once right after explicit sign-in.
-            // Do not call refreshSession() inside onAuthStateChange because it can
-            // race with Supabase internal refresh handling and trigger sign-out loops.
-            if (event === 'SIGNED_IN' && session.access_token) {
-              const guestItems = useCartStore.getState().items;
-              if (guestItems.length > 0) {
-                await mergeGuestCartIntoDbCart(
-                  session.user.id,
-                  guestItems,
-                  () => useCartStore.getState().clearCart(),
-                ).catch((mergeErr: unknown) => {
-                  console.error('Guest cart merge failed:', mergeErr);
-                });
-              }
-            }
-          } catch (err) {
-            console.error('Auth state change error:', err);
-          }
-        })();
+        // Avoid awaiting async work inside the onAuthStateChange callback.
+        void loadProfile(session.user.id);
       } else {
         reset();
       }
@@ -95,6 +78,7 @@ export function useAuth() {
     useShallow((s) => ({
       user: s.user,
       profile: s.profile,
+      profileStatus: s.profileStatus,
       session: s.session,
       isLoading: s.isLoading,
       isAuthenticated: Boolean(s.user),

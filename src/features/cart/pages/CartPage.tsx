@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useCartStore } from '../../../store/cartStore';
+import { useCartSync } from '../../../hooks/useCartSync';
 import { CartItemRow } from '../components/CartItemRow';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
@@ -8,6 +9,7 @@ import { computeOrderTotals } from '../../../lib/pricing';
 export function CartPage() {
   const items     = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
+  const cartSync  = useCartSync();
   const subtotal  = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const { t, tCount, formatCurrency } = useI18n();
 
@@ -46,10 +48,19 @@ export function CartPage() {
         </button>
       </div>
 
+      {cartSync.changed && (
+        <div className="alert alert-warning" style={{ marginBottom: 'var(--sp-5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--sp-4)' }}>
+          <span>{t('cart.pricesUpdated')}</span>
+          <button className="btn btn-ghost btn-sm" onClick={cartSync.dismiss}>
+            {t('cart.dismiss')}
+          </button>
+        </div>
+      )}
+
       <div className="cart-layout">
         <div className="cart-items-list">
           {items.map((item) => (
-            <CartItemRow key={item.product.id} item={item} />
+            <CartItemRow key={`${item.product.id}-${item.selectedSize ?? ''}`} item={item} />
           ))}
         </div>
 
@@ -62,7 +73,7 @@ export function CartPage() {
           </div>
           <div className="summary-line">
             <span>{t('cart.shipping')}</span>
-            <span className="summary-line--free">{t('common.free')}</span>
+            <span>{t('cart.calculatedAtCheckout')}</span>
           </div>
           {tax > 0 && (
             <div className="summary-line">

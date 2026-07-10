@@ -164,16 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_stripe_intent
   ON public.orders(stripe_payment_intent_id)
   WHERE stripe_payment_intent_id IS NOT NULL;
 
--- ============================================================
--- FIX 4: CART — remove guest session_id, enforce one cart per user
--- ============================================================
-ALTER TABLE public.carts DROP CONSTRAINT IF EXISTS cart_owner_check;
-ALTER TABLE public.carts DROP COLUMN IF EXISTS session_id;
-
-ALTER TABLE public.carts DROP CONSTRAINT IF EXISTS carts_user_id_key;
-ALTER TABLE public.carts ADD CONSTRAINT carts_user_id_key UNIQUE (user_id);
-
-ALTER TABLE public.carts ALTER COLUMN user_id SET NOT NULL;
+-- (FIX 4 removed: the DB cart no longer exists — localStorage cart only.)
 
 -- ============================================================
 -- FIX 5: DATA INTEGRITY — price/quantity checks on order_items
@@ -202,7 +193,6 @@ ALTER TABLE public.orders
 CREATE INDEX IF NOT EXISTS idx_products_category  ON public.products(category_id);
 CREATE INDEX IF NOT EXISTS idx_orders_user_id     ON public.orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order  ON public.order_items(order_id);
-CREATE INDEX IF NOT EXISTS idx_cart_items_cart    ON public.cart_items(cart_id);
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_created
   ON public.orders(user_id, created_at DESC);

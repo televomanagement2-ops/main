@@ -115,10 +115,11 @@ export interface ProductReview {
   user_id: string;
   rating: number;
   body: string | null;
+  // Snapshot of the reviewer's display name (set by a DB trigger) — public
+  // reviews no longer join profiles, which leaked reviewer emails.
+  author_name: string | null;
   created_at: string;
   updated_at: string;
-  // joined
-  profiles?: Pick<Profile, 'full_name' | 'email'>;
 }
 
 export interface OrderItem {
@@ -154,32 +155,17 @@ export interface Order {
   refund_id?: string | null;
   refund_amount?: number | null;
   delivered_at?: string | null;
+  // Operator attention flag (e.g. 'oversold', or a webhook business-rule
+  // rejection). Paid orders are always honored; this surfaces the ones that
+  // need manual follow-up.
+  needs_review?: boolean;
+  review_reason?: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
   // joined
   order_items?: OrderItem[];
   profiles?: Pick<Profile, 'full_name' | 'email' | 'phone'>;
-}
-
-export interface CartItem {
-  id: string;
-  cart_id: string;
-  product_id: string;
-  quantity: number;
-  created_at: string;
-  updated_at: string;
-  // joined
-  products?: Product;
-}
-
-export interface Cart {
-  id: string;
-  user_id: string;
-  created_at: string;
-  updated_at: string;
-  // joined
-  cart_items?: CartItem[];
 }
 
 // ---- UI / Store types ----
@@ -211,6 +197,11 @@ export interface AdminAnalytics {
   grossRevenue: number;
   orders24h: number;
   orders7d: number;
+  needsReview: number;
   bestSeller: { productId: string; productName: string; quantity: number } | null;
   statusCounts: Record<OrderStatus, number>;
+  /** Daily gross revenue over the last 30 days (days without sales omitted). */
+  revenueByDay: { day: string; revenue: number }[];
+  /** Gross revenue split by order status (revenue statuses only). */
+  revenueByStatus: Partial<Record<OrderStatus, number>>;
 }

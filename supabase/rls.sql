@@ -48,15 +48,6 @@ DROP POLICY IF EXISTS "orders: admin update" ON public.orders;
 DROP POLICY IF EXISTS "order_items: owner select" ON public.order_items;
 DROP POLICY IF EXISTS "order_items: owner insert" ON public.order_items;
 
-DROP POLICY IF EXISTS "carts: owner select" ON public.carts;
-DROP POLICY IF EXISTS "carts: owner insert" ON public.carts;
-DROP POLICY IF EXISTS "carts: owner delete" ON public.carts;
-
-DROP POLICY IF EXISTS "cart_items: owner select" ON public.cart_items;
-DROP POLICY IF EXISTS "cart_items: owner insert" ON public.cart_items;
-DROP POLICY IF EXISTS "cart_items: owner update" ON public.cart_items;
-DROP POLICY IF EXISTS "cart_items: owner delete" ON public.cart_items;
-
 -- ============================================================
 -- PROFILES
 -- ============================================================
@@ -223,62 +214,4 @@ CREATE POLICY "order_items: owner insert"
     )
   );
 
--- ============================================================
--- CARTS
--- ============================================================
-
-ALTER TABLE public.carts ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "carts: owner select"
-  ON public.carts FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "carts: owner insert"
-  ON public.carts FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "carts: owner delete"
-  ON public.carts FOR DELETE
-  USING (auth.uid() = user_id);
-
--- ============================================================
--- CART ITEMS
--- ============================================================
-
-ALTER TABLE public.cart_items ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "cart_items: owner select"
-  ON public.cart_items FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.carts c
-      WHERE c.id = cart_id AND c.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "cart_items: owner insert"
-  ON public.cart_items FOR INSERT
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.carts c
-      WHERE c.id = cart_id AND c.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "cart_items: owner update"
-  ON public.cart_items FOR UPDATE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.carts c
-      WHERE c.id = cart_id AND c.user_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "cart_items: owner delete"
-  ON public.cart_items FOR DELETE
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.carts c
-      WHERE c.id = cart_id AND c.user_id = auth.uid()
-    )
-  );
+-- (No DB cart: the storefront cart lives in localStorage only.)
