@@ -6,8 +6,9 @@ import { useOrders } from '../../../hooks/useOrders';
 import { RowsSkeleton } from '../../../components/ui/Skeletons';
 import { ErrorMessage } from '../../../components/ui/ErrorMessage';
 import { Media } from '../../../components/ui/Media';
+import { Badge } from '../../../components/ui/Badge';
 import { OrderStatus as OrderStatusIndicator } from '../../../components/ui/StatusIndicator';
-import { IconChevronRight, IconLogout, IconSettings } from '../../../components/ui/icons';
+import { IconChart, IconChevronRight, IconLogout, IconSettings } from '../../../components/ui/icons';
 import { supabase } from '../../../lib/supabaseClient';
 import { useI18n } from '../../../lib/i18n';
 import type { OrderStatus } from '../../../types';
@@ -29,7 +30,7 @@ const OPEN_ORDER_STATUSES: OrderStatus[] = ['pending', 'processing', 'requires_a
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
   const { data: orders = [], isLoading, error } = useOrders();
   const { t, tCount, formatDate, formatCurrency } = useI18n();
 
@@ -124,8 +125,21 @@ export function ProfilePage() {
           <p className="t-sm t-faint" style={{ marginTop: 'var(--s-3)' }}>
             {profile?.email ?? user?.email ?? t('profile.noEmail')}
           </p>
+          {/* The account role, shown where the owner looks after changing it in
+              Supabase — otherwise a promotion is invisible until /admin is hit. */}
+          {isAdmin && (
+            <p style={{ marginTop: 'var(--s-3)' }}>
+              <Badge accent>{t('sidebar.admin')}</Badge>
+            </p>
+          )}
         </div>
         <div className="account-head__actions">
+          {isAdmin && (
+            <Link to="/admin" className="btn btn--secondary btn--sm">
+              <IconChart size={15} />
+              {t('sidebar.dashboard')}
+            </Link>
+          )}
           <Link to="/settings" className="icon-btn" aria-label={t('profile.openSettings')}>
             <IconSettings size={16} />
           </Link>

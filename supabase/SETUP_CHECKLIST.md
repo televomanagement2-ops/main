@@ -7,10 +7,32 @@
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
 3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
-   `013_payment_reliability.sql`. Run each one.
-   > Already-migrated database (ran 001–012 before)? Only run
-   > `013_payment_reliability.sql`, then `NOTIFY pgrst, 'reload schema';`
+   `014_role_management.sql`. Run each one.
+   > Already-migrated database (ran 001–013 before)? Only run
+   > `014_role_management.sql`, then `NOTIFY pgrst, 'reload schema';`
 4. `supabase/seeds/002_mock_products.sql` ← optional sample products
+
+### Assign the admin role
+
+`014_role_management.sql` installs `set_user_role()`. After signing up in the app:
+
+```sql
+select public.set_user_role('you@your-domain.com', 'admin');  -- or 'customer'
+```
+
+The `role` column is not writable through the app or the API (that is what stops customers
+from promoting themselves), so role changes belong here. Unlike a hand-edit in the Table
+Editor, the function refuses to demote the last admin and tells you when the account has no
+profile row yet.
+
+Check who is what:
+
+```sql
+select u.email, coalesce(p.role::text, 'MISSING PROFILE') as role
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+ order by u.created_at desc;
+```
 
 ### Schedule the stale-order cron (REQUIRED)
 

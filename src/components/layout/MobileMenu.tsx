@@ -18,7 +18,7 @@ export function MobileMenu() {
   const { t } = useI18n();
   const location = useLocation();
   const close = useUiStore((s) => s.close);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
   const { data: categories = [] } = useCategories();
   const language = usePreferencesStore((s) => s.language);
   const setLanguage = usePreferencesStore((s) => s.setLanguage);
@@ -69,6 +69,16 @@ export function MobileMenu() {
             </Link>
           ))}
         </nav>
+
+        {isAdmin && (
+          <section className="mobile-menu__section">
+            <p className="t-label" style={{ marginBottom: 'var(--s-2)' }}>{t('sidebar.admin')}</p>
+            <Link to="/admin" className="mobile-menu__sub">
+              <span>{t('sidebar.dashboard')}</span>
+              <IconArrowUpRight size={14} />
+            </Link>
+          </section>
+        )}
 
         {categories.length > 0 && (
           <section className="mobile-menu__section">

@@ -56,6 +56,7 @@
   <li>Set the backend secrets</li>
   <li>Deploy the Edge Functions</li>
   <li>Quick test</li>
+  <li>Make the first admin</li>
 </ol>
 
 <blockquote><p><strong>Note —</strong> Supabase is your backend: database, user authentication, and serverless Edge
@@ -80,13 +81,17 @@ click Run):</p>
   <li><code>supabase/schema.sql</code> — tables &amp; types</li>
   <li><code>supabase/rls.sql</code> — security policies</li>
   <li><strong>Every file in <code>supabase/migrations/</code> in numeric order</strong> — <code>001_fixes.sql</code> through
-    <code>012_us_shipping_cleanup.sql</code>. Run each one. (There are two <code>004_*</code> files — run both.)</li>
+    <code>014_role_management.sql</code>. Run each one.</li>
   <li><code>supabase/seeds/002_mock_products.sql</code> — optional demo catalog (skip if you'll add your
     own products right away)</li>
 </ol>
 
 <blockquote><p><strong>Important —</strong> Run the migrations in order. They build on each other; skipping one can
-leave the checkout schema incomplete.</p></blockquote>
+leave the checkout schema incomplete. If your database already ran 001–013, only run
+<code>014_role_management.sql</code>, then <code>NOTIFY pgrst, 'reload schema';</code></p></blockquote>
+
+<p><code>014_role_management.sql</code> installs <code>set_user_role()</code>, the supported way to make somebody an
+admin (or put them back to customer) — see <em>Make the first admin</em> below.</p>
 
 <blockquote><p><strong>Tip —</strong> <code>supabase/SETUP_CHECKLIST.md</code> contains verification queries to confirm every
 required column exists.</p></blockquote>
@@ -186,6 +191,39 @@ supabase functions deploy handle-order-action</code></pre>
 </ul>
 
 <blockquote><p><strong>Tip —</strong> Common pitfalls and fixes are listed in <code>supabase/SETUP_CHECKLIST.md</code>.</p></blockquote>
+
+<hr>
+
+<h2>8. Make the first admin</h2>
+
+<p>Sign up with the account you want to run the store from, then in <strong>SQL Editor</strong> run:</p>
+
+<pre><code>select public.set_user_role('you@your-domain.com', 'admin');</code></pre>
+
+<p>It returns the id, email and new role of the account it changed. To put somebody back to
+customer, use <code>'customer'</code> — the function refuses to demote the <em>last</em> admin, so you cannot
+lock yourself out.</p>
+
+<p>Sign out and back in (or reload the page): <strong>Admin</strong> now appears in the site header, in the
+mobile menu, and on your profile page, and it opens the dashboard at <code>/admin</code>.</p>
+
+<blockquote><p><strong>Why not edit the column by hand?</strong> Through the app and the API the <code>role</code> column is
+not writable at all — that is what stops a customer from promoting themselves. Editing the cell
+in the Table Editor or a plain <code>update</code> in the SQL Editor still works (both run as the database
+owner), but they skip the last-admin check and say nothing when the account simply has no
+profile row yet. <code>set_user_role()</code> (installed by <code>014_role_management.sql</code>) is the supported
+path.</p></blockquote>
+
+<p><strong>If it says <code>No profile found for ...</code></strong> the account has not signed up yet, or its profile
+row is missing. Check with:</p>
+
+<pre><code>select u.id, u.email, p.role
+  from auth.users u
+  left join public.profiles p on p.id = u.id
+ order by u.created_at desc;</code></pre>
+
+<p>A <code>role</code> of <code>NULL</code> means the profile row is missing — re-run <code>014_role_management.sql</code>,
+which backfills them, then try again.</p>
 
 </body>
 </html>

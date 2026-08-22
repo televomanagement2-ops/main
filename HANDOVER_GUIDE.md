@@ -132,10 +132,20 @@ Security is enforced on all tables. See [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md)
 After signing up your own account, promote it to admin in the Supabase SQL editor:
 
 ```sql
-update public.profiles set role = 'admin' where email = 'you@your-domain.com';
+select public.set_user_role('you@your-domain.com', 'admin');
 ```
 
-Admins access `/admin` (dashboard, orders, catalog, finance).
+Pass `'customer'` to demote somebody. The function refuses to demote the last admin, so you
+cannot lock yourself out of the dashboard.
+
+> Requires `supabase/migrations/014_role_management.sql`. The `role` column is not writable
+> through the app or the API — that is what stops customers from promoting themselves — so
+> role changes belong in the SQL editor, where this function also guards against demoting
+> the last admin.
+
+Admins access `/admin` (dashboard, orders, catalog, finance). Once promoted, **Admin**
+appears in the site header, in the mobile menu, and on the profile page; reload the page
+after the role change so the app picks it up.
 
 ---
 
@@ -160,7 +170,7 @@ Admins access `/admin` (dashboard, orders, catalog, finance).
 ## Step 6 — Go-live checklist
 
 - [ ] `src/config/storeConfig.ts` fully filled (no `[...]` left) — name, contacts, legal.
-- [ ] All migrations applied in order (through `012_us_shipping_cleanup.sql`); RLS enabled on every table.
+- [ ] All migrations applied in order (through `014_role_management.sql`); RLS enabled on every table.
 - [ ] All four Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`, tax
       (`TAX_RATE`/`STRIPE_TAX_ENABLED`), and email branding (`STORE_NAME`/`RESEND_FROM_EMAIL`).
 - [ ] Sent a test order email (shipping/refund/delivery) and confirmed it shows your brand.

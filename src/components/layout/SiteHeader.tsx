@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Wordmark } from '../ui/Wordmark';
-import { IconBag, IconChevronDown, IconMenu, IconSearch, IconUser } from '../ui/icons';
+import { IconBag, IconChart, IconChevronDown, IconMenu, IconSearch, IconUser } from '../ui/icons';
 import { useCartStore } from '../../store/cartStore';
 import { useUiStore } from '../../store/uiStore';
 import { useAuth } from '../../hooks/useAuth';
@@ -16,7 +16,7 @@ import { useI18n } from '../../lib/i18n';
 export function SiteHeader() {
   const { t } = useI18n();
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
   const count = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
   const open = useUiStore((s) => s.open);
   const { data: categories = [] } = useCategories();
@@ -102,6 +102,15 @@ export function SiteHeader() {
         </nav>
 
         <div className="site-actions">
+          {/* The only storefront door into the admin workspace — rendered for
+              admins alone, so the role change in Supabase is visible here. */}
+          {isAdmin && (
+            <Link to="/admin" className="site-action site-action--admin" aria-label={t('sidebar.admin')}>
+              <IconChart size={17} />
+              <span className="site-action__label hide-sm">{t('sidebar.admin')}</span>
+            </Link>
+          )}
+
           <button
             type="button"
             className="site-action"

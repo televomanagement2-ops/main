@@ -19,6 +19,10 @@ function loadProfile(userId: string) {
   const { setProfile, setProfileStatus } = useAuthStore.getState();
   setProfileStatus('loading');
   return fetchProfileWithTimeout(userId)
+    // One retry: a dropped first request would otherwise leave the session
+    // permanently role-less — no admin entry, and /admin bouncing home —
+    // until the user reloads the page by hand.
+    .catch(() => fetchProfileWithTimeout(userId))
     .then((profile) => {
       setProfile(profile);
       setProfileStatus('loaded');

@@ -102,6 +102,10 @@
 }
 .site-action:hover { color: var(--ink); background: var(--neutral-soft); }
 .site-action__count { font-variant-numeric: tabular-nums; }
+/* Admin entry: carried in accent so the operator can find it at a glance,
+   but with the same weight and geometry as the other actions. */
+.site-action--admin { color: var(--accent); }
+.site-action--admin:hover { color: var(--accent); background: var(--accent-soft); }
 .site-header__burger {
   display: none;
   width: 36px; height: 36px;
