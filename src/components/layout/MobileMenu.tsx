@@ -41,6 +41,7 @@ export function MobileMenu() {
   }, [close]);
 
   const primary = [
+    { to: '/', label: t('sidebar.home') },
     { to: '/products', label: t('nav.shop') },
     { to: '/orders', label: t('sidebar.myOrders'), auth: true },
     { to: '/help', label: t('nav.about') },

@@ -77,6 +77,15 @@ export function SiteHeader() {
         </div>
 
         <nav className="site-nav hide-sm" aria-label={t('nav.mainNavigation')}>
+          {/* `end` so Home is only active on "/" — every other page would
+              otherwise match it and light two items at once. */}
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `site-nav__link${isActive ? ' is-active' : ''}`}
+          >
+            {t('sidebar.home')}
+          </NavLink>
           <NavLink
             to="/products"
             className={({ isActive }) => `site-nav__link${isActive ? ' is-active' : ''}`}

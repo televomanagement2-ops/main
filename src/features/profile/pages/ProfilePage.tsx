@@ -84,15 +84,64 @@ export function ProfilePage() {
       .slice(0, 5);
   }, [recentPurchasedItems, buyAgainProducts]);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
+
+  // The head and the admin entry depend only on the session, so they render
+  // even while the orders query is loading or has failed — the way into the
+  // dashboard must never hang on an unrelated request.
+  const accountHead = (
+    <header className="account-head">
+      <div className="account-head__title">
+        <p className="t-label">{t('profile.account')}</p>
+        <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{displayName}</h1>
+        <p className="t-sm t-faint" style={{ marginTop: 'var(--s-3)' }}>
+          {profile?.email ?? user?.email ?? t('profile.noEmail')}
+        </p>
+        {/* The role the app currently sees. Shown for customers too: after a
+            change in Supabase this line is how you check it actually landed. */}
+        {profile && (
+          <p style={{ marginTop: 'var(--s-3)' }}>
+            <Badge accent={isAdmin}>
+              {isAdmin ? t('sidebar.admin') : t('profile.roleCustomer')}
+            </Badge>
+          </p>
+        )}
+      </div>
+      <div className="account-head__actions">
+        <Link to="/settings" className="icon-btn" aria-label={t('profile.openSettings')}>
+          <IconSettings size={16} />
+        </Link>
+        <button type="button" className="icon-btn" onClick={handleSignOut} aria-label={t('nav.signOut')}>
+          <IconLogout size={16} />
+        </button>
+      </div>
+    </header>
+  );
+
+  const adminEntry = isAdmin ? (
+    <section className="panel admin-entry">
+      <div className="admin-entry__text">
+        <p className="t-label">{t('sidebar.admin')}</p>
+        <h2 className="t-h3" style={{ marginTop: 'var(--s-2)' }}>{t('profile.adminTitle')}</h2>
+        <p className="t-sm t-faint" style={{ marginTop: 'var(--s-2)', maxWidth: '46ch' }}>
+          {t('profile.adminBody')}
+        </p>
+      </div>
+      <Link to="/admin" className="btn btn--primary">
+        <IconChart size={15} />
+        {t('sidebar.dashboard')}
+      </Link>
+    </section>
+  ) : null;
+
   if (isLoading) {
     return (
-      <div className="page">
-        <header className="account-head">
-          <div className="account-head__title">
-            <p className="t-label">{t('profile.account')}</p>
-            <div className="sk" style={{ height: 44, width: 280, marginTop: 'var(--s-3)' }} />
-          </div>
-        </header>
+      <div className="page" style={{ paddingBottom: 'var(--s-20)' }}>
+        {accountHead}
+        {adminEntry}
         <RowsSkeleton rows={4} height={72} />
       </div>
     );
@@ -100,7 +149,9 @@ export function ProfilePage() {
 
   if (error) {
     return (
-      <div className="page" style={{ paddingTop: 'var(--s-16)' }}>
+      <div className="page" style={{ paddingBottom: 'var(--s-20)' }}>
+        {accountHead}
+        {adminEntry}
         <ErrorMessage />
       </div>
     );
@@ -111,43 +162,10 @@ export function ProfilePage() {
     .filter((o) => PURCHASED_ORDER_STATUSES.includes(o.status))
     .reduce((sum, o) => sum + o.total, 0);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate('/');
-  };
-
   return (
     <div className="page" style={{ paddingBottom: 'var(--s-20)' }}>
-      <header className="account-head">
-        <div className="account-head__title">
-          <p className="t-label">{t('profile.account')}</p>
-          <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{displayName}</h1>
-          <p className="t-sm t-faint" style={{ marginTop: 'var(--s-3)' }}>
-            {profile?.email ?? user?.email ?? t('profile.noEmail')}
-          </p>
-          {/* The account role, shown where the owner looks after changing it in
-              Supabase — otherwise a promotion is invisible until /admin is hit. */}
-          {isAdmin && (
-            <p style={{ marginTop: 'var(--s-3)' }}>
-              <Badge accent>{t('sidebar.admin')}</Badge>
-            </p>
-          )}
-        </div>
-        <div className="account-head__actions">
-          {isAdmin && (
-            <Link to="/admin" className="btn btn--secondary btn--sm">
-              <IconChart size={15} />
-              {t('sidebar.dashboard')}
-            </Link>
-          )}
-          <Link to="/settings" className="icon-btn" aria-label={t('profile.openSettings')}>
-            <IconSettings size={16} />
-          </Link>
-          <button type="button" className="icon-btn" onClick={handleSignOut} aria-label={t('nav.signOut')}>
-            <IconLogout size={16} />
-          </button>
-        </div>
-      </header>
+      {accountHead}
+      {adminEntry}
 
       {/* Account snapshot — numbers first, no decorative panels. */}
       <div className="kpi-strip" style={{ marginBottom: 'clamp(40px, 5vw, 72px)' }}>

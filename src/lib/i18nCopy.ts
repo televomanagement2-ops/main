@@ -149,6 +149,9 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
       appearance: 'Appearance',
       recentOrders: 'Recent activity',
       allOrders: 'All orders',
+      roleCustomer: 'Customer',
+      adminTitle: 'You run this store',
+      adminBody: 'Orders, catalogue, stock and finance — the whole workspace.',
       stats: {
         open: 'Open orders',
         openMeta: 'In progress right now',
@@ -400,6 +403,9 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
       appearance: 'Aspetto',
       recentOrders: 'Attivita recente',
       allOrders: 'Tutti gli ordini',
+      roleCustomer: 'Cliente',
+      adminTitle: 'Gestisci questo negozio',
+      adminBody: 'Ordini, catalogo, giacenze e finanze — tutto lo spazio di lavoro.',
       stats: {
         open: 'Ordini aperti',
         openMeta: 'In corso adesso',
@@ -651,6 +657,9 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
       appearance: 'Apariencia',
       recentOrders: 'Actividad reciente',
       allOrders: 'Todos los pedidos',
+      roleCustomer: 'Cliente',
+      adminTitle: 'Tu gestionas esta tienda',
+      adminBody: 'Pedidos, catalogo, stock y finanzas — todo el espacio de trabajo.',
       stats: {
         open: 'Pedidos abiertos',
         openMeta: 'En curso ahora',
@@ -902,6 +911,9 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
       appearance: 'Apparence',
       recentOrders: 'Activite recente',
       allOrders: 'Toutes les commandes',
+      roleCustomer: 'Client',
+      adminTitle: 'Vous gerez cette boutique',
+      adminBody: 'Commandes, catalogue, stock et finances — tout l espace de travail.',
       stats: {
         open: 'Commandes en cours',
         openMeta: 'En cours maintenant',
