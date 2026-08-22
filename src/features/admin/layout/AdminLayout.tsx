@@ -58,7 +58,13 @@ export function AdminLayout() {
 
   return (
     <div className="admin">
-      {railOpen && <div className="overlay" onClick={() => setRailOpen(false)} aria-hidden="true" />}
+      {railOpen && (
+        <div
+          className="overlay overlay--rail"
+          onClick={() => setRailOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <aside className={`admin__rail${railOpen ? ' is-open' : ''}`} aria-label={t('admin.navigationLabel')}>
         <div className="admin__rail-head">
