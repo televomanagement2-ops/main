@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../../lib/supabaseClient';
 import { useI18n } from '../../../lib/i18n';
-import { storeConfig } from '../../../config/storeConfig';
+import { Wordmark } from '../../../components/ui/Wordmark';
+import { Spinner } from '../../../components/ui/Spinner';
+import { IconAlert, IconCheck } from '../../../components/ui/icons';
 
 const RECOVERY_WAIT_MS = 6000;
 
@@ -71,65 +73,78 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-card__inner">
-          <div className="auth-card__brand">
-            <Link to="/" className="logo">{storeConfig.storeName}</Link>
-          </div>
-
-          <h1 className="auth-card__title">{t('auth.resetPassword')}</h1>
-
-          {done ? (
-            <div className="alert alert-success">{t('auth.passwordUpdated')}</div>
-          ) : !ready && expired ? (
-            <>
-              <div className="alert alert-error">{t('auth.resetInvalid')}</div>
-              <Link to="/login" className="btn btn-secondary btn-lg btn-full" style={{ marginTop: 'var(--sp-4)' }}>
-                {t('auth.signIn')}
-              </Link>
-            </>
-          ) : !ready ? (
-            <p className="auth-card__sub">{t('auth.pleaseWait')}</p>
-          ) : (
-            <form onSubmit={handleSubmit} className="auth-form">
-              {error && <div className="alert alert-error">{error}</div>}
-              <div className="form-group">
-                <label htmlFor="new-password" className="label">{t('auth.newPassword')}</label>
-                <input
-                  id="new-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="confirm-password" className="label">{t('auth.confirmPassword')}</label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
-                  className="input"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn btn-primary btn-lg btn-full"
-              >
-                {isLoading ? t('auth.pleaseWait') : t('auth.updatePassword')}
-              </button>
-            </form>
-          )}
+    <div className="auth">
+      <div className="auth__panel">
+        <div className="auth__brand">
+          <Wordmark />
         </div>
+
+        <p className="t-label">{t('auth.label')}</p>
+        <h1 className="t-h1 auth__title" style={{ marginTop: 'var(--s-3)' }}>{t('auth.resetPassword')}</h1>
+
+        {done ? (
+          <div className="notice notice--positive">
+            <IconCheck size={15} />
+            <div className="notice__body">{t('auth.passwordUpdated')}</div>
+          </div>
+        ) : !ready && expired ? (
+          <>
+            <div className="notice notice--critical">
+              <IconAlert size={15} />
+              <div className="notice__body">{t('auth.resetInvalid')}</div>
+            </div>
+            <Link to="/login" className="btn btn--secondary btn--lg btn--block" style={{ marginTop: 'var(--s-5)' }}>
+              {t('auth.signIn')}
+            </Link>
+          </>
+        ) : !ready ? (
+          <p className="t-body auth__sub">{t('auth.pleaseWait')}</p>
+        ) : (
+          <form onSubmit={handleSubmit} className="auth__form" style={{ marginTop: 'var(--s-6)' }}>
+            {error && (
+              <div className="notice notice--critical">
+                <IconAlert size={15} />
+                <div className="notice__body">{error}</div>
+              </div>
+            )}
+            <div className="field">
+              <label htmlFor="new-password" className="field__label">{t('auth.newPassword')}</label>
+              <input
+                id="new-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                required
+                minLength={8}
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="confirm-password" className="field__label">{t('auth.confirmPassword')}</label>
+              <input
+                id="confirm-password"
+                type="password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                className="input"
+                required
+                minLength={8}
+                autoComplete="new-password"
+              />
+            </div>
+            <button type="submit" disabled={isLoading} className="btn btn--primary btn--lg btn--block">
+              {isLoading ? (
+                <>
+                  <Spinner onAction />
+                  {t('auth.pleaseWait')}
+                </>
+              ) : (
+                t('auth.updatePassword')
+              )}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

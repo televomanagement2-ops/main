@@ -1,21 +1,29 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Spinner } from '../../../components/ui/Spinner';
+import { RowsSkeleton } from '../../../components/ui/Skeletons';
+import { ErrorMessage } from '../../../components/ui/ErrorMessage';
+import { Media } from '../../../components/ui/Media';
+import { StatusDot } from '../../../components/ui/StatusIndicator';
 import { useAdminProducts, useUpdateAdminProduct } from '../../../hooks/useAdminProducts';
-import { ProductFormModal } from '../components/ProductFormModal';
+import { ProductFormDrawer } from '../components/ProductFormDrawer';
+import { toast } from '../../../store/toastStore';
 import { useI18n } from '../../../lib/i18n';
+import { IconExternal, IconPlus } from '../../../components/ui/icons';
 import type { Product } from '../../../types';
+
+type Tab = 'active' | 'archive';
 
 export function AdminCatalogPage() {
   const { data: products = [], isLoading, error } = useAdminProducts();
   const updateProduct = useUpdateAdminProduct();
-  const { t, formatCurrency } = useI18n();
-  const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<'active' | 'archive'>('active');
-  const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
-  const [modal, setModal] = useState<{ mode: 'create' | 'edit'; product?: Product } | null>(null);
+  const { t, tCount, formatCurrency } = useI18n();
 
-  const filteredProducts = useMemo(() => {
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<Tab>('active');
+  const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
+  const [drawer, setDrawer] = useState<{ mode: 'create' | 'edit'; product?: Product } | null>(null);
+
+  const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return products;
     return products.filter((product) =>
@@ -28,183 +36,261 @@ export function AdminCatalogPage() {
   }, [products, search]);
 
   if (isLoading) {
-    return <div className="page-loading"><Spinner size="lg" /></div>;
+    return (
+      <>
+        <header className="admin-page__head">
+          <div>
+            <p className="t-label">{t('admin.catalog.eyebrow')}</p>
+            <h1 className="admin-page__title">{t('admin.catalog.title')}</h1>
+          </div>
+        </header>
+        <RowsSkeleton rows={8} />
+      </>
+    );
   }
 
   if (error) {
     return (
-      <div className="card card-padded" style={{ textAlign: 'center' }}>
-        <p className="body" style={{ color: 'var(--color-danger)' }}>
-          {t('admin.catalog.loadError')}
-        </p>
+      <div style={{ paddingTop: 'var(--s-10)' }}>
+        <ErrorMessage message={t('admin.catalog.loadError')} />
       </div>
     );
   }
 
-  const activeProducts = filteredProducts.filter(
-    (product) => product.is_active && product.stock_quantity > 0
-  );
-  const archivedProducts = filteredProducts.filter(
-    (product) => !product.is_active || product.stock_quantity === 0
-  );
-  const visibleProducts = tab === 'active' ? activeProducts : archivedProducts;
+  const activeProducts = filtered.filter((p) => p.is_active && p.stock_quantity > 0);
+  const archivedProducts = filtered.filter((p) => !p.is_active || p.stock_quantity === 0);
+  const visible = tab === 'active' ? activeProducts : archivedProducts;
+
+  const saveStock = (product: Product) => {
+    const draft = stockDrafts[product.id];
+    if (draft == null) return;
+    const value = Math.max(0, Math.trunc(Number(draft) || 0));
+    updateProduct.mutate(
+      { productId: product.id, updates: { stock_quantity: value } },
+      {
+        onSuccess: () => {
+          setStockDrafts((prev) => {
+            const next = { ...prev };
+            delete next[product.id];
+            return next;
+          });
+          toast(t('admin.catalog.stockUpdated', { name: product.name }));
+        },
+        onError: (err) => toast(err instanceof Error ? err.message : t('common.error'), 'critical'),
+      }
+    );
+  };
+
+  const toggleActive = (product: Product) => {
+    updateProduct.mutate(
+      { productId: product.id, updates: { is_active: !product.is_active } },
+      {
+        onSuccess: () =>
+          toast(product.is_active
+            ? t('admin.catalog.hidden', { name: product.name })
+            : t('admin.catalog.activated', { name: product.name })),
+        onError: (err) => toast(err instanceof Error ? err.message : t('common.error'), 'critical'),
+      }
+    );
+  };
 
   return (
-    <div className="admin-section">
-      <div className="admin-orders-toolbar">
+    <>
+      <header className="admin-page__head">
         <div>
-          <span className="section-eyebrow">{t('admin.catalog.eyebrow')}</span>
-          <h2 className="heading-2" style={{ marginTop: 'var(--sp-2)' }}>
-            {t('admin.catalog.title')}
-          </h2>
+          <p className="t-label">{t('admin.catalog.eyebrow')}</p>
+          <h1 className="admin-page__title">{t('admin.catalog.title')}</h1>
+          <p className="t-sm t-faint admin-page__desc">{t('admin.catalog.subtitle')}</p>
         </div>
-        <div className="admin-orders-filters">
-          <label className="admin-filter">
-            <span>{t('admin.catalog.searchLabel')}</span>
-            <input
-              className="input"
-              placeholder={t('admin.catalog.searchPlaceholder')}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
-          <button className="btn btn-primary btn-sm" onClick={() => setModal({ mode: 'create' })}>
+        <div className="admin-page__actions">
+          <button type="button" className="btn btn--primary btn--sm" onClick={() => setDrawer({ mode: 'create' })}>
+            <IconPlus size={15} />
             {t('admin.catalog.newProduct')}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="admin-tabs admin-tabs--inline">
+      <div className="tabs" role="tablist" aria-label={t('admin.catalog.title')}>
         <button
           type="button"
-          className={`admin-tab${tab === 'active' ? ' active' : ''}`}
+          role="tab"
+          aria-selected={tab === 'active'}
+          className={`tab${tab === 'active' ? ' is-active' : ''}`}
           onClick={() => setTab('active')}
         >
-          {t('admin.catalog.activeWithCount', { count: activeProducts.length })}
+          {t('admin.catalog.tabActive')}
+          <span className="tab__count">{activeProducts.length}</span>
         </button>
         <button
           type="button"
-          className={`admin-tab${tab === 'archive' ? ' active' : ''}`}
+          role="tab"
+          aria-selected={tab === 'archive'}
+          className={`tab${tab === 'archive' ? ' is-active' : ''}`}
           onClick={() => setTab('archive')}
         >
-          {t('admin.catalog.archiveWithCount', { count: archivedProducts.length })}
+          {t('admin.catalog.tabArchive')}
+          <span className="tab__count">{archivedProducts.length}</span>
         </button>
       </div>
 
-      {visibleProducts.length === 0 ? (
-        <div className="card card-padded" style={{ textAlign: 'center' }}>
-          <p className="body">{t('admin.catalog.empty')}</p>
-        </div>
-      ) : (
-        <div className="admin-catalog-grid">
-          {visibleProducts.map((product) => {
-            const primaryImage =
-              product.product_images?.find((img) => img.is_primary)
-              ?? product.product_images?.[0]
-              ?? null;
-
-            return (
-            <article key={product.id} className="card admin-product-card">
-              <div className="admin-product-card__head">
-                <div className="admin-product-card__summary">
-                  <div className="admin-product-card__thumb">
-                    <img
-                      src={primaryImage?.url ?? 'https://placehold.co/96x96/f5f5f7/aeaeb2?text=No+image'}
-                      alt={primaryImage?.alt_text ?? product.name}
-                    />
-                  </div>
-                  <div>
-                    <p className="admin-product-card__title">{product.name}</p>
-                    <p className="caption">{product.categories?.name ?? t('admin.catalog.uncategorized')}</p>
-                  </div>
-                </div>
-                <span className={`admin-pill admin-pill--status${product.is_active ? '' : ' is-muted'}`}>
-                  {product.is_active ? t('admin.catalog.statusActive') : t('admin.catalog.statusHidden')}
-                </span>
-              </div>
-
-              <p className="admin-product-card__price">{formatCurrency(product.price)}</p>
-
-              <div className="admin-product-card__meta">
-                <div>
-                  <p className="label-caps">{t('admin.catalog.stockLabel')}</p>
-                  <p className="admin-product-card__stock">
-                    {product.stock_quantity === 0
-                      ? t('admin.catalog.outOfStock')
-                      : t('admin.catalog.inStock', { count: product.stock_quantity })}
-                  </p>
-                </div>
-                <Link to={`/products/${product.slug}`} className="btn btn-ghost btn-sm">
-                  {t('admin.catalog.view')}
-                </Link>
-              </div>
-
-              <div className="admin-product-card__actions">
-                <label className="admin-action">
-                  <span>{t('admin.catalog.stockQty')}</span>
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    value={stockDrafts[product.id] ?? String(product.stock_quantity)}
-                    onChange={(event) =>
-                      setStockDrafts((prev) => ({
-                        ...prev,
-                        [product.id]: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
-                <div className="admin-product-card__buttons">
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setModal({ mode: 'edit', product })}
-                  >
-                    {t('admin.catalog.edit')}
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() =>
-                      updateProduct.mutate({
-                        productId: product.id,
-                        updates: { stock_quantity: Number(stockDrafts[product.id] ?? product.stock_quantity) },
-                      })
-                    }
-                    disabled={updateProduct.isPending}
-                  >
-                    {t('admin.catalog.updateStock')}
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() =>
-                      updateProduct.mutate({
-                        productId: product.id,
-                        updates: { is_active: !product.is_active },
-                      })
-                    }
-                    disabled={updateProduct.isPending}
-                  >
-                    {product.is_active ? t('admin.catalog.hide') : t('admin.catalog.activate')}
-                  </button>
-                </div>
-              </div>
-            </article>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="admin-note">
-        <p className="body">{t('admin.catalog.note')}</p>
+      <div className="admin-toolbar" style={{ borderTop: 0 }}>
+        <input
+          type="search"
+          className="input input--sm admin-toolbar__search"
+          placeholder={t('admin.catalog.searchPlaceholder')}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          aria-label={t('admin.catalog.searchLabel')}
+        />
+        <span className="admin-toolbar__count">{tCount('admin.catalog.count', visible.length)}</span>
       </div>
 
-      {modal && (
-        <ProductFormModal
-          mode={modal.mode}
-          product={modal.product}
-          onClose={() => setModal(null)}
+      {visible.length === 0 ? (
+        <div className="empty">
+          <p className="empty__title">{t('admin.catalog.emptyTitle')}</p>
+          <p className="empty__body">{t('admin.catalog.empty')}</p>
+          <button type="button" className="btn btn--primary btn--sm" onClick={() => setDrawer({ mode: 'create' })}>
+            {t('admin.catalog.newProduct')}
+          </button>
+        </div>
+      ) : (
+        <div className="table-wrap" style={{ marginTop: 'var(--s-6)' }}>
+          <table className="table table--stack">
+            <thead>
+              <tr>
+                <th>{t('admin.catalog.table.product')}</th>
+                <th>{t('admin.catalog.table.category')}</th>
+                <th className="table__num">{t('admin.catalog.table.price')}</th>
+                <th>{t('admin.catalog.table.inventory')}</th>
+                <th>{t('admin.catalog.table.status')}</th>
+                <th className="table__actions">{t('admin.catalog.table.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((product) => {
+                const image =
+                  product.product_images?.find((img) => img.is_primary)
+                  ?? product.product_images?.[0]
+                  ?? null;
+                const draft = stockDrafts[product.id];
+                const dirty = draft != null && Number(draft) !== product.stock_quantity;
+                const out = product.stock_quantity === 0;
+                const low = !out && product.stock_quantity <= product.low_stock_threshold;
+                const fill = Math.min(
+                  100,
+                  Math.round((product.stock_quantity / Math.max(product.low_stock_threshold * 4, 1)) * 100)
+                );
+
+                return (
+                  <tr key={product.id}>
+                    <td data-col="meta">
+                      <div className="row gap-3">
+                        <Media
+                          src={image?.url}
+                          alt=""
+                          ratio="square"
+                          className="thumb"
+                          style={{ width: 40, height: 40 }}
+                        />
+                        <div style={{ minWidth: 0 }}>
+                          <p className="table__primary">{product.name}</p>
+                          <p className="t-xs t-faint t-mono">{product.sku ?? product.slug}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td data-col="full">{product.categories?.name ?? t('admin.catalog.uncategorized')}</td>
+                    <td data-col="end" className="table__num">{formatCurrency(product.price)}</td>
+                    <td data-col="full">
+                      <div className="stock-cell">
+                        <input
+                          className="input input--sm"
+                          style={{ width: 68 }}
+                          type="number"
+                          min={0}
+                          value={draft ?? String(product.stock_quantity)}
+                          onChange={(event) =>
+                            setStockDrafts((prev) => ({ ...prev, [product.id]: event.target.value }))
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') saveStock(product);
+                          }}
+                          aria-label={t('admin.catalog.stockQty')}
+                        />
+                        <span className="stock-bar" aria-hidden="true">
+                          <span
+                            className={`stock-bar__fill${out ? ' stock-bar__fill--out' : low ? ' stock-bar__fill--low' : ''}`}
+                            style={{ width: `${out ? 100 : Math.max(fill, 6)}%` }}
+                          />
+                        </span>
+                        {dirty && (
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--sm"
+                            onClick={() => saveStock(product)}
+                            disabled={updateProduct.isPending}
+                          >
+                            {t('admin.catalog.updateStock')}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td data-col="full">
+                      {!product.is_active ? (
+                        <StatusDot tone="neutral" label={t('admin.catalog.statusHidden')} />
+                      ) : out ? (
+                        <StatusDot tone="critical" label={t('admin.catalog.outOfStock')} />
+                      ) : low ? (
+                        <StatusDot tone="caution" label={t('admin.catalog.lowStock')} />
+                      ) : (
+                        <StatusDot tone="positive" label={t('admin.catalog.statusActive')} />
+                      )}
+                    </td>
+                    <td data-col="end" className="table__actions">
+                      <div className="row gap-2" style={{ justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--sm"
+                          onClick={() => setDrawer({ mode: 'edit', product })}
+                        >
+                          {t('admin.catalog.edit')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--quiet btn--sm"
+                          onClick={() => toggleActive(product)}
+                          disabled={updateProduct.isPending}
+                        >
+                          {product.is_active ? t('admin.catalog.hide') : t('admin.catalog.activate')}
+                        </button>
+                        <Link
+                          to={`/products/${product.slug}`}
+                          className="btn btn--quiet btn--sm"
+                          aria-label={t('admin.catalog.view')}
+                        >
+                          <IconExternal size={14} />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="t-xs t-faint" style={{ marginTop: 'var(--s-6)', maxWidth: '68ch' }}>
+        {t('admin.catalog.note')}
+      </p>
+
+      {drawer && (
+        <ProductFormDrawer
+          key={drawer.product?.id ?? 'create'}
+          mode={drawer.mode}
+          product={drawer.product}
+          onClose={() => setDrawer(null)}
         />
       )}
-    </div>
+    </>
   );
 }

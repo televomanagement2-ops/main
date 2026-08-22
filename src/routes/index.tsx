@@ -1,5 +1,5 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
-import { RootLayout } from '../components/layout/RootLayout';
+import { StoreLayout } from '../components/layout/StoreLayout';
 import { HomePage } from '../features/products/pages/HomePage';
 import { ProductListPage } from '../features/products/pages/ProductListPage';
 import { ProductDetailPage } from '../features/products/pages/ProductDetailPage';
@@ -21,6 +21,7 @@ import { TermsPage } from '../features/legal/pages/TermsPage';
 import { CookiePolicyPage } from '../features/legal/pages/CookiePolicyPage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { AdminRoute } from './AdminRoute';
+import { AuthBoundary, BareLayout } from '../components/layout/AuthBoundary';
 import { AdminLayout } from '../features/admin/layout/AdminLayout';
 import { AdminDashboardPage } from '../features/admin/pages/AdminDashboardPage';
 import { AdminOrdersPage } from '../features/admin/pages/AdminOrdersPage';
@@ -28,16 +29,14 @@ import { AdminCatalogPage } from '../features/admin/pages/AdminCatalogPage';
 import { AdminFinancePage } from '../features/admin/pages/AdminFinancePage';
 
 const router = createBrowserRouter([
+  // ── Storefront: editorial shell (header + footer + overlay surfaces) ──
   {
     path: '/',
-    element: <RootLayout />,
+    element: <StoreLayout />,
     children: [
       { index: true, element: <HomePage /> },
       { path: 'products', element: <ProductListPage /> },
       { path: 'products/:slug', element: <ProductDetailPage /> },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'auth/callback', element: <AuthCallbackPage /> },
-      { path: 'auth/reset', element: <ResetPasswordPage /> },
       {
         path: 'cart',
         element: (
@@ -107,21 +106,36 @@ const router = createBrowserRouter([
       { path: 'privacy-policy', element: <PrivacyPolicyPage /> },
       { path: 'terms', element: <TermsPage /> },
       { path: 'cookies', element: <CookiePolicyPage /> },
-      {
-        path: 'admin',
-        element: (
-          <AdminRoute>
-            <AdminLayout />
-          </AdminRoute>
-        ),
-        children: [
-          { index: true, element: <AdminDashboardPage /> },
-          { path: 'orders', element: <AdminOrdersPage /> },
-          { path: 'catalog', element: <AdminCatalogPage /> },
-          { path: 'finance', element: <AdminFinancePage /> },
-        ],
-      },
       { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+
+  // ── Auth: full-bleed, no store chrome ──
+  {
+    path: '/',
+    element: <BareLayout />,
+    children: [
+      { path: 'login', element: <LoginPage /> },
+      { path: 'auth/callback', element: <AuthCallbackPage /> },
+      { path: 'auth/reset', element: <ResetPasswordPage /> },
+    ],
+  },
+
+  // ── Admin: operational shell (rail + workspace) ──
+  {
+    path: '/admin',
+    element: (
+      <AuthBoundary>
+        <AdminRoute>
+          <AdminLayout />
+        </AdminRoute>
+      </AuthBoundary>
+    ),
+    children: [
+      { index: true, element: <AdminDashboardPage /> },
+      { path: 'orders', element: <AdminOrdersPage /> },
+      { path: 'catalog', element: <AdminCatalogPage /> },
+      { path: 'finance', element: <AdminFinancePage /> },
     ],
   },
 ]);

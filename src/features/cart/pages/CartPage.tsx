@@ -2,101 +2,105 @@ import { Link } from 'react-router-dom';
 import { useCartStore } from '../../../store/cartStore';
 import { useCartSync } from '../../../hooks/useCartSync';
 import { CartItemRow } from '../components/CartItemRow';
-import { BackButton } from '../../../components/ui/BackButton';
+import { IconArrowRight, IconInfo } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
 import { computeOrderTotals } from '../../../lib/pricing';
 
 export function CartPage() {
-  const items     = useCartStore((s) => s.items);
+  const items = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
-  const cartSync  = useCartSync();
-  const subtotal  = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const cartSync = useCartSync();
   const { t, tCount, formatCurrency } = useI18n();
+
+  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const count = items.reduce((n, i) => n + i.quantity, 0);
+  const { tax, total } = computeOrderTotals(subtotal, 0);
 
   if (items.length === 0) {
     return (
-      <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-        <div className="cart-empty-state">
-          <svg className="cart-empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
-            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <path d="M16 10a4 4 0 01-8 0"/>
-          </svg>
-          <p className="cart-empty-state__title">{t('cart.emptyTitle')}</p>
-          <p className="cart-empty-state__sub">{t('cart.emptySubtitle')}</p>
-          <Link to="/products" className="btn btn-primary btn-lg" style={{ marginTop: 'var(--sp-2)' }}>
+      <div className="page">
+        <header className="account-head">
+          <div className="account-head__title">
+            <p className="t-label">{t('cart.label')}</p>
+            <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{t('cart.title')}</h1>
+          </div>
+        </header>
+        <div className="empty">
+          <p className="empty__title">{t('cart.emptyTitle')}</p>
+          <p className="empty__body">{t('cart.emptySubtitle')}</p>
+          <Link to="/products" className="btn btn--primary">
             {t('cart.browseProducts')}
+            <IconArrowRight size={16} />
           </Link>
         </div>
       </div>
     );
   }
 
-  const { tax, total } = computeOrderTotals(subtotal, 0);
-
   return (
-    <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton />
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 'var(--sp-8)' }}>
-        <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('cart.title')}</h1>
-        <button
-          onClick={clearCart}
-          className="btn btn-ghost btn-sm"
-          style={{ color: 'var(--color-text-3)' }}
-        >
-          {t('cart.clearAll')}
-        </button>
-      </div>
+    <div className="page">
+      <header className="account-head">
+        <div className="account-head__title">
+          <p className="t-label">{t('cart.label')}</p>
+          <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{t('cart.title')}</h1>
+        </div>
+        <div className="account-head__actions">
+          <button type="button" onClick={clearCart} className="btn btn--quiet">
+            {t('cart.clearAll')}
+          </button>
+        </div>
+      </header>
 
       {cartSync.changed && (
-        <div className="alert alert-warning" style={{ marginBottom: 'var(--sp-5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--sp-4)' }}>
-          <span>{t('cart.pricesUpdated')}</span>
-          <button className="btn btn-ghost btn-sm" onClick={cartSync.dismiss}>
+        <div className="notice notice--caution" style={{ marginBottom: 'var(--s-6)' }}>
+          <IconInfo size={16} />
+          <div className="notice__body">{t('cart.pricesUpdated')}</div>
+          <button type="button" className="btn btn--quiet btn--sm" onClick={cartSync.dismiss}>
             {t('cart.dismiss')}
           </button>
         </div>
       )}
 
       <div className="cart-layout">
-        <div className="cart-items-list">
+        <div className="cart-layout__items">
           {items.map((item) => (
             <CartItemRow key={`${item.product.id}-${item.selectedSize ?? ''}`} item={item} />
           ))}
         </div>
 
-        <aside className="order-summary" aria-label={t('cart.orderSummary')}>
-          <h2 className="order-summary__title">{t('cart.orderSummary')}</h2>
+        <aside className="cart-layout__summary" aria-label={t('cart.orderSummary')}>
+          <p className="t-label" style={{ marginBottom: 'var(--s-5)' }}>{t('cart.orderSummary')}</p>
 
-          <div className="summary-line">
-            <span>{t('cart.subtotal')} ({tCount('orders.items', items.reduce((n, i) => n + i.quantity, 0))})</span>
-            <span>{formatCurrency(subtotal)}</span>
-          </div>
-          <div className="summary-line">
-            <span>{t('cart.shipping')}</span>
-            <span>{t('cart.calculatedAtCheckout')}</span>
-          </div>
-          {tax > 0 && (
-            <div className="summary-line">
-              <span>{t('cart.tax')}</span>
-              <span>{formatCurrency(tax)}</span>
+          <div className="summary">
+            <div className="summary__row">
+              <span>
+                {t('cart.subtotal')} · {tCount('orders.items', count)}
+              </span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
-          )}
-          <div className="summary-line summary-line--total">
-            <span>{t('cart.total')}</span>
-            <span>{formatCurrency(total)}</span>
+            <div className="summary__row">
+              <span>{t('cart.shipping')}</span>
+              <span>{t('cart.calculatedAtCheckout')}</span>
+            </div>
+            {tax > 0 && (
+              <div className="summary__row">
+                <span>{t('cart.tax')}</span>
+                <span>{formatCurrency(tax)}</span>
+              </div>
+            )}
+            <div className="summary__row summary__row--total">
+              <span>{t('cart.total')}</span>
+              <span>{formatCurrency(total)}</span>
+            </div>
           </div>
 
-          <Link
-            to="/checkout"
-            className="btn btn-primary btn-lg btn-full"
-            style={{ marginTop: 'var(--sp-5)' }}
-          >
+          <Link to="/checkout" className="btn btn--primary btn--block" style={{ marginTop: 'var(--s-6)' }}>
             {t('cart.proceedCheckout')}
           </Link>
           <Link
             to="/products"
-            className="btn btn-ghost btn-sm btn-full"
-            style={{ marginTop: 'var(--sp-2)' }}
+            className="btn btn--quiet"
+            style={{ marginTop: 'var(--s-4)', display: 'flex', justifyContent: 'center' }}
           >
             {t('cart.continueShopping')}
           </Link>

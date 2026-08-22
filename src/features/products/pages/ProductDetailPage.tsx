@@ -1,49 +1,419 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useProduct } from '../../../hooks/useProducts';
+import { useProduct, useProducts } from '../../../hooks/useProducts';
 import { useReviews, useSubmitReview, useHasPurchased } from '../../../hooks/useReviews';
 import { useCartStore } from '../../../store/cartStore';
+import { useUiStore } from '../../../store/uiStore';
 import { useAuth } from '../../../hooks/useAuth';
-import { Spinner } from '../../../components/ui/Spinner';
-import { BackButton } from '../../../components/ui/BackButton';
+import { ProductDetailSkeleton } from '../../../components/ui/Skeletons';
+import { Media } from '../../../components/ui/Media';
+import { Reveal } from '../../../components/ui/Reveal';
+import { StockStatus } from '../../../components/ui/StatusIndicator';
+import { ProductCard } from '../components/ProductCard';
+import {
+  IconCheck,
+  IconLock,
+  IconMinus,
+  IconPlus,
+  IconReturn,
+  IconStar,
+  IconTruck,
+} from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
-import type { ProductImage, ProductVariant } from '../../../types';
+import type { Product, ProductImage, ProductVariant } from '../../../types';
 
-function StarRating({
+export function ProductDetailPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const { data: product, isLoading, error } = useProduct(slug ?? '');
+  const { t } = useI18n();
+
+  if (isLoading) return <ProductDetailSkeleton />;
+
+  if (error || !product) {
+    return (
+      <div className="page">
+        <div className="empty empty--center" style={{ paddingBlock: 'clamp(80px, 12vw, 180px)' }}>
+          <p className="t-label">{t('product.notFoundLabel')}</p>
+          <p className="empty__title">{t('product.notFoundTitle')}</p>
+          <p className="empty__body">{t('product.notFoundSubtitle')}</p>
+          <Link to="/products" className="btn btn--primary">
+            {t('product.backToProducts')}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Keyed so switching products resets gallery, size and quantity state.
+  return <ProductView key={product.id} product={product} />;
+}
+
+function ProductView({ product }: { product: Product }) {
+  const { t, formatCurrency } = useI18n();
+  const navigate = useNavigate();
+  const addItem = useCartStore((s) => s.addItem);
+  const openCart = useUiStore((s) => s.open);
+
+  const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [sizeError, setSizeError] = useState(false);
+  const [added, setAdded] = useState(false);
+
+  const variants: ProductVariant[] = useMemo(
+    () => (product.product_variants ? [...product.product_variants].sort((a, b) => a.sort_order - b.sort_order) : []),
+    [product.product_variants]
+  );
+  const hasVariants = variants.length > 0;
+
+  const images = product.product_images ?? [];
+  const primary = images.find((i) => i.is_primary) ?? images[0];
+  const displayed = activeImage ?? primary;
+  const support = images.filter((i) => i.id !== displayed?.id).slice(0, 2);
+
+  const isOut = product.stock_quantity === 0;
+
+  const { data: relatedPage } = useProducts({
+    categorySlug: product.categories?.slug,
+    pageSize: 5,
+    page: 1,
+  });
+  const related = (relatedPage?.data ?? []).filter((p) => p.id !== product.id).slice(0, 4);
+
+  const requireSize = () => {
+    if (hasVariants && !selectedSize) {
+      setSizeError(true);
+      return false;
+    }
+    return true;
+  };
+
+  const handleAdd = () => {
+    if (!requireSize()) return;
+    addItem(product, quantity, selectedSize);
+    setSizeError(false);
+    setAdded(true);
+    openCart('cart');
+    window.setTimeout(() => setAdded(false), 2200);
+  };
+
+  const handleBuyNow = () => {
+    if (!requireSize()) return;
+    addItem(product, quantity, selectedSize);
+    navigate('/checkout');
+  };
+
+  return (
+    <div className="page">
+      <nav className="crumbs" aria-label={t('product.breadcrumbLabel')} style={{ paddingTop: 'var(--s-6)' }}>
+        <Link to="/">{t('sidebar.home')}</Link>
+        <span className="crumbs__sep">/</span>
+        <Link to="/products">{t('nav.shop')}</Link>
+        {product.categories && (
+          <>
+            <span className="crumbs__sep">/</span>
+            <Link to={`/products?category=${product.categories.slug}`}>{product.categories.name}</Link>
+          </>
+        )}
+        <span className="crumbs__sep">/</span>
+        <span style={{ color: 'var(--ink-2)' }}>{product.name}</span>
+      </nav>
+
+      <div className="pdp">
+        {/* ── Gallery ── */}
+        <div className="pdp__gallery">
+          <div className="pdp__main">
+            <Media
+              src={displayed?.url}
+              alt={displayed?.alt_text ?? product.name}
+              ratio="portrait"
+              loading="eager"
+            />
+          </div>
+
+          {images.length > 1 && (
+            <>
+              <div className="pdp__support">
+                {support.map((image) => (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() => setActiveImage(image)}
+                    aria-label={image.alt_text ?? t('product.imageAlt')}
+                  >
+                    <Media src={image.url} alt={image.alt_text ?? ''} ratio="square" zoom />
+                  </button>
+                ))}
+              </div>
+
+              {images.length > 3 && (
+                <div className="pdp__thumbs">
+                  {images.map((image) => (
+                    <button
+                      key={image.id}
+                      type="button"
+                      className={`pdp__thumb${displayed?.id === image.id ? ' is-active' : ''}`}
+                      onClick={() => setActiveImage(image)}
+                      aria-label={image.alt_text ?? t('product.imageAlt')}
+                      aria-pressed={displayed?.id === image.id}
+                    >
+                      <img src={image.url} alt="" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* ── Information ── */}
+        <div className="pdp__info">
+          {product.categories && (
+            <Link to={`/products?category=${product.categories.slug}`} className="t-label pdp__cat">
+              {product.categories.name}
+            </Link>
+          )}
+
+          <h1 className="pdp__name">{product.name}</h1>
+          <p className="pdp__price">{formatCurrency(product.price)}</p>
+
+          {product.description && <p className="pdp__desc">{product.description}</p>}
+
+          <div className="pdp__rule" />
+
+          {hasVariants && (
+            <div className="field">
+              <span className="field__label">
+                {t('cart.size')}
+                {selectedSize && <span style={{ color: 'var(--ink)' }}> — {selectedSize}</span>}
+              </span>
+              <div className="size-grid">
+                {variants.map((variant) => {
+                  const soldOut = variant.stock_qty === 0;
+                  return (
+                    <button
+                      key={variant.id}
+                      type="button"
+                      className={`size-btn${selectedSize === variant.size ? ' is-active' : ''}`}
+                      onClick={() => {
+                        setSelectedSize(variant.size);
+                        setSizeError(false);
+                      }}
+                      disabled={soldOut}
+                      aria-pressed={selectedSize === variant.size}
+                      title={soldOut ? t('product.stockOut') : variant.size}
+                    >
+                      {variant.size}
+                    </button>
+                  );
+                })}
+              </div>
+              {sizeError && <p className="field__error">{t('product.sizeError')}</p>}
+            </div>
+          )}
+
+          <StockStatus quantity={product.stock_quantity} threshold={product.low_stock_threshold} />
+
+          {isOut ? (
+            <button type="button" className="btn btn--secondary btn--lg btn--block" disabled>
+              {t('product.stockOut')}
+            </button>
+          ) : (
+            <>
+              <div className="pdp__actions">
+                <div className="stepper" aria-label={t('cart.quantity')}>
+                  <button
+                    type="button"
+                    className="stepper__btn"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    aria-label={t('cart.decrease')}
+                  >
+                    <IconMinus size={14} />
+                  </button>
+                  <span className="stepper__value" aria-live="polite">{quantity}</span>
+                  <button
+                    type="button"
+                    className="stepper__btn"
+                    onClick={() => setQuantity((q) => Math.min(q + 1, product.stock_quantity))}
+                    disabled={quantity >= product.stock_quantity}
+                    aria-label={t('cart.increase')}
+                  >
+                    <IconPlus size={14} />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  className={`btn btn--primary${added ? ' is-done' : ''}`}
+                >
+                  {added ? (
+                    <>
+                      <IconCheck size={16} />
+                      {t('product.addedToCart')}
+                    </>
+                  ) : (
+                    t('product.addToCart')
+                  )}
+                </button>
+              </div>
+
+              <button type="button" onClick={handleBuyNow} className="btn btn--quiet" style={{ alignSelf: 'flex-start' }}>
+                {t('product.buyNow')}
+              </button>
+            </>
+          )}
+
+          <div className="pdp__rule" />
+
+          <dl className="pdp__meta-list">
+            <div className="pdp__meta-row">
+              <dt>{t('product.meta.shipping')}</dt>
+              <dd>{t('product.meta.shippingValue')}</dd>
+            </div>
+            <div className="pdp__meta-row">
+              <dt>{t('product.meta.returns')}</dt>
+              <dd>{t('product.meta.returnsValue')}</dd>
+            </div>
+            {product.sku && (
+              <div className="pdp__meta-row">
+                <dt>{t('product.meta.sku')}</dt>
+                <dd className="t-mono">{product.sku}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      </div>
+
+      {/* ── Story, specifications, care ── */}
+      <div className="pdp__sections">
+        <div className="pdp__section">
+          <p className="t-label">{t('product.sections.storyLabel')}</p>
+          <h2 className="t-h3">{t('product.sections.storyTitle')}</h2>
+          <p className="pdp__section-body">
+            {product.description ?? t('product.sections.storyFallback')}
+          </p>
+        </div>
+
+        <div className="pdp__section">
+          <p className="t-label">{t('product.sections.specsLabel')}</p>
+          <dl className="spec-list">
+            {product.categories && (
+              <div className="spec-row">
+                <dt>{t('products.category')}</dt>
+                <dd>{product.categories.name}</dd>
+              </div>
+            )}
+            {product.sku && (
+              <div className="spec-row">
+                <dt>{t('product.meta.sku')}</dt>
+                <dd className="t-mono">{product.sku}</dd>
+              </div>
+            )}
+            {product.weight_grams != null && (
+              <div className="spec-row">
+                <dt>{t('product.meta.weight')}</dt>
+                <dd>{product.weight_grams} g</dd>
+              </div>
+            )}
+            <div className="spec-row">
+              <dt>{t('product.meta.availability')}</dt>
+              <dd>
+                <StockStatus quantity={product.stock_quantity} threshold={product.low_stock_threshold} />
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="pdp__section">
+          <p className="t-label">{t('product.sections.serviceLabel')}</p>
+          <div className="stack gap-4" style={{ marginTop: 'var(--s-1)' }}>
+            <ServiceLine icon={<IconTruck size={16} />} title={t('home.trust.shippingTitle')} desc={t('home.trust.shippingDesc')} />
+            <ServiceLine icon={<IconReturn size={16} />} title={t('home.trust.returnsTitle')} desc={t('home.trust.returnsDesc')} />
+            <ServiceLine icon={<IconLock size={16} />} title={t('home.trust.secureTitle')} desc={t('home.trust.secureDesc')} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Reviews ── */}
+      <ReviewsSection productId={product.id} />
+
+      {/* ── Related ── */}
+      {related.length > 0 && (
+        <section className="section" aria-labelledby="related-title">
+          <Reveal>
+            <div className="section-head">
+              <div>
+                <p className="t-label">{t('product.related.label')}</p>
+                <h2 id="related-title" className="t-h2 section-head__title">
+                  {t('product.related.title')}
+                </h2>
+              </div>
+              <Link to="/products" className="link-arrow">{t('home.viewAll')}</Link>
+            </div>
+          </Reveal>
+          <div className="product-grid">
+            {related.map((item) => (
+              <ProductCard key={item.id} product={item} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ServiceLine({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+      <span className="service__icon">{icon}</span>
+      <div>
+        <p className="service__title">{title}</p>
+        <p className="service__desc">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Reviews ─────────────────────────────────────────────────────────── */
+
+function Stars({
   value,
   onChange,
-  readonly = false,
+  readOnly = true,
 }: {
   value: number;
   onChange?: (v: number) => void;
-  readonly?: boolean;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
   const [hovered, setHovered] = useState(0);
-  const display = readonly ? value : (hovered || value);
+  const shown = readOnly ? value : hovered || value;
+
   return (
     <div
-      className="star-rating"
+      className={`stars${readOnly ? '' : ' stars--input'}`}
       aria-label={t('product.ratingAria', { value })}
-      style={{ display: 'flex', gap: 2, cursor: readonly ? 'default' : 'pointer' }}
+      style={{ color: 'var(--rating)' }}
     >
-      {[1, 2, 3, 4, 5].map((n) => (
-        <svg
-          key={n}
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill={n <= display ? 'var(--color-rating)' : 'none'}
-          stroke={n <= display ? 'var(--color-rating)' : 'var(--gray-300)'}
-          strokeWidth="1.5"
-          onMouseEnter={() => !readonly && setHovered(n)}
-          onMouseLeave={() => !readonly && setHovered(0)}
-          onClick={() => !readonly && onChange?.(n)}
-          style={{ flexShrink: 0 }}
-        >
-          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-        </svg>
-      ))}
+      {[1, 2, 3, 4, 5].map((n) => {
+        const star = <IconStar size={15} filled={n <= shown} />;
+        if (readOnly) return <span key={n}>{star}</span>;
+        return (
+          <button
+            key={n}
+            type="button"
+            onMouseEnter={() => setHovered(n)}
+            onMouseLeave={() => setHovered(0)}
+            onClick={() => onChange?.(n)}
+            aria-label={t('product.ratingAria', { value: n })}
+            style={{ display: 'grid', color: n <= shown ? 'var(--rating)' : 'var(--ink-3)' }}
+          >
+            {star}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -59,367 +429,92 @@ function ReviewsSection({ productId }: { productId: string }) {
   const [body, setBody] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const avgRating = reviews.length
+  const average = reviews.length
     ? Math.round((reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) * 10) / 10
     : 0;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    submit(
-      { userId: user.id, rating, body },
-      {
-        onSuccess: () => {
-          setSubmitted(true);
-          setBody('');
-          setRating(5);
-        },
-      }
-    );
-  };
-
   return (
-    <section className="reviews-section" aria-label={t('product.reviews.ariaLabel')}>
-      <div className="reviews-header">
-        <div>
-          <h2 className="heading-2" style={{ marginBottom: 4 }}>
-            {t('product.reviews.title')}
-          </h2>
-          {reviews.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <StarRating value={Math.round(avgRating)} readonly />
-              <span style={{ fontSize: 14, color: 'var(--color-text-2)' }}>
-                {avgRating} · {tCount('product.reviews.count', reviews.length)}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {!user ? (
-        <div className="review-login-prompt">
-          <Link to="/login" className="link-btn">{t('auth.signIn')}</Link>
-          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}>{t('product.reviews.signInPrompt')}</span>
-        </div>
-      ) : !hasPurchased ? (
-        <div className="review-login-prompt">
-          <span style={{ color: 'var(--color-text-3)', fontSize: 14 }}>{t('product.reviews.mustPurchase')}</span>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="review-form">
-          <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-            {submitted ? t('product.reviews.updated') : t('product.reviews.write')}
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <span style={{ fontSize: 13, color: 'var(--color-text-2)' }}>{t('product.reviews.yourRating')}</span>
-            <StarRating value={rating} onChange={setRating} />
-          </div>
-          <textarea
-            className="review-textarea"
-            placeholder={t('product.reviews.placeholder')}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={3}
-          />
-          {submitError && (
-            <p style={{ fontSize: 13, color: 'var(--color-danger)', marginTop: 6 }}>
-              {(submitError as Error).message}
-            </p>
-          )}
-          <button
-            type="submit"
-            className="btn btn-primary btn-sm"
-            style={{ marginTop: 10, alignSelf: 'flex-start' }}
-            disabled={isPending}
-          >
-            {isPending ? t('product.reviews.submitting') : t('product.reviews.publish')}
-          </button>
-        </form>
-      )}
-
-      {isLoading ? (
-        <div style={{ paddingTop: 24, display: 'flex', justifyContent: 'center' }}>
-          <Spinner size="md" />
-        </div>
-      ) : reviews.length === 0 ? (
-        <p style={{ fontSize: 14, color: 'var(--color-text-3)', paddingTop: 16 }}>
-          {t('product.reviews.empty')}
-        </p>
-      ) : (
-        <div className="reviews-list">
-          {reviews.map((r) => {
-            const author = r.author_name || t('product.reviews.anonymous');
-            return (
-              <div key={r.id} className="review-card">
-                <div className="review-card__head">
-                  <div className="review-card__author">
-                    <div className="review-card__avatar">
-                      {author.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="review-card__name">{author}</p>
-                      <p className="review-card__date">
-                        {formatDate(new Date(r.created_at))}
-                      </p>
-                      <p className="review-card__verified">✓ {t('product.reviews.verified')}</p>
-                    </div>
-                  </div>
-                  <StarRating value={r.rating} readonly />
-                </div>
-                {r.body && <p className="review-card__body">{r.body}</p>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-export function ProductDetailPage() {
-  const { t, formatCurrency } = useI18n();
-  const { slug } = useParams<{ slug: string }>();
-  const { data: product, isLoading, error } = useProduct(slug ?? '');
-  const addItem = useCartStore((s) => s.addItem);
-  const navigate = useNavigate();
-
-  const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [addedFeedback, setAddedFeedback] = useState(false);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
-  const [sizeError, setSizeError] = useState(false);
-
-  if (isLoading) {
-    return <div className="page-loading"><Spinner size="lg" /></div>;
-  }
-
-  if (error || !product) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--sp-4)', padding: 'var(--sp-32) var(--sp-8)', textAlign: 'center' }}>
-        <p style={{ fontSize: 44, lineHeight: 1 }}>🔍</p>
-        <h1 className="heading-1">{t('product.notFoundTitle')}</h1>
-        <p className="body" style={{ maxWidth: 360 }}>
-          {t('product.notFoundSubtitle')}
-        </p>
-        <Link to="/products" className="btn btn-primary btn-lg" style={{ marginTop: 'var(--sp-2)' }}>
-          {t('product.backToProducts')}
-        </Link>
-      </div>
-    );
-  }
-
-  // Any product with active variants gets the size selector — no category
-  // hardcoding (a new "shoes" category with sizes must work out of the box).
-  const variants: ProductVariant[] = product.product_variants
-    ? [...product.product_variants].sort((a, b) => a.sort_order - b.sort_order)
-    : [];
-  const hasVariants = variants.length > 0;
-
-  const allImages = product.product_images ?? [];
-  const primaryImage = allImages.find((i) => i.is_primary) ?? allImages[0];
-  const displayImage = activeImage ?? primaryImage;
-  const thumbImages = allImages.filter((i) => i.id !== displayImage?.id);
-
-  const isOutOfStock = product.stock_quantity === 0;
-  const isLowStock = !isOutOfStock && product.stock_quantity <= product.low_stock_threshold;
-
-  const handleAddToCart = () => {
-    if (hasVariants && !selectedSize) {
-      setSizeError(true);
-      return;
-    }
-    addItem(product, quantity, selectedSize);
-    setAddedFeedback(true);
-    setSizeError(false);
-    setTimeout(() => setAddedFeedback(false), 2500);
-  };
-
-  const handleBuyNow = () => {
-    if (hasVariants && !selectedSize) {
-      setSizeError(true);
-      return;
-    }
-    addItem(product, quantity, selectedSize);
-    navigate('/checkout');
-  };
-
-  const handleSizeSelect = (size: string) => {
-    setSelectedSize(size);
-    setSizeError(false);
-  };
-
-  return (
-    <div className="container" style={{ paddingTop: 'var(--sp-6)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton to="/products" label={t('product.backToProducts')} />
-      {/* Breadcrumb */}
-      <nav className="breadcrumb" aria-label={t('product.breadcrumbLabel')}>
-        <Link to="/">{t('sidebar.home')}</Link>
-        <span className="breadcrumb-sep">›</span>
-        <Link to="/products">{t('sidebar.products')}</Link>
-        {product.categories && (
-          <>
-            <span className="breadcrumb-sep">›</span>
-            <Link to={`/products?category=${product.categories.slug}`}>
-              {product.categories.name}
-            </Link>
-          </>
-        )}
-        <span className="breadcrumb-sep">›</span>
-        <span style={{ color: 'var(--color-text-2)' }}>{product.name}</span>
-      </nav>
-
-      <div className="product-detail">
-        {/* ── Gallery ── */}
-        <div className="gallery">
-          <div className="gallery__main">
-            <img
-              src={displayImage?.url ?? 'https://placehold.co/800x800/f5f5f7/aeaeb2?text=No+image'}
-              alt={displayImage?.alt_text ?? product.name}
-            />
-          </div>
-          {allImages.length > 1 && (
-            <div className="gallery__thumbs">
-              {[primaryImage, ...thumbImages].filter(Boolean).map((img) => (
-                <button
-                  key={img!.id}
-                  className={`gallery__thumb${displayImage?.id === img!.id ? ' gallery__thumb--active' : ''}`}
-                  onClick={() => setActiveImage(img!)}
-                  aria-label={img!.alt_text ?? t('product.imageAlt')}
-                >
-                  <img src={img!.url} alt={img!.alt_text ?? ''} />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* ── Info ── */}
-        <div className="product-info">
-          <div className="product-info__eyebrow">
-            {product.categories && (
-              <Link
-                to={`/products?category=${product.categories.slug}`}
-                className="product-info__category"
-              >
-                {product.categories.name}
-              </Link>
-            )}
-            {product.sku && (
-              <span style={{ fontSize: 11, color: 'var(--color-text-3)', fontFamily: 'var(--font-mono)' }}>
-                SKU {product.sku}
-              </span>
-            )}
-          </div>
-
-          <h1 className="product-info__name">{product.name}</h1>
-
-          <div className="product-info__pricing">
-            <span className="product-info__price">{formatCurrency(product.price)}</span>
-          </div>
-
-          {product.description && (
-            <p className="product-info__description">{product.description}</p>
-          )}
-
-          <div className="product-info__divider" />
-
-          {/* Size selector (any product with variants) */}
-          {hasVariants && (
-            <div className="size-selector">
-              <div className="size-selector__label">
-                {t('cart.size')}
-                {selectedSize && <span className="size-selector__chosen"> — {selectedSize}</span>}
-              </div>
-              <div className="size-selector__grid">
-                {variants.map((v) => {
-                  const outOfSize = v.stock_qty === 0;
-                  return (
-                    <button
-                      key={v.id}
-                      className={`size-btn${selectedSize === v.size ? ' size-btn--active' : ''}${outOfSize ? ' size-btn--out' : ''}`}
-                      onClick={() => !outOfSize && handleSizeSelect(v.size)}
-                      disabled={outOfSize}
-                      aria-pressed={selectedSize === v.size}
-                      title={outOfSize ? t('product.stockOut') : v.size}
-                    >
-                      {v.size}
-                    </button>
-                  );
-                })}
-              </div>
-              {sizeError && (
-                <p className="size-error">{t('product.sizeError')}</p>
-              )}
-            </div>
-          )}
-
-          {/* Stock indicator */}
-          {isOutOfStock ? (
-            <span className="stock-status stock-status--out">{t('product.stockOut')}</span>
-          ) : isLowStock ? (
-            <span className="stock-status stock-status--low">
-              {t('product.stockLow', { count: product.stock_quantity })}
+    <section className="section reviews" aria-label={t('product.reviews.ariaLabel')}>
+      <div className="reviews__head">
+        <p className="t-label">{t('product.reviews.label')}</p>
+        <h2 className="t-h2" style={{ marginTop: 'var(--s-3)' }}>{t('product.reviews.title')}</h2>
+        {reviews.length > 0 && (
+          <div className="row gap-3" style={{ marginTop: 'var(--s-4)' }}>
+            <Stars value={Math.round(average)} />
+            <span className="t-sm t-faint">
+              {average} · {tCount('product.reviews.count', reviews.length)}
             </span>
-          ) : (
-            <span className="stock-status stock-status--in">{t('product.stockIn')}</span>
-          )}
-
-          {/* Actions */}
-          {!isOutOfStock && (
-            <div className="product-info__actions">
-              <div className="qty-control" aria-label={t('cart.quantity')}>
-                <button
-                  className="qty-btn"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  disabled={quantity <= 1}
-                  aria-label={t('cart.decrease')}
-                >−</button>
-                <span className="qty-value" aria-live="polite">{quantity}</span>
-                <button
-                  className="qty-btn"
-                  onClick={() => setQuantity((q) => Math.min(q + 1, product.stock_quantity))}
-                  disabled={quantity >= product.stock_quantity}
-                  aria-label={t('cart.increase')}
-                >+</button>
-              </div>
-
-              <button
-                onClick={handleAddToCart}
-                className={`btn btn-lg${addedFeedback ? ' btn-secondary' : ' btn-primary'}`}
-                style={{ flex: 1 }}
-              >
-                {addedFeedback ? t('product.addedToCart') : t('product.addToCart')}
-              </button>
-            </div>
-          )}
-
-          {!isOutOfStock && (
-            <button
-              onClick={handleBuyNow}
-              className="btn btn-secondary btn-lg btn-full"
-              style={{ marginTop: 'var(--sp-2)' }}
-            >
-              {t('product.buyNow')}
-            </button>
-          )}
-
-          {isOutOfStock && (
-            <button disabled className="btn btn-secondary btn-lg btn-full">
-              {t('product.stockOut')}
-            </button>
-          )}
-
-          {product.weight_grams != null && (
-            <p style={{ fontSize: 12.5, color: 'var(--color-text-3)', marginTop: 'var(--sp-2)' }}>
-              {t('product.weight', { grams: product.weight_grams })}
-            </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* ── Reviews ── */}
-      <div className="product-info__divider" style={{ margin: 'var(--sp-16) 0 var(--sp-10)' }} />
-      <ReviewsSection productId={product.id} />
-    </div>
+      <div className="reviews__body">
+        {!user ? (
+          <p className="t-sm t-faint">
+            <Link to="/login" className="link">{t('auth.signIn')}</Link>
+            {t('product.reviews.signInPrompt')}
+          </p>
+        ) : !hasPurchased ? (
+          <p className="t-sm t-faint">{t('product.reviews.mustPurchase')}</p>
+        ) : (
+          <form
+            className="stack gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit(
+                { userId: user.id, rating, body },
+                {
+                  onSuccess: () => {
+                    setSubmitted(true);
+                    setBody('');
+                    setRating(5);
+                  },
+                }
+              );
+            }}
+          >
+            <div className="row gap-4">
+              <span className="t-sm">{submitted ? t('product.reviews.updated') : t('product.reviews.yourRating')}</span>
+              <Stars value={rating} onChange={setRating} readOnly={false} />
+            </div>
+            <textarea
+              className="textarea"
+              placeholder={t('product.reviews.placeholder')}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={3}
+            />
+            {submitError && <p className="field__error">{(submitError as Error).message}</p>}
+            <button type="submit" className="btn btn--secondary btn--sm" disabled={isPending} style={{ alignSelf: 'flex-start' }}>
+              {isPending ? t('product.reviews.submitting') : t('product.reviews.publish')}
+            </button>
+          </form>
+        )}
+
+        {isLoading ? (
+          <div className="stack gap-4">
+            <div className="sk sk--text" style={{ width: '40%' }} />
+            <div className="sk sk--text" style={{ width: '80%' }} />
+          </div>
+        ) : reviews.length === 0 ? (
+          <p className="t-sm t-faint">{t('product.reviews.empty')}</p>
+        ) : (
+          reviews.map((review) => {
+            const author = review.author_name || t('product.reviews.anonymous');
+            return (
+              <article key={review.id} className="review">
+                <div className="review__meta">
+                  <span className="review__author">{author}</span>
+                  <span className="review__date">{formatDate(new Date(review.created_at))}</span>
+                  <span className="status status--positive">{t('product.reviews.verified')}</span>
+                </div>
+                <Stars value={review.rating} />
+                {review.body && <p className="review__body">{review.body}</p>}
+              </article>
+            );
+          })
+        )}
+      </div>
+    </section>
   );
 }

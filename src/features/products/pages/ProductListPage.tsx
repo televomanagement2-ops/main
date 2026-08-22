@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useProducts } from '../../../hooks/useProducts';
+import { useCategories } from '../../../hooks/useCategories';
 import { ProductGrid } from '../components/ProductGrid';
 import { ProductFiltersBar } from '../components/ProductFiltersBar';
+import { IconArrowLeft, IconArrowRight } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
 import type { ProductFilters } from '../../../types';
 
 const PAGE_SIZE = 12;
 
 export function ProductListPage() {
-  const { t } = useI18n();
+  const { t, tCount } = useI18n();
   // search/category live in the URL (single source of truth) so navbar
   // searches and category links keep working after the first render.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -20,7 +22,7 @@ export function ProductListPage() {
   const [minPrice, setMinPrice] = useState<number | undefined>(undefined);
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
 
-  // New search/category (e.g. from the navbar) → back to page 1. State is
+  // New search/category (e.g. from the header) → back to page 1. State is
   // adjusted during render (not in an effect) so no stale page ever renders.
   const paramsKey = `${search ?? ''}|${categorySlug ?? ''}`;
   const [prevParamsKey, setPrevParamsKey] = useState(paramsKey);
@@ -40,10 +42,12 @@ export function ProductListPage() {
     pageSize: PAGE_SIZE,
   };
   const { data, isLoading, error } = useProducts(filters);
+  const { data: categories = [] } = useCategories();
 
-  const products   = data?.data ?? [];
-  const total      = data?.count ?? 0;
+  const products = data?.data ?? [];
+  const total = data?.count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  const activeCategory = categories.find((c) => c.slug === categorySlug);
 
   const update = (partial: Partial<ProductFilters>) => {
     if ('search' in partial || 'categorySlug' in partial) {
@@ -68,44 +72,60 @@ export function ProductListPage() {
     }
   };
 
-  return (
-    <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-      <div style={{ marginBottom: 'var(--sp-8)' }}>
-        <span className="section-eyebrow">{t('products.catalogEyebrow')}</span>
-        <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('products.catalogTitle')}</h1>
-      </div>
+  const title = activeCategory?.name ?? t('products.catalogTitle');
+  const description = activeCategory?.description ?? t('products.catalogSubtitle');
 
-      <ProductFiltersBar
-        filters={filters}
-        onChange={update}
-        totalCount={total}
-        isLoading={isLoading}
-      />
+  return (
+    <div className="page">
+      <header className="collection__head">
+        <div className="collection__title">
+          <p className="t-label">
+            {activeCategory ? t('products.collectionEyebrow') : t('products.catalogEyebrow')}
+          </p>
+          <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{title}</h1>
+        </div>
+        {description && <p className="t-body collection__desc t-measure">{description}</p>}
+        <p className="t-xs t-faint collection__count">
+          {isLoading ? t('products.loading') : tCount('products.results', total)}
+        </p>
+      </header>
+
+      <ProductFiltersBar filters={filters} onChange={update} totalCount={total} isLoading={isLoading} />
 
       <ProductGrid
         products={products}
         isLoading={isLoading}
         error={error as Error | null}
-        skeletonCount={12}
-        staggered
+        skeletonCount={PAGE_SIZE}
+        emptyAction={
+          <Link to="/products" className="btn btn--secondary">
+            {t('products.clearFilters')}
+          </Link>
+        }
       />
 
       {totalPages > 1 && (
-        <nav className="pagination" aria-label={t('products.paginationLabel')}>
+        <nav className="pager" aria-label={t('products.paginationLabel')}>
           <button
+            type="button"
             onClick={() => update({ page: effectivePage - 1 })}
             disabled={effectivePage <= 1}
-            className="btn btn-secondary btn-sm"
+            className="btn btn--secondary btn--sm"
           >
-            ← {t('products.prevPage')}
+            <IconArrowLeft size={14} />
+            {t('products.prevPage')}
           </button>
-          <span className="pagination-info">{effectivePage} / {totalPages}</span>
+          <span className="pager__info">
+            {effectivePage} / {totalPages}
+          </span>
           <button
+            type="button"
             onClick={() => update({ page: effectivePage + 1 })}
             disabled={effectivePage >= totalPages}
-            className="btn btn-secondary btn-sm"
+            className="btn btn--secondary btn--sm"
           >
-            {t('products.nextPage')} →
+            {t('products.nextPage')}
+            <IconArrowRight size={14} />
           </button>
         </nav>
       )}

@@ -1,75 +1,70 @@
 import { Link } from 'react-router-dom';
+import { Media } from '../../../components/ui/Media';
+import { IconArrowUpRight } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
 import type { Product } from '../../../types';
 
 interface Props {
   product: Product;
-  showActionButton?: boolean;
+  /** `lead` sets the type a step larger for the dominant item in a composition. */
+  variant?: 'default' | 'lead';
+  ratio?: 'square' | 'portrait' | 'tall';
+  /** Editorial index (01, 02 …) shown on curated compositions only. */
+  index?: number;
 }
 
-export function ProductCard({ product, showActionButton = true }: Props) {
+/**
+ * A product card is not a card: image, name, category, price. No container,
+ * no border, no shadow — the photograph is the object and the type sits
+ * quietly beneath it.
+ */
+export function ProductCard({ product, variant = 'default', ratio = 'square', index }: Props) {
   const { t, formatCurrency } = useI18n();
-  const primaryImage = product.product_images?.find((img) => img.is_primary);
 
-  const isOutOfStock = product.stock_quantity === 0;
-  const isLowStock = !isOutOfStock && product.stock_quantity <= product.low_stock_threshold;
-  const isClothing = product.categories?.slug === 'clothing';
-  const hasVariants = (product.product_variants?.length ?? 0) > 0;
+  const image =
+    product.product_images?.find((img) => img.is_primary)?.url ??
+    product.product_images?.[0]?.url ??
+    null;
+  const alt =
+    product.product_images?.find((img) => img.is_primary)?.alt_text ?? product.name;
+
+  const isOut = product.stock_quantity === 0;
+  const isLow = !isOut && product.stock_quantity <= product.low_stock_threshold;
 
   return (
-    <article className="product-card">
-      <Link
-        to={`/products/${product.slug}`}
-        className="product-card__img-wrap"
-        tabIndex={-1}
-        aria-hidden="true"
-      >
-        <img
-          src={primaryImage?.url ?? 'https://placehold.co/480x480/f5f5f7/aeaeb2?text=No+image'}
-          alt={primaryImage?.alt_text ?? product.name}
-          className="product-card__img"
-          loading="lazy"
-          ref={(node) => { if (node?.complete) node.classList.add('is-loaded'); }}
-          onLoad={(e) => e.currentTarget.classList.add('is-loaded')}
-        />
-        {isClothing && hasVariants && (
-          <span className="product-card__variant-hint">{t('products.card.selectSize')}</span>
+    <article className={`pcard${variant === 'lead' ? ' pcard--lead' : ''}`}>
+      <Link to={`/products/${product.slug}`} className="pcard__media">
+        {index != null && (
+          <span className="pcard__index" aria-hidden="true">
+            {String(index).padStart(2, '0')}
+          </span>
         )}
+        {isOut && <span className="pcard__flag">{t('products.card.soldOut')}</span>}
+        <Media src={image} alt={alt} ratio={ratio} zoom />
       </Link>
 
-      <div className="product-card__body">
-        {product.categories && (
-          <span className="product-card__category">{product.categories.name}</span>
-        )}
-        <Link to={`/products/${product.slug}`} className="product-card__name">
-          {product.name}
-        </Link>
-        <div className="product-card__pricing">
-          <span className="product-card__price">{formatCurrency(product.price)}</span>
-        </div>
-      </div>
-
-      {showActionButton && (
-        <div className="product-card__footer">
-          {isLowStock ? (
-            <span className="product-card__stock-warn">
-              {t('products.card.onlyLeft', { count: product.stock_quantity })}
-            </span>
-          ) : (
-            <span />
+      <div className="pcard__body">
+        <div style={{ minWidth: 0 }}>
+          <Link to={`/products/${product.slug}`} className="pcard__name">
+            {product.name}
+          </Link>
+          {product.categories && <p className="pcard__cat">{product.categories.name}</p>}
+          {isLow && (
+            <p className="pcard__note">{t('products.card.onlyLeft', { count: product.stock_quantity })}</p>
           )}
+        </div>
+
+        <div className="row gap-3" style={{ alignItems: 'flex-start' }}>
+          <span className="pcard__price">{formatCurrency(product.price)}</span>
           <Link
             to={`/products/${product.slug}`}
-            className={`btn btn-primary btn-sm${isOutOfStock ? ' btn-disabled' : ''}`}
+            className="pcard__open"
             aria-label={t('products.card.viewProduct', { name: product.name })}
-            style={isOutOfStock ? { pointerEvents: 'none', opacity: 0.42 } : {}}
           >
-            {isOutOfStock
-              ? t('products.card.soldOut')
-              : (isClothing && hasVariants ? t('products.card.chooseSize') : t('products.card.add'))}
+            <IconArrowUpRight size={12} />
           </Link>
         </div>
-      )}
+      </div>
     </article>
   );
 }

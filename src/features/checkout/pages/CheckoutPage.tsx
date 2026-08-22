@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { BackButton } from '../../../components/ui/BackButton';
 import { useCartStore } from '../../../store/cartStore';
 import { useCartSync } from '../../../hooks/useCartSync';
 import { useAuth } from '../../../hooks/useAuth';
@@ -11,6 +10,10 @@ import { supabase } from '../../../lib/supabaseClient';
 import { createAddress } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
 import { computeOrderTotals } from '../../../lib/pricing';
+import { Media } from '../../../components/ui/Media';
+import { Spinner } from '../../../components/ui/Spinner';
+import { Badge } from '../../../components/ui/Badge';
+import { IconAlert, IconCheck, IconInfo, IconLock } from '../../../components/ui/icons';
 import type { Address, ShippingMethod } from '../../../types';
 
 type CheckoutBody = {
@@ -118,7 +121,7 @@ async function invokeCheckoutSession(
   return { url: payload.url };
 }
 
-function AddressCard({
+function AddressChoice({
   address,
   selected,
   onSelect,
@@ -132,27 +135,28 @@ function AddressCard({
   return (
     <button
       type="button"
-      className={`address-card${selected ? ' address-card--selected' : ''}`}
+      className={`choice${selected ? ' is-selected' : ''}`}
       onClick={onSelect}
       aria-pressed={selected}
     >
-      <div className="address-card__radio" aria-hidden="true">
-        <div className={`address-card__dot${selected ? ' address-card__dot--active' : ''}`} />
-      </div>
-      <div className="address-card__body">
-        <p className="address-card__name">{address.full_name}</p>
-        <p className="address-card__line">{address.line1}{address.line2 ? `, ${address.line2}` : ''}</p>
-        <p className="address-card__line">{address.city}, {address.state} {address.postal_code}</p>
-        <p className="address-card__line">{address.country}</p>
-      </div>
-      {address.is_default && (
-        <span className="badge badge-accent" style={{ marginLeft: 'auto', flexShrink: 0 }}>{defaultLabel}</span>
-      )}
+      <span className="choice__radio" aria-hidden="true">
+        <span className="choice__dot" />
+      </span>
+      <span className="choice__body">
+        <span className="choice__title">{address.full_name}</span>
+        <span className="choice__line" style={{ display: 'block' }}>
+          {address.line1}{address.line2 ? `, ${address.line2}` : ''}
+        </span>
+        <span className="choice__line" style={{ display: 'block' }}>
+          {address.city}, {address.state} {address.postal_code} · {address.country}
+        </span>
+      </span>
+      {address.is_default && <Badge>{defaultLabel}</Badge>}
     </button>
   );
 }
 
-function ShippingMethodCard({
+function ShippingChoice({
   method,
   selected,
   onSelect,
@@ -174,23 +178,19 @@ function ShippingMethodCard({
   return (
     <button
       type="button"
-      className={`shipping-card${selected ? ' shipping-card--selected' : ''}`}
+      className={`choice${selected ? ' is-selected' : ''}`}
       onClick={onSelect}
       aria-pressed={selected}
     >
-      <div className="address-card__radio" aria-hidden="true">
-        <div className={`address-card__dot${selected ? ' address-card__dot--active' : ''}`} />
-      </div>
-      <div style={{ flex: 1 }}>
-        <p className="shipping-card__name">{method.name}</p>
-        {method.description && (
-          <p className="shipping-card__desc">{method.description}</p>
-        )}
-        {days && <p className="shipping-card__days">{estimatedLabel}: {days}</p>}
-      </div>
-      <span className="shipping-card__price">
-        {method.price === 0 ? freeLabel : formatCurrency(method.price)}
+      <span className="choice__radio" aria-hidden="true">
+        <span className="choice__dot" />
       </span>
+      <span className="choice__body">
+        <span className="choice__title">{method.name}</span>
+        {method.description && <span className="choice__line" style={{ display: 'block' }}>{method.description}</span>}
+        {days && <span className="t-xs t-faint" style={{ display: 'block' }}>{estimatedLabel}: {days}</span>}
+      </span>
+      <span className="choice__price">{method.price === 0 ? freeLabel : formatCurrency(method.price)}</span>
     </button>
   );
 }
@@ -264,11 +264,12 @@ function NewAddressForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="new-address-form">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-3)' }}>
-        <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="label">{labels.fullName} *</label>
+    <form onSubmit={handleSubmit} className="stack gap-4" style={{ marginTop: 'var(--s-5)' }}>
+      <div className="form-grid">
+        <div className="field" style={{ gridColumn: '1 / -1' }}>
+          <label className="field__label" htmlFor="ck-name">{labels.fullName} *</label>
           <input
+            id="ck-name"
             className="input"
             required
             value={form.full_name}
@@ -277,9 +278,10 @@ function NewAddressForm({
             autoComplete="name"
           />
         </div>
-        <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="label">{labels.addressLine1} *</label>
+        <div className="field" style={{ gridColumn: '1 / -1' }}>
+          <label className="field__label" htmlFor="ck-line1">{labels.addressLine1} *</label>
           <input
+            id="ck-line1"
             className="input"
             required
             value={form.line1}
@@ -288,9 +290,10 @@ function NewAddressForm({
             autoComplete="address-line1"
           />
         </div>
-        <div className="form-group" style={{ gridColumn: '1/-1' }}>
-          <label className="label">{labels.addressLine2}</label>
+        <div className="field" style={{ gridColumn: '1 / -1' }}>
+          <label className="field__label" htmlFor="ck-line2">{labels.addressLine2}</label>
           <input
+            id="ck-line2"
             className="input"
             value={form.line2}
             onChange={set('line2')}
@@ -298,9 +301,10 @@ function NewAddressForm({
             autoComplete="address-line2"
           />
         </div>
-        <div className="form-group">
-          <label className="label">{labels.city} *</label>
+        <div className="field">
+          <label className="field__label" htmlFor="ck-city">{labels.city} *</label>
           <input
+            id="ck-city"
             className="input"
             required
             value={form.city}
@@ -309,9 +313,10 @@ function NewAddressForm({
             autoComplete="address-level2"
           />
         </div>
-        <div className="form-group">
-          <label className="label">{labels.state} *</label>
+        <div className="field">
+          <label className="field__label" htmlFor="ck-state">{labels.state} *</label>
           <input
+            id="ck-state"
             className="input"
             required
             value={form.state}
@@ -320,9 +325,10 @@ function NewAddressForm({
             autoComplete="address-level1"
           />
         </div>
-        <div className="form-group">
-          <label className="label">{labels.postalCode} *</label>
+        <div className="field">
+          <label className="field__label" htmlFor="ck-postal">{labels.postalCode} *</label>
           <input
+            id="ck-postal"
             className="input"
             required
             value={form.postal_code}
@@ -330,15 +336,12 @@ function NewAddressForm({
             placeholder={labels.placeholders.postalCode}
             autoComplete="postal-code"
           />
-          {postalError && (
-            <p style={{ fontSize: 12.5, color: 'var(--color-danger)', marginTop: 4 }}>
-              {labels.invalidPostalCode}
-            </p>
-          )}
+          {postalError && <p className="field__error">{labels.invalidPostalCode}</p>}
         </div>
-        <div className="form-group">
-          <label className="label">{labels.country} *</label>
+        <div className="field">
+          <label className="field__label" htmlFor="ck-country">{labels.country} *</label>
           <select
+            id="ck-country"
             className="select"
             required
             value={form.country}
@@ -350,9 +353,10 @@ function NewAddressForm({
             ))}
           </select>
         </div>
-        <div className="form-group">
-          <label className="label">{labels.phone}</label>
+        <div className="field" style={{ gridColumn: '1 / -1' }}>
+          <label className="field__label" htmlFor="ck-phone">{labels.phone}</label>
           <input
+            id="ck-phone"
             className="input"
             value={form.phone}
             onChange={set('phone')}
@@ -362,7 +366,8 @@ function NewAddressForm({
           />
         </div>
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', marginTop: 'var(--sp-3)', fontSize: 13.5 }}>
+
+      <label className="checkbox">
         <input
           type="checkbox"
           checked={saveForLater}
@@ -370,7 +375,8 @@ function NewAddressForm({
         />
         {labels.saveAddress}
       </label>
-      <button type="submit" className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--sp-3)' }}>
+
+      <button type="submit" className="btn btn--secondary btn--sm" style={{ alignSelf: 'flex-start' }}>
         {labels.useThisAddress}
       </button>
     </form>
@@ -408,6 +414,7 @@ export function CheckoutPage() {
   const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const shippingCost = selectedMethod?.price ?? 0;
   const { tax, total } = computeOrderTotals(subtotal, shippingCost);
+  const itemCount = items.reduce((n, i) => n + i.quantity, 0);
 
   const formatDays = (min: number | null, max: number | null) => {
     if (min == null || max == null) return null;
@@ -523,36 +530,42 @@ export function CheckoutPage() {
   }
 
   return (
-    <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton to="/cart" label={t('checkout.backToCart')} />
-      <div style={{ marginBottom: 'var(--sp-8)' }}>
-        <span className="section-eyebrow">{t('checkout.securePayment')}</span>
-        <h1 className="heading-1" style={{ marginBottom: 0 }}>{t('checkout.title')}</h1>
-      </div>
+    <div className="page">
+      <header className="account-head">
+        <div className="account-head__title">
+          <p className="t-label">{t('checkout.securePayment')}</p>
+          <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{t('checkout.title')}</h1>
+        </div>
+        <div className="account-head__actions">
+          <Link to="/cart" className="btn btn--quiet">{t('checkout.backToCart')}</Link>
+        </div>
+      </header>
 
       {cartSync.changed && (
-        <div className="alert alert-warning" style={{ marginBottom: 'var(--sp-5)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--sp-4)' }}>
-          <span>{t('cart.pricesUpdated')}</span>
-          <button className="btn btn-ghost btn-sm" onClick={cartSync.dismiss}>
+        <div className="notice notice--caution" style={{ marginBottom: 'var(--s-8)' }}>
+          <IconInfo size={16} />
+          <div className="notice__body">{t('cart.pricesUpdated')}</div>
+          <button type="button" className="btn btn--quiet btn--sm" onClick={cartSync.dismiss}>
             {t('cart.dismiss')}
           </button>
         </div>
       )}
 
       <div className="checkout-layout">
-        <div className="checkout-main">
-          {/* ── Address section ── */}
-          <section className="checkout-section">
-            <h2 className="checkout-section-title">{t('checkout.shippingAddress')}</h2>
+        <div className="checkout-layout__main">
+          {/* ── 01 · Shipping address ── */}
+          <section className="checkout-step">
+            <div className="checkout-step__head">
+              <span className="checkout-step__num">01</span>
+              <h2 className="t-h3">{t('checkout.shippingAddress')}</h2>
+            </div>
 
             {addressesLoading ? (
-              <div style={{ padding: 'var(--sp-4)', color: 'var(--color-text-3)', fontSize: 14 }}>
-                {t('checkout.loadingAddresses')}
-              </div>
+              <p className="t-sm t-faint">{t('checkout.loadingAddresses')}</p>
             ) : (
-              <div className="address-list">
+              <div className="stack gap-2">
                 {savedAddresses.map((addr) => (
-                  <AddressCard
+                  <AddressChoice
                     key={addr.id}
                     address={addr}
                     selected={effectiveAddressId === addr.id}
@@ -562,152 +575,176 @@ export function CheckoutPage() {
                 ))}
                 <button
                   type="button"
-                  className={`address-card address-card--new${effectiveAddressId === 'new' ? ' address-card--selected' : ''}`}
+                  className={`choice${effectiveAddressId === 'new' ? ' is-selected' : ''}`}
                   onClick={() => setSelectedAddressId('new')}
+                  aria-pressed={effectiveAddressId === 'new'}
                 >
-                  <div className="address-card__radio" aria-hidden="true">
-                    <div className={`address-card__dot${effectiveAddressId === 'new' ? ' address-card__dot--active' : ''}`} />
-                  </div>
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>
-                    {savedAddresses.length === 0
-                      ? t('checkout.enterShippingAddress')
-                      : `+ ${t('checkout.useDifferentAddress')}`}
+                  <span className="choice__radio" aria-hidden="true">
+                    <span className="choice__dot" />
+                  </span>
+                  <span className="choice__body">
+                    <span className="choice__title">
+                      {savedAddresses.length === 0
+                        ? t('checkout.enterShippingAddress')
+                        : t('checkout.useDifferentAddress')}
+                    </span>
                   </span>
                 </button>
               </div>
             )}
 
             {effectiveAddressId === 'new' && (
-              <div style={{ marginTop: 'var(--sp-4)' }}>
+              <div>
                 <NewAddressForm onSaved={handleNewAddress} labels={addressLabels} />
                 {newAddress && (
-                  <p style={{ fontSize: 13, color: 'var(--color-success)', marginTop: 8 }}>
-                    ✓ {t('checkout.addressReady')}
+                  <p className="status status--positive" style={{ marginTop: 'var(--s-3)' }}>
+                    {t('checkout.addressReady')}
                   </p>
                 )}
               </div>
             )}
           </section>
 
-          {/* ── Shipping method section ── */}
-          <section className="checkout-section" style={{ marginTop: 'var(--sp-8)' }}>
-            <h2 className="checkout-section-title">{t('checkout.shippingMethod')}</h2>
+          {/* ── 02 · Shipping method ── */}
+          <section className="checkout-step">
+            <div className="checkout-step__head">
+              <span className="checkout-step__num">02</span>
+              <h2 className="t-h3">{t('checkout.shippingMethod')}</h2>
+            </div>
 
             {shippingLoading ? (
-              <div style={{ padding: 'var(--sp-4)', color: 'var(--color-text-3)', fontSize: 14 }}>
-                {t('checkout.loadingShipping')}
-              </div>
+              <p className="t-sm t-faint">{t('checkout.loadingShipping')}</p>
             ) : (
-              <div className="shipping-list">
-                {shippingMethods.map((method) => {
-                  const isSelected = (selectedMethodId ?? shippingMethods[0]?.id) === method.id;
-                  return (
-                    <ShippingMethodCard
-                      key={method.id}
-                      method={method}
-                      selected={isSelected}
-                      onSelect={() => setSelectedMethodId(method.id)}
-                      estimatedLabel={t('checkout.estimated')}
-                      freeLabel={t('common.free')}
-                      formatCurrency={formatCurrency}
-                      formatDays={formatDays}
-                    />
-                  );
-                })}
+              <div className="stack gap-2">
+                {shippingMethods.map((method) => (
+                  <ShippingChoice
+                    key={method.id}
+                    method={method}
+                    selected={(selectedMethodId ?? shippingMethods[0]?.id) === method.id}
+                    onSelect={() => setSelectedMethodId(method.id)}
+                    estimatedLabel={t('checkout.estimated')}
+                    freeLabel={t('common.free')}
+                    formatCurrency={formatCurrency}
+                    formatDays={formatDays}
+                  />
+                ))}
               </div>
             )}
           </section>
 
-          {/* ── Order review ── */}
-          <section className="checkout-section" style={{ marginTop: 'var(--sp-8)' }}>
-            <h2 className="checkout-section-title">{t('checkout.orderReview')}</h2>
-            {items.map((item) => (
-              <div key={`${item.product.id}-${item.selectedSize ?? ''}`} className="checkout-item">
-                <div className="checkout-item__img-wrap">
-                  {item.product.product_images?.[0]?.url ? (
-                    <img
-                      src={item.product.product_images[0].url}
-                      alt={item.product.name}
-                      className="checkout-item__img"
-                    />
-                  ) : (
-                    <div className="checkout-item__img-placeholder" />
-                  )}
-                  <span className="checkout-item__qty">{item.quantity}</span>
-                </div>
-                <div className="checkout-item__info">
-                  <p className="checkout-item__name">{item.product.name}</p>
-                  {item.selectedSize && (
-                    <p className="checkout-item__unit" style={{ color: 'var(--color-text-2)' }}>
-                      {t('cart.size')}: {item.selectedSize}
+          {/* ── 03 · Review ── */}
+          <section className="checkout-step">
+            <div className="checkout-step__head">
+              <span className="checkout-step__num">03</span>
+              <h2 className="t-h3">{t('checkout.orderReview')}</h2>
+              <span className="t-xs t-faint">{tCount('orders.items', itemCount)}</span>
+            </div>
+
+            <div>
+              {items.map((item) => {
+                const image =
+                  item.product.product_images?.find((i) => i.is_primary)?.url ??
+                  item.product.product_images?.[0]?.url ??
+                  null;
+                return (
+                  <div key={`${item.product.id}-${item.selectedSize ?? ''}`} className="mini-line">
+                    <div className="mini-line__media">
+                      <Media src={image} alt="" ratio="square" />
+                      <span className="mini-line__qty">{item.quantity}</span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p className="t-sm" style={{ color: 'var(--ink)' }}>{item.product.name}</p>
+                      {item.selectedSize && (
+                        <p className="t-xs t-faint">{t('cart.size')}: {item.selectedSize}</p>
+                      )}
+                      <p className="t-xs t-faint">
+                        {formatCurrency(item.product.price)} {t('cart.each')}
+                      </p>
+                    </div>
+                    <p className="t-sm t-num" style={{ color: 'var(--ink)' }}>
+                      {formatCurrency(item.product.price * item.quantity)}
                     </p>
-                  )}
-                  <p className="checkout-item__unit">{formatCurrency(item.product.price)} {t('cart.each')}</p>
-                </div>
-                <p className="checkout-item__total">
-                  {formatCurrency(item.product.price * item.quantity)}
-                </p>
-              </div>
-            ))}
+                  </div>
+                );
+              })}
+            </div>
           </section>
         </div>
 
-        <aside className="order-summary">
-          <h2 className="order-summary__title">{t('checkout.orderSummary')}</h2>
+        <aside className="checkout-layout__aside" aria-label={t('checkout.orderSummary')}>
+          <p className="t-label" style={{ marginBottom: 'var(--s-5)' }}>{t('checkout.orderSummary')}</p>
 
-          <div className="summary-line">
-            <span>{t('cart.subtotal')}</span>
-            <span>{formatCurrency(subtotal)}</span>
-          </div>
-          <div className="summary-line">
-            <span>
-              {t('checkout.shippingWithMethod', {
-                method: selectedMethod?.name ?? t('checkout.standard'),
-              })}
-            </span>
-            <span className={shippingCost === 0 ? 'summary-line--free' : ''}>
-              {shippingCost === 0 ? t('common.free') : formatCurrency(shippingCost)}
-            </span>
-          </div>
-          {tax > 0 && (
-            <div className="summary-line">
-              <span>{t('cart.tax')}</span>
-              <span>{formatCurrency(tax)}</span>
+          <div className="summary">
+            <div className="summary__row">
+              <span>{t('cart.subtotal')}</span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
-          )}
-          <div className="summary-line summary-line--total">
-            <span>{t('cart.total')}</span>
-            <span>{formatCurrency(total)}</span>
+            <div className="summary__row">
+              <span>
+                {t('checkout.shippingWithMethod', { method: selectedMethod?.name ?? t('checkout.standard') })}
+              </span>
+              <span className={shippingCost === 0 ? 'summary__free' : undefined}>
+                {shippingCost === 0 ? t('common.free') : formatCurrency(shippingCost)}
+              </span>
+            </div>
+            {tax > 0 && (
+              <div className="summary__row">
+                <span>{t('cart.tax')}</span>
+                <span>{formatCurrency(tax)}</span>
+              </div>
+            )}
+            <div className="summary__row summary__row--total">
+              <span>{t('cart.total')}</span>
+              <span>{formatCurrency(total)}</span>
+            </div>
           </div>
 
           {error && (
-            <div className="alert alert-error" style={{ marginTop: 'var(--sp-4)' }}>
-              {error}
+            <div className="notice notice--critical" style={{ marginTop: 'var(--s-5)' }}>
+              <IconAlert size={16} />
+              <div className="notice__body">{error}</div>
             </div>
           )}
 
           {!shippingAddressReady && (
-            <p style={{ fontSize: 12.5, color: 'var(--color-warning)', marginTop: 'var(--sp-4)', lineHeight: 1.5 }}>
+            <p className="t-xs" style={{ color: 'var(--caution)', marginTop: 'var(--s-5)' }}>
               {t('checkout.completeAddressWarning')}
             </p>
           )}
 
           <button
+            type="button"
             onClick={handleCheckout}
             disabled={isLoading || !shippingAddressReady}
-            className="btn btn-primary btn-lg btn-full"
-            style={{ marginTop: 'var(--sp-5)' }}
+            className="btn btn--primary btn--lg btn--block"
+            style={{ marginTop: 'var(--s-6)' }}
           >
             {isLoading ? (
-              <><span className="spinner spinner-sm" style={{ borderColor: 'rgba(255,255,255,.3)', borderTopColor: '#fff' }} /> {t('checkout.redirectingPayment')}</>
+              <>
+                <Spinner onAction />
+                {t('checkout.redirectingPayment')}
+              </>
             ) : (
-              <>{t('checkout.payWithStripe', { amount: formatCurrency(total) })}</>
+              t('checkout.payWithStripe', { amount: formatCurrency(total) })
             )}
           </button>
 
-          <p style={{ fontSize: 12, color: 'var(--color-text-3)', textAlign: 'center', marginTop: 'var(--sp-3)' }}>
+          <p
+            className="t-xs t-faint row gap-2"
+            style={{ justifyContent: 'center', marginTop: 'var(--s-4)' }}
+          >
+            <IconLock size={13} />
             {t('checkout.securedByStripe')}
           </p>
+
+          <ul className="stack gap-2" style={{ marginTop: 'var(--s-6)' }}>
+            {[t('checkout.assurance1'), t('checkout.assurance2')].map((line) => (
+              <li key={line} className="t-xs t-faint row gap-2" style={{ alignItems: 'flex-start' }}>
+                <IconCheck size={13} />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
         </aside>
       </div>
     </div>

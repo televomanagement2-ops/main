@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
+import { useThemeStore, type Theme } from '../../../store/themeStore';
+import { LANGUAGE_OPTIONS, usePreferencesStore, type AppLanguageCode } from '../../../store/preferencesStore';
+import { useCookieConsentStore } from '../../../store/cookieConsentStore';
 
 const VERSION_FALLBACK = '1.0.0';
 
@@ -11,10 +14,19 @@ function getStoredBoolean(key: string, defaultValue: boolean): boolean {
   return raw === 'true';
 }
 
- export function SettingsPage() {
+export function SettingsPage() {
   const { t } = useI18n();
-  const [locationAllowed, setLocationAllowed] = useState<boolean>(() => getStoredBoolean('settings.locationAllowed', false));
-  const [analyticsAllowed, setAnalyticsAllowed] = useState<boolean>(() => getStoredBoolean('settings.analyticsAllowed', true));
+  const { theme, setTheme } = useThemeStore();
+  const language = usePreferencesStore((s) => s.language);
+  const setLanguage = usePreferencesStore((s) => s.setLanguage);
+  const openCookiePreferences = useCookieConsentStore((s) => s.openPreferences);
+
+  const [locationAllowed, setLocationAllowed] = useState<boolean>(() =>
+    getStoredBoolean('settings.locationAllowed', false)
+  );
+  const [analyticsAllowed, setAnalyticsAllowed] = useState<boolean>(() =>
+    getStoredBoolean('settings.analyticsAllowed', true)
+  );
   const [locationStatusKey, setLocationStatusKey] = useState<string>('settings.locationDisabled');
 
   const appVersion = useMemo(() => {
@@ -58,86 +70,133 @@ function getStoredBoolean(key: string, defaultValue: boolean): boolean {
     setAnalyticsAllowed(next);
   };
 
+  const themes: { value: Theme; label: string }[] = [
+    { value: 'light', label: t('settings.themeLight') },
+    { value: 'dark', label: t('settings.themeDark') },
+    { value: 'system', label: t('settings.themeSystem') },
+  ];
+
   return (
-    <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton to="/profile" label={t('settings.backToProfile')} />
+    <div className="page" style={{ paddingBottom: 'var(--s-20)' }}>
+      <div style={{ paddingTop: 'var(--s-6)' }}>
+        <BackButton to="/profile" label={t('settings.backToProfile')} />
+      </div>
 
-      <section className="settings-hero">
-        <span className="section-eyebrow">{t('settings.preferences')}</span>
-        <h1 className="heading-1" style={{ marginBottom: 'var(--sp-2)' }}>{t('settings.title')}</h1>
-        <p className="body-sm" style={{ maxWidth: 620 }}>
-          {t('settings.subtitle')}
-        </p>
-      </section>
+      <header className="account-head">
+        <div className="account-head__title">
+          <p className="t-label">{t('settings.preferences')}</p>
+          <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{t('settings.title')}</h1>
+          <p className="t-body collection__desc t-measure">{t('settings.subtitle')}</p>
+        </div>
+      </header>
 
-      <div className="settings-grid">
-        <article className="settings-card">
-          <h2 className="settings-card__title">{t('settings.permissions')}</h2>
-          <div className="settings-toggle-row">
-            <div>
-              <p className="settings-toggle-row__label">{t('settings.locationAccess')}</p>
-              <p className="settings-toggle-row__sub">{t('settings.locationSub')}</p>
+      <div className="detail-grid">
+        <section className="detail-block detail-block--wide">
+          <p className="t-label">{t('settings.appearance')}</p>
+          <div className="filter-chips" style={{ marginTop: 'var(--s-2)' }}>
+            {themes.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`filter-chip${theme === option.value ? ' is-active' : ''}`}
+                onClick={() => setTheme(option.value)}
+                aria-pressed={theme === option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="t-label" style={{ marginTop: 'var(--s-8)' }}>{t('settings.language')}</p>
+          <div className="filter-chips" style={{ marginTop: 'var(--s-2)' }}>
+            {(Object.keys(LANGUAGE_OPTIONS) as AppLanguageCode[]).map((code) => (
+              <button
+                key={code}
+                type="button"
+                className={`filter-chip${language === code ? ' is-active' : ''}`}
+                onClick={() => setLanguage(code)}
+                aria-pressed={language === code}
+              >
+                {LANGUAGE_OPTIONS[code].label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="detail-block detail-block--wide">
+          <p className="t-label">{t('settings.permissions')}</p>
+
+          <div className="info-rows" style={{ marginTop: 'var(--s-2)' }}>
+            <div className="info-row" style={{ alignItems: 'flex-start' }}>
+              <span>
+                <strong style={{ display: 'block' }}>{t('settings.locationAccess')}</strong>
+                <span className="t-xs t-faint">{t('settings.locationSub')}</span>
+              </span>
+              <button
+                type="button"
+                className={`switch${locationAllowed ? ' is-on' : ''}`}
+                onClick={handleLocationToggle}
+                role="switch"
+                aria-checked={locationAllowed}
+                aria-label={t('settings.locationAccess')}
+              />
             </div>
-            <button
-              type="button"
-              className={`settings-toggle ${locationAllowed ? 'is-on' : ''}`}
-              onClick={handleLocationToggle}
-              aria-pressed={locationAllowed}
-            >
-              <span>{locationAllowed ? t('settings.on') : t('settings.off')}</span>
+
+            <div className="info-row" style={{ alignItems: 'flex-start' }}>
+              <span>
+                <strong style={{ display: 'block' }}>{t('settings.analytics')}</strong>
+                <span className="t-xs t-faint">{t('settings.analyticsSub')}</span>
+              </span>
+              <button
+                type="button"
+                className={`switch${analyticsAllowed ? ' is-on' : ''}`}
+                onClick={handleAnalyticsToggle}
+                role="switch"
+                aria-checked={analyticsAllowed}
+                aria-label={t('settings.analytics')}
+              />
+            </div>
+          </div>
+
+          <p className="t-xs t-faint">{t(locationStatusKey)}</p>
+        </section>
+
+        <section className="detail-block">
+          <p className="t-label">{t('settings.privacy')}</p>
+          <p className="detail-block__body">{t('settings.privacySub')}</p>
+          <div className="row row--wrap gap-2" style={{ marginTop: 'var(--s-2)' }}>
+            <Link to="/privacy-policy" className="btn btn--secondary btn--sm">{t('settings.openPrivacy')}</Link>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={openCookiePreferences}>
+              {t('cookies.manageBtn')}
             </button>
           </div>
-          <p className="settings-note">{t(locationStatusKey)}</p>
+        </section>
 
-          <div className="settings-toggle-row" style={{ marginTop: 'var(--sp-4)' }}>
-            <div>
-              <p className="settings-toggle-row__label">{t('settings.analytics')}</p>
-              <p className="settings-toggle-row__sub">{t('settings.analyticsSub')}</p>
-            </div>
-            <button
-              type="button"
-              className={`settings-toggle ${analyticsAllowed ? 'is-on' : ''}`}
-              onClick={handleAnalyticsToggle}
-              aria-pressed={analyticsAllowed}
-            >
-              <span>{analyticsAllowed ? t('settings.on') : t('settings.off')}</span>
-            </button>
-          </div>
-        </article>
+        <section className="detail-block">
+          <p className="t-label">{t('settings.help')}</p>
+          <p className="detail-block__body">{t('settings.helpSub')}</p>
+          <Link to="/help" className="btn btn--secondary btn--sm" style={{ alignSelf: 'flex-start' }}>
+            {t('settings.openHelp')}
+          </Link>
+        </section>
 
-        <article className="settings-card">
-          <h2 className="settings-card__title">{t('settings.information')}</h2>
-          <div className="settings-info-list">
-            <div className="settings-info-row">
+        <section className="detail-block">
+          <p className="t-label">{t('settings.information')}</p>
+          <div className="info-rows">
+            <div className="info-row">
               <span>{t('settings.appVersion')}</span>
-              <strong>{appVersion}</strong>
+              <strong className="t-mono">{appVersion}</strong>
             </div>
-            <div className="settings-info-row">
+            <div className="info-row">
               <span>{t('settings.environment')}</span>
               <strong>{environment}</strong>
             </div>
-            <div className="settings-info-row">
+            <div className="info-row">
               <span>{t('settings.buildChannel')}</span>
               <strong>{t('settings.buildChannelValue')}</strong>
             </div>
           </div>
-        </article>
-
-        <article className="settings-card">
-          <h2 className="settings-card__title">{t('settings.privacy')}</h2>
-          <p className="settings-note" style={{ marginBottom: 'var(--sp-4)' }}>
-            {t('settings.privacySub')}
-          </p>
-          <Link to="/privacy-policy" className="btn btn-secondary btn-sm">{t('settings.openPrivacy')}</Link>
-        </article>
-
-        <article className="settings-card">
-          <h2 className="settings-card__title">{t('settings.help')}</h2>
-          <p className="settings-note" style={{ marginBottom: 'var(--sp-4)' }}>
-            {t('settings.helpSub')}
-          </p>
-          <Link to="/help" className="btn btn-secondary btn-sm">{t('settings.openHelp')}</Link>
-        </article>
+        </section>
       </div>
     </div>
   );

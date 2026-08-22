@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCookieConsentStore } from '../../store/cookieConsentStore';
 import { useI18n } from '../../lib/i18n';
+import { IconSettings } from '../ui/icons';
 
 /**
  * Self-hosted cookie consent banner.
@@ -25,13 +26,13 @@ export function CookieConsentBanner() {
 
   const bannerVisible = status === 'pending' || isPanelOpen;
 
-  // When a decision has been made and the panel is closed, show only a small
-  // floating button so the user can re-open preferences whenever they want.
+  // Once a decision exists the banner collapses to a small, quiet control so
+  // the choice stays reachable without occupying the page.
   if (!bannerVisible) {
     return (
       <button
         type="button"
-        className="cookie-fab"
+        className="consent-fab"
         aria-label={t('cookies.banner.manageFloating')}
         title={t('cookies.banner.manageFloating')}
         onClick={() => {
@@ -40,79 +41,81 @@ export function CookieConsentBanner() {
           openPreferences();
         }}
       >
-        🍪
+        <IconSettings size={15} />
       </button>
     );
   }
 
   return (
     <div
-      className="cookie-consent"
+      className="consent"
       role="dialog"
       aria-modal="false"
       aria-label={t('cookies.banner.title')}
     >
-      <div className="cookie-consent__card">
-        <h2 className="cookie-consent__title">{t('cookies.banner.title')}</h2>
-        <p className="cookie-consent__body">
-          {t('cookies.banner.body')}{' '}
-          <Link to="/cookies" className="cookie-consent__link">
-            {t('footer.cookie')}
-          </Link>
-        </p>
+      <p className="consent__title">{t('cookies.banner.title')}</p>
+      <p className="consent__body">
+        {t('cookies.banner.body')}{' '}
+        <Link to="/cookies" className="link">{t('footer.cookie')}</Link>
+      </p>
 
-        {customizing && (
-          <div className="cookie-consent__categories">
-            <label className="cookie-cat cookie-cat--locked">
-              <span className="cookie-cat__text">
-                <span className="cookie-cat__title">{t('cookies.banner.necessaryTitle')}</span>
-                <span className="cookie-cat__desc">{t('cookies.banner.necessaryDesc')}</span>
+      {customizing && (
+        <div className="consent__cats">
+          <div className="consent__cat">
+            <span>
+              <span className="t-sm" style={{ color: 'var(--ink)', display: 'block' }}>
+                {t('cookies.banner.necessaryTitle')}
               </span>
-              <span className="cookie-cat__always">{t('cookies.banner.alwaysOn')}</span>
-            </label>
-            <label className="cookie-cat">
-              <span className="cookie-cat__text">
-                <span className="cookie-cat__title">{t('cookies.banner.analyticsTitle')}</span>
-                <span className="cookie-cat__desc">{t('cookies.banner.analyticsDesc')}</span>
+              <span className="t-xs t-faint">{t('cookies.banner.necessaryDesc')}</span>
+            </span>
+            <span className="status status--positive">{t('cookies.banner.alwaysOn')}</span>
+          </div>
+
+          <label className="consent__cat">
+            <span>
+              <span className="t-sm" style={{ color: 'var(--ink)', display: 'block' }}>
+                {t('cookies.banner.analyticsTitle')}
               </span>
+              <span className="t-xs t-faint">{t('cookies.banner.analyticsDesc')}</span>
+            </span>
+            <span className="checkbox">
               <input
                 type="checkbox"
-                className="cookie-cat__toggle"
                 checked={analytics}
                 onChange={(e) => setAnalytics(e.target.checked)}
                 aria-label={t('cookies.banner.analyticsTitle')}
               />
-            </label>
-          </div>
-        )}
-
-        <div className="cookie-consent__actions">
-          {customizing ? (
-            <>
-              <button type="button" className="cookie-btn" onClick={() => savePreferences(analytics)}>
-                {t('cookies.banner.save')}
-              </button>
-              <button type="button" className="cookie-btn" onClick={rejectAll}>
-                {t('cookies.banner.rejectAll')}
-              </button>
-              <button type="button" className="cookie-btn cookie-btn--primary" onClick={acceptAll}>
-                {t('cookies.banner.acceptAll')}
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className="cookie-btn" onClick={rejectAll}>
-                {t('cookies.banner.rejectAll')}
-              </button>
-              <button type="button" className="cookie-btn" onClick={() => setCustomizing(true)}>
-                {t('cookies.banner.customize')}
-              </button>
-              <button type="button" className="cookie-btn cookie-btn--primary" onClick={acceptAll}>
-                {t('cookies.banner.acceptAll')}
-              </button>
-            </>
-          )}
+            </span>
+          </label>
         </div>
+      )}
+
+      <div className="consent__actions">
+        {customizing ? (
+          <>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={rejectAll}>
+              {t('cookies.banner.rejectAll')}
+            </button>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => savePreferences(analytics)}>
+              {t('cookies.banner.save')}
+            </button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={acceptAll}>
+              {t('cookies.banner.acceptAll')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={rejectAll}>
+              {t('cookies.banner.rejectAll')}
+            </button>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={() => setCustomizing(true)}>
+              {t('cookies.banner.customize')}
+            </button>
+            <button type="button" className="btn btn--primary btn--sm" onClick={acceptAll}>
+              {t('cookies.banner.acceptAll')}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

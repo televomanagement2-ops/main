@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { BackButton } from '../../../components/ui/BackButton';
 import { useI18n } from '../../../lib/i18n';
 import { storeConfig } from '../../../config/storeConfig';
+
 
 type FAQSection = {
   title: string;
@@ -60,55 +60,75 @@ export function HelpPage() {
   };
 
   return (
-    <div className="container" style={{ paddingTop: 'var(--sp-10)', paddingBottom: 'var(--sp-20)' }}>
-      <BackButton label={t('common.back')} />
+    <div className="page" style={{ paddingBottom: 'var(--s-20)' }}>
+      <header className="account-head">
+        <div className="account-head__title">
+          <p className="t-label">{t('help.eyebrow')}</p>
+          <h1 className="t-h1" style={{ marginTop: 'var(--s-3)' }}>{t('help.title')}</h1>
+          <p className="t-body collection__desc t-measure">{t('help.subtitle')}</p>
+        </div>
+      </header>
 
-      <section className="help-hero">
-        <span className="section-eyebrow">{t('help.eyebrow')}</span>
-        <h1 className="heading-1" style={{ marginBottom: 'var(--sp-2)' }}>{t('help.title')}</h1>
-        <p className="body-sm" style={{ maxWidth: 700 }}>
-          {t('help.subtitle')}
-        </p>
-      </section>
-
-      <section className="help-grid">
+      <div className="detail-grid" style={{ rowGap: 'clamp(40px, 5vw, 72px)' }}>
         {faq.map((section) => (
-          <article key={section.title} className="help-card">
-            <h2 className="help-card__title">{section.title}</h2>
-            <div className="help-faq-list">
+          <section key={section.title} className="detail-block detail-block--wide">
+            <h2 className="t-h3">{section.title}</h2>
+            <div>
               {section.items.map((item) => (
-                <details key={item.q} className="help-faq-item">
+                <details key={item.q} className="faq-item">
                   <summary>{item.q}</summary>
-                  <p>{item.a}</p>
+                  <p className="faq-item__body">{item.a}</p>
                 </details>
               ))}
             </div>
-          </article>
+          </section>
         ))}
-      </section>
+      </div>
 
-      <section className="help-contact" aria-label={t('help.contactAria')}>
-        <div>
-          <h2 className="heading-2" style={{ marginBottom: 'var(--sp-2)' }}>{t('help.contactTitle')}</h2>
-          <p className="body-sm">{t('help.contactEmail')}: <a href={`mailto:${storeConfig.contactEmail}`}>{storeConfig.contactEmail}</a></p>
-          <p className="body-sm">{t('help.contactPhone')}: <a href={`tel:${storeConfig.supportPhone.replace(/[^+\d]/g, '')}`}>{storeConfig.supportPhone}</a></p>
-          <p className="body-sm">{t('help.contactHours')}</p>
+      <section
+        className="detail-grid"
+        aria-label={t('help.contactAria')}
+        style={{ marginTop: 'clamp(56px, 7vw, 112px)', paddingTop: 'var(--s-10)', borderTop: '1px solid var(--line)' }}
+      >
+        <div className="detail-block detail-block--wide">
+          <p className="t-label">{t('help.contactLabel')}</p>
+          <h2 className="t-h2">{t('help.contactTitle')}</h2>
+          <div className="info-rows" style={{ marginTop: 'var(--s-4)' }}>
+            <div className="info-row">
+              <span>{t('help.contactEmail')}</span>
+              <a href={`mailto:${storeConfig.contactEmail}`} className="link">{storeConfig.contactEmail}</a>
+            </div>
+            <div className="info-row">
+              <span>{t('help.contactPhone')}</span>
+              <a href={`tel:${storeConfig.supportPhone.replace(/[^+\d]/g, '')}`} className="link">
+                {storeConfig.supportPhone}
+              </a>
+            </div>
+            <div className="info-row">
+              <span>{t('help.contactHoursLabel')}</span>
+              <strong>{t('help.contactHours')}</strong>
+            </div>
+          </div>
         </div>
 
-        <form className="help-form" onSubmit={onSubmit}>
-          <label className="label" htmlFor="help-email">{t('help.formEmail')}</label>
-          <input id="help-email" className="input" type="email" required placeholder={t('auth.emailPlaceholder')} />
-
-          <label className="label" htmlFor="help-message">{t('help.formMessage')}</label>
-          <textarea
-            id="help-message"
-            className="help-form__textarea"
-            required
-            placeholder={t('help.formMessagePlaceholder')}
-          />
-
-          <button type="submit" className="btn btn-primary btn-sm">{t('help.formSubmit')}</button>
-          {sent && <p className="settings-note">{t('help.formSuccess')}</p>}
+        <form className="detail-block detail-block--wide stack gap-4" onSubmit={onSubmit}>
+          <div className="field">
+            <label className="field__label" htmlFor="help-email">{t('help.formEmail')}</label>
+            <input id="help-email" className="input" type="email" required placeholder={t('auth.emailPlaceholder')} />
+          </div>
+          <div className="field">
+            <label className="field__label" htmlFor="help-message">{t('help.formMessage')}</label>
+            <textarea
+              id="help-message"
+              className="textarea"
+              required
+              placeholder={t('help.formMessagePlaceholder')}
+            />
+          </div>
+          <button type="submit" className="btn btn--primary" style={{ alignSelf: 'flex-start' }}>
+            {t('help.formSubmit')}
+          </button>
+          {sent && <p className="status status--positive">{t('help.formSuccess')}</p>}
         </form>
       </section>
     </div>

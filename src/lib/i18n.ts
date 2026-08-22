@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { usePreferencesStore } from '../store/preferencesStore';
 import type { AppLanguageCode } from '../store/preferencesStore';
+import { editorialCopy } from './i18nCopy';
 
 const LOCALE_MAP: Record<AppLanguageCode, string> = {
   it: 'it-IT',
@@ -2813,6 +2814,31 @@ const translations: Translations = {
     },
   },
 };
+
+/**
+ * Merge the editorial copy deck (src/lib/i18nCopy.ts) over the base dictionary
+ * for each language. Nested sections merge key by key, so the deck can add new
+ * strings and re-voice individual existing ones without restating a section.
+ */
+function deepMerge(base: Dictionary, override: Dictionary): Dictionary {
+  const result: Dictionary = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const existing = result[key];
+    if (
+      value && typeof value === 'object' &&
+      existing && typeof existing === 'object'
+    ) {
+      result[key] = deepMerge(existing, value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+for (const code of Object.keys(translations) as AppLanguageCode[]) {
+  translations[code] = deepMerge(translations[code], editorialCopy[code] as Dictionary);
+}
 
 function resolveKey(dictionary: Dictionary, path: string): string | null {
   const parts = path.split('.');

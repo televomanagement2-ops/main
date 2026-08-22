@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabaseClient';
 import { useCartStore } from '../../../store/cartStore';
 import { Spinner } from '../../../components/ui/Spinner';
+import { IconAlert, IconCheck } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
 import type { Order } from '../../../types';
 
@@ -45,12 +46,13 @@ export function CheckoutSuccessPage() {
 
   if (!sessionId) {
     return (
-      <div className="container">
-        <div className="result-state result-state--error">
-          <h1 className="result-state__title">{t('checkoutSuccess.invalidLink')}</h1>
-          <p className="result-state__sub">{t('checkoutSuccess.invalidLinkSub')}</p>
-          <div className="result-state__actions">
-            <Link to="/products" className="btn btn-primary btn-lg">{t('checkoutSuccess.browseProducts')}</Link>
+      <div className="page">
+        <div className="result">
+          <span className="result__mark result__mark--critical"><IconAlert size={20} /></span>
+          <h1 className="t-h2">{t('checkoutSuccess.invalidLink')}</h1>
+          <p className="t-body">{t('checkoutSuccess.invalidLinkSub')}</p>
+          <div className="result__actions">
+            <Link to="/products" className="btn btn--primary">{t('checkoutSuccess.browseProducts')}</Link>
           </div>
         </div>
       </div>
@@ -59,10 +61,10 @@ export function CheckoutSuccessPage() {
 
   if (isLoading) {
     return (
-      <div className="container">
-        <div className="result-state">
-          <Spinner />
-          <p className="result-state__sub" style={{ marginTop: 'var(--sp-4)' }}>
+      <div className="page">
+        <div className="result">
+          <Spinner size="lg" label={t('checkoutSuccess.confirmingPayment')} />
+          <p className="t-body" style={{ marginTop: 'var(--s-4)' }}>
             {t('checkoutSuccess.confirmingPayment')}
           </p>
         </div>
@@ -72,13 +74,14 @@ export function CheckoutSuccessPage() {
 
   if (error || !order) {
     return (
-      <div className="container">
-        <div className="result-state result-state--warning">
-          <h1 className="result-state__title">{t('checkoutSuccess.paymentReceived')}</h1>
-          <p className="result-state__sub">{t('checkoutSuccess.paymentReceivedSub')}</p>
-          <div className="result-state__actions">
-            <Link to="/orders" className="btn btn-primary btn-lg">{t('checkoutSuccess.viewOrders')}</Link>
-            <Link to="/products" className="btn btn-ghost btn-lg">{t('checkoutSuccess.continueShopping')}</Link>
+      <div className="page">
+        <div className="result">
+          <span className="result__mark"><IconCheck size={20} /></span>
+          <h1 className="t-h2">{t('checkoutSuccess.paymentReceived')}</h1>
+          <p className="t-body">{t('checkoutSuccess.paymentReceivedSub')}</p>
+          <div className="result__actions">
+            <Link to="/orders" className="btn btn--primary">{t('checkoutSuccess.viewOrders')}</Link>
+            <Link to="/products" className="btn btn--secondary">{t('checkoutSuccess.continueShopping')}</Link>
           </div>
         </div>
       </div>
@@ -89,32 +92,21 @@ export function CheckoutSuccessPage() {
   const requiresAction = order.status === 'requires_action';
 
   return (
-    <div className="container">
-      <div className={`result-state result-state--${isPaid ? 'success' : requiresAction ? 'warning' : 'success'}`}>
-        <div className="result-state__icon">
-          {isPaid ? (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-          )}
-        </div>
+    <div className="page">
+      <div className="result">
+        <span className={`result__mark${isPaid ? ' result__mark--positive' : ''}`}>
+          {isPaid ? <IconCheck size={20} /> : <IconAlert size={20} />}
+        </span>
 
-        <h1 className="result-state__title">
+        <p className="t-label">{t('checkoutSuccess.label')}</p>
+        <h1 className="t-h1">
           {isPaid
             ? t('checkoutSuccess.orderConfirmed')
             : requiresAction
             ? t('checkoutSuccess.actionRequired')
             : t('checkoutSuccess.orderReceived')}
         </h1>
-
-        <p className="result-state__sub">
+        <p className="t-body t-measure">
           {isPaid
             ? t('checkoutSuccess.paidSub')
             : requiresAction
@@ -122,34 +114,29 @@ export function CheckoutSuccessPage() {
             : t('checkoutSuccess.processingSub')}
         </p>
 
-        {/* Order summary */}
-        <div style={{
-          background: 'var(--color-surface-2)',
-          borderRadius: 'var(--radius-lg)',
-          padding: 'var(--sp-5) var(--sp-6)',
-          margin: 'var(--sp-6) 0',
-          textAlign: 'left',
-          maxWidth: 400,
-          width: '100%',
-        }}>
-          <p style={{ fontSize: 13, color: 'var(--color-text-3)', marginBottom: 'var(--sp-3)' }}>
-            {order.order_items?.[0]?.product_name || t('checkoutSuccess.orderLabel')}
+        <div className="result__panel">
+          <p className="t-label" style={{ marginBottom: 'var(--s-3)' }}>
+            {t('checkoutSuccess.orderLabel')} · {order.id.slice(0, 8).toUpperCase()}
           </p>
-          {order.order_items?.map((item) => (
-            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: 'var(--sp-1) 0' }}>
-              <span>{item.product_name} × {item.quantity}</span>
-              <span>{formatCurrency(item.total_price)}</span>
-            </div>
-          ))}
-          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 'var(--sp-3)', paddingTop: 'var(--sp-3)', display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+          <div className="info-rows">
+            {order.order_items?.map((item) => (
+              <div key={item.id} className="info-row">
+                <span>
+                  {item.product_name} × {item.quantity}
+                </span>
+                <strong>{formatCurrency(item.total_price)}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="summary__row summary__row--total">
             <span>{t('checkoutSuccess.total')}</span>
             <span>{formatCurrency(order.total)}</span>
           </div>
         </div>
 
-        <div className="result-state__actions">
-          <Link to="/orders" className="btn btn-primary btn-lg">{t('checkoutSuccess.viewOrders')}</Link>
-          <Link to="/products" className="btn btn-ghost btn-lg">{t('checkoutSuccess.continueShopping')}</Link>
+        <div className="result__actions">
+          <Link to={`/orders/${order.id}`} className="btn btn--primary">{t('checkoutSuccess.viewOrders')}</Link>
+          <Link to="/products" className="btn btn--secondary">{t('checkoutSuccess.continueShopping')}</Link>
         </div>
       </div>
     </div>

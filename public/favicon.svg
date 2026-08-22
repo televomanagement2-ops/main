@@ -1,64 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" fill="none" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#2b2f36"/>
-      <stop offset="0.55" stop-color="#1c1f24"/>
-      <stop offset="1" stop-color="#101216"/>
-    </linearGradient>
-    <radialGradient id="bgGlow" cx="0.32" cy="0.24" r="0.85">
-      <stop offset="0" stop-color="#3a3f48" stop-opacity="0.9"/>
-      <stop offset="1" stop-color="#3a3f48" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="silver" x1="150" y1="80" x2="380" y2="440" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.35" stop-color="#dfe3e8"/>
-      <stop offset="0.62" stop-color="#a7adb7"/>
-      <stop offset="0.82" stop-color="#cdd2d9"/>
-      <stop offset="1" stop-color="#f3f5f8"/>
-    </linearGradient>
-    <linearGradient id="silverEdge" x1="120" y1="120" x2="400" y2="400" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#9aa0aa"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Dark app-icon background -->
-  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <rect width="512" height="512" rx="116" fill="url(#bgGlow)"/>
-  <rect x="3" y="3" width="506" height="506" rx="113" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="2"/>
-
-  <!-- Emblem: rocket ascending toward the upper-right with an orbit ring -->
-  <g transform="rotate(45 256 256)">
-    <!-- Orbit / motion ring -->
-    <ellipse cx="256" cy="256" rx="172" ry="74" transform="rotate(-24 256 256)"
-             fill="none" stroke="url(#silverEdge)" stroke-width="9" stroke-opacity="0.85"/>
-
-    <!-- Fins -->
-    <path d="M214 250 L160 332 L216 312 Z" fill="url(#silver)" stroke="url(#silverEdge)" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M298 250 L352 332 L296 312 Z" fill="url(#silver)" stroke="url(#silverEdge)" stroke-width="6" stroke-linejoin="round"/>
-
-    <!-- Fuselage -->
-    <path d="M256 60
-             C 290 116, 304 196, 300 256
-             C 297 304, 286 340, 274 366
-             L 256 336
-             L 238 366
-             C 226 340, 215 304, 212 256
-             C 208 196, 222 116, 256 60 Z"
-          fill="url(#silver)" stroke="url(#silverEdge)" stroke-width="7" stroke-linejoin="round"/>
-
-    <!-- Window -->
-    <circle cx="256" cy="172" r="30" fill="#15171a"/>
-    <circle cx="256" cy="172" r="30" fill="none" stroke="url(#silverEdge)" stroke-width="8"/>
-    <circle cx="247" cy="163" r="8" fill="#ffffff" fill-opacity="0.55"/>
-
-    <!-- Exhaust streaks -->
-    <path d="M256 372 V 432" stroke="url(#silver)" stroke-width="14" stroke-linecap="round"/>
-    <path d="M222 372 V 414" stroke="url(#silver)" stroke-width="11" stroke-linecap="round" stroke-opacity="0.85"/>
-    <path d="M290 372 V 414" stroke="url(#silver)" stroke-width="11" stroke-linecap="round" stroke-opacity="0.85"/>
-  </g>
-
-  <!-- Growth arrow head accent (top-right), echoing the upward trajectory -->
-  <path d="M372 140 L408 104 M408 104 L370 100 M408 104 L412 142"
-        fill="none" stroke="url(#silverEdge)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!-- CommerceJet mark: ink field, paper monogram. Same two colours as the
+       product itself — no gradients, no chrome, legible at 16px. -->
+  <rect width="512" height="512" rx="104" fill="#16140F"/>
+  <path d="M362 150 A150 150 0 1 0 362 362"
+        fill="none" stroke="#F7F5F1" stroke-width="46" stroke-linecap="butt"/>
 </svg>

@@ -9,10 +9,11 @@ export const productKeys = {
   featured: () => [...productKeys.all, 'featured'] as const,
 };
 
-export function useProducts(filters: ProductFilters = {}) {
+export function useProducts(filters: ProductFilters = {}, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: productKeys.list(filters),
     queryFn: () => fetchProducts(filters),
+    enabled: options.enabled ?? true,
   });
 }
 

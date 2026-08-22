@@ -5,6 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CommerceJet</title>
+    <meta name="description" content="A considered selection of products made to inspire, to simplify, and to last." />
+    <!-- Browser chrome follows the store's own paper / ink grounds -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5F1" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E0D0B" />
+
+    <!-- The display serif carries the first line the visitor reads, so it is
+         fetched alongside the document instead of after the stylesheet. -->
+    <link rel="preload" href="/fonts/instrument-serif-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+
     <!-- External file (not inline) so the CSP can stay script-src 'self' -->
     <script src="/theme-init.js"></script>
   </head>

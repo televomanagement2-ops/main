@@ -1,16 +1,9 @@
 import type { ReactNode } from 'react';
 
-type Variant = 'default' | 'accent' | 'success' | 'warning' | 'danger';
-
-interface Props {
-  children: ReactNode;
-  variant?: Variant;
-}
-
-export function Badge({ children, variant = 'default' }: Props) {
-  return (
-    <span className={`badge badge-${variant}`}>
-      {children}
-    </span>
-  );
+/**
+ * A neutral metadata tag. Order/stock state uses StatusIndicator instead —
+ * badges never carry state on their own.
+ */
+export function Badge({ children, accent }: { children: ReactNode; accent?: boolean }) {
+  return <span className={`tag${accent ? ' tag--accent' : ''}`}>{children}</span>;
 }

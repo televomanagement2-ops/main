@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../lib/i18n';
+import { IconArrowLeft } from './icons';
 
 interface Props {
   to?: string;
@@ -9,18 +10,16 @@ interface Props {
 export function BackButton({ to, label }: Props) {
   const navigate = useNavigate();
   const { t } = useI18n();
-  const resolvedLabel = label ?? t('common.back');
-  const handleClick = () => (to ? navigate(to) : navigate(-1));
+  const resolved = label ?? t('common.back');
+
   return (
     <button
-      onClick={handleClick}
-      className="back-btn"
-      aria-label={resolvedLabel}
+      type="button"
+      onClick={() => (to ? navigate(to) : navigate(-1))}
+      className="back-link"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M15 18l-6-6 6-6"/>
-      </svg>
-      <span>{resolvedLabel}</span>
+      <IconArrowLeft size={15} />
+      <span>{resolved}</span>
     </button>
   );
 }
