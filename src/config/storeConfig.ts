@@ -12,7 +12,7 @@
 
 export const storeConfig = {
   /** Public store / brand name shown to customers. */
-  storeName: 'CommerceJet',
+  storeName: 'AURUM',
 
   /** Two-letter country code shown in the footer (operator's location). */
   countryCode: 'US',

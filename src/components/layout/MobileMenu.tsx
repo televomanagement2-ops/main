@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Wordmark } from '../ui/Wordmark';
 import { IconArrowUpRight, IconClose, IconMoon, IconSun } from '../ui/icons';
@@ -28,7 +28,17 @@ export function MobileMenu() {
     theme === 'dark' ||
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-  useEffect(() => close(), [location.pathname, location.search, close]);
+  // Close on navigation — but only on an actual navigation. This effect used to
+  // run on mount too, and since the component mounts precisely when the menu
+  // opens, it closed the menu in the same commit that opened it: the burger
+  // did nothing at all, on every phone. The mount location is remembered so
+  // the first run is a no-op and only later changes dismiss the menu.
+  const openedAt = useRef(`${location.pathname}${location.search}`);
+  const here = `${location.pathname}${location.search}`;
+  useEffect(() => {
+    if (openedAt.current === here) return;
+    close();
+  }, [here, close]);
   useEffect(() => {
     const { overflow } = document.body.style;
     document.body.style.overflow = 'hidden';

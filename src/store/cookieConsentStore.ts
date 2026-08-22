@@ -66,7 +66,7 @@ export const useCookieConsentStore = create<CookieConsentState>()(
       closePanel: () => set({ isPanelOpen: false }),
     }),
     {
-      name: 'commercejet-cookie-consent',
+      name: 'aurum-cookie-consent',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         status: state.status,

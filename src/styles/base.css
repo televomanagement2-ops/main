@@ -14,6 +14,20 @@ html {
   -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
   background: var(--paper);
+
+  /* The site header is fixed, so in-page anchors have to clear it instead of
+     landing underneath it. */
+  scroll-padding-top: calc(var(--header-h) + var(--s-4));
+
+  /* Reserve the scrollbar gutter permanently. Opening the bag, the search
+     overlay or the mobile menu locks body scroll; without this the scrollbar
+     vanishes and the whole page jumps sideways as it does. */
+  scrollbar-gutter: stable;
+
+  /* `clip`, not `hidden`: it contains stray horizontal overflow on narrow
+     screens without turning the root into a scroll container — which would
+     break every position: sticky in the app. */
+  overflow-x: clip;
 }
 
 body {

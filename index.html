@@ -3,12 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CommerceJet</title>
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to a
+         real value; without it every safe-area padding in the stylesheet is 0
+         and content sits under the home indicator on notched phones. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>AURUM</title>
     <meta name="description" content="A considered selection of products made to inspire, to simplify, and to last." />
-    <!-- Browser chrome follows the store's own paper / ink grounds -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F7F5F1" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E0D0B" />
+    <!-- Light is the store's default, so the browser chrome starts on paper and
+         is repainted by theme-init.js only for a visitor who chose dark. -->
+    <meta name="theme-color" content="#F7F5F1" />
 
     <!-- The display serif carries the first line the visitor reads, so it is
          fetched alongside the document instead of after the stylesheet. -->

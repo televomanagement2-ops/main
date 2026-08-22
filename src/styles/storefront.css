@@ -8,6 +8,11 @@
   flex-direction: column;
   min-height: 100dvh;
   background: var(--paper);
+  /* The header is taken out of flow (see below) and the shell reserves its
+     full, uncompacted height here — once. Because this reservation is a
+     constant, the header can change its own height on scroll without moving a
+     single pixel of the page behind it. */
+  padding-top: var(--header-h);
 }
 .store-main { flex: 1; }
 
@@ -33,10 +38,34 @@
   text-transform: none;
 }
 
-/* ── SITE HEADER ─────────────────────────────────────────────────────── */
+/* The crossbar-less initial. Drawn on a box whose bottom edge is the baseline,
+   so `vertical-align: baseline` seats it exactly on the text baseline; height
+   is set in `em` from the cap height of the face it sits in, so it tracks the
+   wordmark at every size without a second breakpoint. `display` overrides the
+   global `svg { display: block }` in base.css — it has to stay inline for
+   letter-spacing to apply after it like any other letter. */
+.wordmark__a {
+  display: inline-block;
+  width: auto;
+  height: 0.72em;          /* Inter cap height */
+  vertical-align: baseline;
+  fill: currentColor;
+}
+.wordmark--serif .wordmark__a { height: 0.70em; }  /* Instrument Serif cap height */
+
+/* ── SITE HEADER ─────────────────────────────────────────────────────────
+   Fixed rather than sticky, and deliberately so. A sticky header still
+   occupies space in flow, so animating its height on scroll re-laid out the
+   entire document underneath it: every scroll past the threshold shoved the
+   page 16px and the compaction read as a stutter — worst on the way back up,
+   where the expansion fought the scroll. Out of flow, with .store-shell
+   holding a constant reservation, the same compaction moves nothing but the
+   header itself. */
 .site-header {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 300;
   background: var(--paper);
   border-bottom: 1px solid transparent;
@@ -440,9 +469,13 @@
   gap: var(--s-4);
   border-radius: 0 0 var(--radius-xs) var(--radius-xs);
 }
-.cat-card--feature .cat-card__name { color: #FFFFFF; font-size: clamp(24px, 2.6vw, 38px); }
-.cat-card--feature .cat-card__desc { color: rgba(255, 255, 255, 0.76); }
-.cat-card--feature .cat-card__arrow { color: rgba(255, 255, 255, 0.8); }
+/* Scoped to the overlay, not to the card. The feature card falls back to a
+   typographic tile on a paper ground when the category has no image of its
+   own, and an unscoped white here painted that fallback white on white. */
+.cat-card--feature .cat-card__overlay .cat-card__name { color: #FFFFFF; }
+.cat-card--feature .cat-card__overlay .cat-card__desc { color: rgba(255, 255, 255, 0.76); }
+.cat-card--feature .cat-card__overlay .cat-card__arrow { color: rgba(255, 255, 255, 0.8); }
+.cat-card--feature .cat-card__name { font-size: clamp(24px, 2.6vw, 38px); }
 
 .cat-card--wide .media { aspect-ratio: 3 / 2; }
 .cat-card--small .media { aspect-ratio: 1; }
@@ -1483,11 +1516,29 @@
 }
 
 @media (max-width: 720px) {
-  .site-header__inner { grid-template-columns: auto 1fr auto; }
+  /* The brand column is minmax(0, 1fr) rather than 1fr: a grid track sized
+     `1fr` still refuses to shrink below its content's min-content width, so a
+     long store name plus four actions pushed the bar wider than the screen and
+     put the whole page into horizontal scroll. */
+  .site-header__inner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--s-3);
+  }
   .site-header__burger { display: inline-flex; }
   .site-nav { display: none; }
-  .site-header__brand-wrap { justify-self: center; }
+  .site-header__brand-wrap { justify-self: center; min-width: 0; }
+  .site-header__brand-wrap .wordmark { overflow: hidden; max-width: 100%; }
   .site-action__label { display: none; }
+  /* Icon-only actions on a touch screen: square, and big enough to hit. Scoped
+     to the header — the footer reuses .site-action for the language picker,
+     which keeps its text label and must stay free to size to it. */
+  .site-header .site-action {
+    height: 44px;
+    min-width: 44px;
+    justify-content: center;
+    padding-inline: var(--s-1);
+  }
+  .site-actions { gap: 0; }
 
   .line-item { grid-template-columns: 64px minmax(0, 1fr); grid-template-areas: 'media body' 'media price'; row-gap: var(--s-2); }
   .line-item__media { grid-area: media; width: 64px; }
@@ -1499,13 +1550,81 @@
   .order-row__chev { display: none; }
 
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s-4); row-gap: var(--s-8); }
+  /* Two cards to a row leaves ~150px of column: a name and a price cannot
+     share that line without both being clipped, so they stack. */
+  .pcard__body { grid-template-columns: minmax(0, 1fr); gap: var(--s-1); }
+  .pcard__open { display: none; }  /* a hover affordance, on a device with no hover */
+  .pcard__name { -webkit-line-clamp: 3; }
+
   .edit-grid__side { flex-direction: column; }
   .showcase__stack { flex-direction: column; }
+  /* The third tile is hidden from 900px down purely to keep the desktop row
+     even; on one column there is no row to keep even and it is just a missing
+     product. */
+  .edit-grid__row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .edit-grid__row > *:nth-child(3) { display: block; grid-column: 1 / -1; }
+  .edit-grid__row > *:nth-child(2) { margin-top: 0; }
+
   .service-strip { grid-template-columns: 1fr; }
-  .service { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); }
+  .service { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-block: var(--s-5); }
   .service:first-child { border-top: 0; }
-  .pdp__support { grid-template-columns: 1fr; }
+  /* Kept two-up. Stacking the secondary shots put roughly a full extra screen
+     of images between the visitor and the price, which is the one thing they
+     came to the page for. */
+  .pdp__support { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); }
+  /* Stepper + button side by side leaves the button too narrow to read its
+     own label once the label is a real sentence in French or Spanish. */
+  .pdp__actions { flex-wrap: wrap; }
+  .pdp__actions .btn { flex: 1 1 100%; }
+  .pdp__sections { row-gap: var(--s-8); }
+
   .result__actions { flex-direction: column; align-self: stretch; }
   .result__actions .btn { width: 100%; }
+
   .consent { left: var(--s-3); right: var(--s-3); width: auto; }
+  .consent__actions .btn { flex: 1 1 100%; }
+
+  .cat-gallery__right > * { flex-basis: 78%; }
+  .site-footer__bottom { align-items: flex-start; }
+
+  /* The search overlay is a panel floating in the middle of a desktop window;
+     on a phone, with the keyboard up, that panel had almost no room left. It
+     becomes a sheet anchored under the header instead. */
+  .search-panel {
+    top: calc(var(--header-h) + var(--s-2));
+    left: var(--s-3);
+    right: var(--s-3);
+    transform: none;
+    width: auto;
+    max-height: calc(100dvh - var(--header-h) - var(--s-6));
+  }
+  .search-panel__foot { display: none; }  /* keyboard hints, on a device with no keyboard */
+  .search-item { padding-block: var(--s-3); }
+
+  .mobile-menu__link { font-size: 27px; padding-block: var(--s-4); }
+  .mobile-menu__sub { padding-block: var(--s-4); }
+}
+
+/* ── PHONES ────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .hero__cta { gap: var(--s-4); }
+  .hero__cta .btn { flex: 1 1 100%; }
+  .hero__title { max-width: none; }
+  .hero__sub { max-width: none; }
+  /* Absolutely positioned over the image, it covered most of a 4:3 crop. */
+  .hero__badge { position: static; margin-top: var(--s-3); margin-inline: var(--page-pad); }
+
+  .statement__text { font-size: clamp(26px, 7.6vw, 34px); }
+  .closing { padding-block: clamp(56px, 14vw, 80px); }
+  .closing__title { max-width: none; }
+  .closing__action .btn { width: 100%; }
+  .closing__action { justify-content: stretch; }
+
+  .site-footer__cols { grid-template-columns: 1fr; gap: var(--s-8); }
+  .section-head { margin-bottom: var(--s-6); }
+  .section-head__title { max-width: none; }
+
+  .doc__section { scroll-margin-top: calc(var(--header-h) + var(--s-6)); }
+  .filter-bar { gap: var(--s-3); }
+  .filter-bar__search { flex: 1 1 100%; }
 }

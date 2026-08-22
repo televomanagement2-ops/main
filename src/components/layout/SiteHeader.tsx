@@ -25,11 +25,29 @@ export function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
+  // Compaction uses two thresholds, not one. With a single edge at 8px the
+  // header flips state on the sub-pixel scroll deltas a trackpad or a momentum
+  // fling produces around that value, which is what read as a stutter on the
+  // way back up. It now compacts at 64px and only expands again below 8px, so
+  // there is no scroll position where a small movement can toggle it.
+  // Reads are deferred to rAF so a fling coalesces into one measurement per
+  // frame instead of one per scroll event.
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const y = window.scrollY;
+      setScrolled((was) => (was ? y > 8 : y > 64));
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+    measure();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   // Close the collections panel on navigation — adjusted during render rather

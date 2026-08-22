@@ -664,3 +664,55 @@ a:hover > .media--zoom > img,
 .empty--center { align-items: center; text-align: center; margin-inline: auto; }
 .empty__title { font-family: var(--font-serif); font-size: var(--fs-h2); line-height: 1.15; color: var(--ink); }
 .empty__body { font-size: var(--fs-body); color: var(--ink-2); }
+
+/* ══ TOUCH ═══════════════════════════════════════════════════════════════
+   The vocabulary above is sized for a cursor, which is accurate to the pixel.
+   A fingertip is not: controls that read as precise and quiet on a desktop
+   are 26–38px here and genuinely hard to hit. Everything interactive comes up
+   to roughly 44px, and every text input comes up to 16px — below that iOS
+   Safari zooms the viewport on focus and leaves the page zoomed and shifted
+   sideways, which is most of what makes a form feel broken on a phone. */
+@media (max-width: 720px) {
+  .input,
+  .select,
+  .textarea,
+  .input--sm,
+  .select--sm {
+    font-size: 16px;
+  }
+  .input, .select { height: 48px; }
+  .input--sm, .select--sm { height: 42px; }
+  .input--underline { height: 44px; }
+
+  .btn { --btn-h: 48px; }
+  .btn--sm { --btn-h: 40px; }
+  .btn--lg { --btn-h: 54px; }
+
+  .icon-btn,
+  .drawer__close { width: 44px; height: 44px; }
+  .filter-chip { height: 36px; padding-inline: var(--s-4); }
+  .stepper { height: 46px; }
+  .stepper__btn { width: 46px; }
+  .checkbox input[type='checkbox'] { width: 20px; height: 20px; }
+
+  /* Tabs are laid out to fit a wide workspace; on a phone they simply run off
+     the edge, so they scroll instead — with the hairline still spanning the
+     full width so the row keeps its structure. */
+  .tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: var(--s-5);
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex-shrink: 0; padding-block: var(--s-4); }
+
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+  .panel__head { padding: var(--s-4) var(--s-5); }
+  .panel__body { padding: var(--s-5); }
+  .drawer__body { padding: var(--s-5); }
+  .drawer__head, .drawer__foot { padding-inline: var(--s-5); }
+  .modal { padding: var(--s-4); }
+  .pager { margin-top: var(--s-12); gap: var(--s-4); }
+  .empty { padding-block: clamp(40px, 12vw, 72px); }
+}

@@ -22,7 +22,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       setLanguage: (language) => set({ language }),
     }),
     {
-      name: 'commercejet-preferences',
+      name: 'aurum-preferences',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ language: state.language }),
     }

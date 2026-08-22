@@ -28,10 +28,10 @@ const en: PolicyData = {
     {
       title: '3. Specific First-Party Cookies / Storage',
       content: [
-        'commercejet-theme — stores your light/dark/system theme. Persistent. Strictly necessary.',
-        'commercejet-preferences — stores your selected language. Persistent. Strictly necessary.',
-        'commercejet-cart — keeps your cart contents. Session/persistent. Strictly necessary.',
-        'commercejet-cookie-consent — records your cookie choice. Persistent (up to 12 months). Strictly necessary.',
+        'aurum-theme — stores your light/dark/system theme. Persistent. Strictly necessary.',
+        'aurum-preferences — stores your selected language. Persistent. Strictly necessary.',
+        'aurum-cart — keeps your cart contents. Session/persistent. Strictly necessary.',
+        'aurum-cookie-consent — records your cookie choice. Persistent (up to 12 months). Strictly necessary.',
         'Supabase session — secure authentication tokens that keep you signed in. Session. Strictly necessary.',
         'Stripe — at checkout, Stripe may set technical cookies for payment security and fraud prevention on its own pages. See stripe.com/privacy.',
       ],
@@ -90,10 +90,10 @@ const it: PolicyData = {
     {
       title: '3. Cookie / Storage Specifici di Prima Parte',
       content: [
-        'commercejet-theme — memorizza il tema chiaro/scuro/sistema. Persistente. Strettamente necessario.',
-        'commercejet-preferences — memorizza la lingua selezionata. Persistente. Strettamente necessario.',
-        'commercejet-cart — mantiene il contenuto del carrello. Sessione/persistente. Strettamente necessario.',
-        'commercejet-cookie-consent — registra la scelta sui cookie. Persistente (fino a 12 mesi). Strettamente necessario.',
+        'aurum-theme — memorizza il tema chiaro/scuro/sistema. Persistente. Strettamente necessario.',
+        'aurum-preferences — memorizza la lingua selezionata. Persistente. Strettamente necessario.',
+        'aurum-cart — mantiene il contenuto del carrello. Sessione/persistente. Strettamente necessario.',
+        'aurum-cookie-consent — registra la scelta sui cookie. Persistente (fino a 12 mesi). Strettamente necessario.',
         'Sessione Supabase — token di autenticazione sicuri che ti mantengono connesso. Sessione. Strettamente necessario.',
         'Stripe — al checkout, Stripe può impostare cookie tecnici per la sicurezza dei pagamenti e la prevenzione frodi sulle proprie pagine. Vedi stripe.com/privacy.',
       ],
@@ -152,10 +152,10 @@ const es: PolicyData = {
     {
       title: '3. Cookies / Almacenamiento de Origen Específicos',
       content: [
-        'commercejet-theme — guarda el tema claro/oscuro/sistema. Persistente. Estrictamente necesaria.',
-        'commercejet-preferences — guarda el idioma seleccionado. Persistente. Estrictamente necesaria.',
-        'commercejet-cart — mantiene el contenido del carrito. Sesión/persistente. Estrictamente necesaria.',
-        'commercejet-cookie-consent — registra tu elección de cookies. Persistente (hasta 12 meses). Estrictamente necesaria.',
+        'aurum-theme — guarda el tema claro/oscuro/sistema. Persistente. Estrictamente necesaria.',
+        'aurum-preferences — guarda el idioma seleccionado. Persistente. Estrictamente necesaria.',
+        'aurum-cart — mantiene el contenido del carrito. Sesión/persistente. Estrictamente necesaria.',
+        'aurum-cookie-consent — registra tu elección de cookies. Persistente (hasta 12 meses). Estrictamente necesaria.',
         'Sesión de Supabase — tokens de autenticación seguros que te mantienen conectado. Sesión. Estrictamente necesaria.',
         'Stripe — en el pago, Stripe puede establecer cookies técnicas para la seguridad de los pagos y la prevención del fraude en sus propias páginas. Ver stripe.com/privacy.',
       ],
@@ -214,10 +214,10 @@ const fr: PolicyData = {
     {
       title: '3. Cookies / Stockage de Première Partie Spécifiques',
       content: [
-        'commercejet-theme — mémorise le thème clair/sombre/système. Persistant. Strictement nécessaire.',
-        'commercejet-preferences — mémorise la langue sélectionnée. Persistant. Strictement nécessaire.',
-        'commercejet-cart — conserve le contenu du panier. Session/persistant. Strictement nécessaire.',
-        'commercejet-cookie-consent — enregistre votre choix de cookies. Persistant (jusqu\'à 12 mois). Strictement nécessaire.',
+        'aurum-theme — mémorise le thème clair/sombre/système. Persistant. Strictement nécessaire.',
+        'aurum-preferences — mémorise la langue sélectionnée. Persistant. Strictement nécessaire.',
+        'aurum-cart — conserve le contenu du panier. Session/persistant. Strictement nécessaire.',
+        'aurum-cookie-consent — enregistre votre choix de cookies. Persistant (jusqu\'à 12 mois). Strictement nécessaire.',
         'Session Supabase — jetons d\'authentification sécurisés qui vous maintiennent connecté. Session. Strictement nécessaire.',
         'Stripe — au paiement, Stripe peut déposer des cookies techniques pour la sécurité des paiements et la prévention de la fraude sur ses propres pages. Voir stripe.com/privacy.',
       ],

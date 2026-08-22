@@ -6,7 +6,7 @@
 // Edge Function secrets, with demo-safe defaults so everything works out of the
 // box. The store operator overrides them in Supabase → Edge Functions → Secrets:
 //
-//   STORE_NAME          Public brand name shown in emails (default "CommerceJet")
+//   STORE_NAME          Public brand name shown in emails (default "AURUM")
 //   SUPPORT_EMAIL       Reply/support address (default "support@example.com")
 //   RESEND_FROM_EMAIL   Full "from" header; overrides the two above if set
 //   STORE_CURRENCY      ISO currency for money in emails (default "USD")
@@ -14,7 +14,7 @@
 //   STORE_BRAND_COLOR   Header color in emails (default "#111111")
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const STORE_NAME = Deno.env.get('STORE_NAME') ?? 'CommerceJet';
+export const STORE_NAME = Deno.env.get('STORE_NAME') ?? 'AURUM';
 export const SUPPORT_EMAIL = Deno.env.get('SUPPORT_EMAIL') ?? 'support@example.com';
 export const FROM_EMAIL =
   Deno.env.get('RESEND_FROM_EMAIL') ?? `${STORE_NAME} <${SUPPORT_EMAIL}>`;

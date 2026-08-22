@@ -26,7 +26,7 @@ const en: PolicyData = {
     {
       title: '1. Who We Are',
       content: [
-        'This Privacy Policy explains how [SELLER_LEGAL_NAME] ("we", "us", "CommerceJet") collects, uses, and shares personal information when you visit this site or make a purchase.',
+        'This Privacy Policy explains how [SELLER_LEGAL_NAME] ("we", "us", "AURUM") collects, uses, and shares personal information when you visit this site or make a purchase.',
         'Controller / business: [SELLER_LEGAL_NAME] — [BUSINESS_ADDRESS]. Privacy contact: [PRIVACY_EMAIL].',
         'By using the site you acknowledge this Policy. It should be read together with our Cookie Policy and Terms of Service.',
       ],
@@ -137,7 +137,7 @@ const it: PolicyData = {
     {
       title: '1. Chi Siamo',
       content: [
-        'La presente Privacy Policy spiega come [SELLER_LEGAL_NAME] ("noi", "CommerceJet") raccoglie, utilizza e condivide i dati personali quando visiti il sito o effettui un acquisto.',
+        'La presente Privacy Policy spiega come [SELLER_LEGAL_NAME] ("noi", "AURUM") raccoglie, utilizza e condivide i dati personali quando visiti il sito o effettui un acquisto.',
         'Titolare / impresa: [SELLER_LEGAL_NAME] — [BUSINESS_ADDRESS]. Contatto privacy: [PRIVACY_EMAIL].',
         'Utilizzando il sito prendi atto della presente Policy, da leggere insieme alla Cookie Policy e ai Termini di Servizio.',
       ],
@@ -248,7 +248,7 @@ const es: PolicyData = {
     {
       title: '1. Quiénes Somos',
       content: [
-        'Esta Política de Privacidad explica cómo [SELLER_LEGAL_NAME] ("nosotros", "CommerceJet") recopila, usa y comparte datos personales cuando visitas el sitio o realizas una compra.',
+        'Esta Política de Privacidad explica cómo [SELLER_LEGAL_NAME] ("nosotros", "AURUM") recopila, usa y comparte datos personales cuando visitas el sitio o realizas una compra.',
         'Responsable / empresa: [SELLER_LEGAL_NAME] — [BUSINESS_ADDRESS]. Contacto de privacidad: [PRIVACY_EMAIL].',
         'Al usar el sitio reconoces esta Política, que debe leerse junto con la Política de Cookies y las Condiciones del Servicio.',
       ],
@@ -359,7 +359,7 @@ const fr: PolicyData = {
     {
       title: '1. Qui Sommes-Nous',
       content: [
-        'La présente Politique de Confidentialité explique comment [SELLER_LEGAL_NAME] (« nous », « CommerceJet ») collecte, utilise et partage les données personnelles lorsque vous visitez le site ou effectuez un achat.',
+        'La présente Politique de Confidentialité explique comment [SELLER_LEGAL_NAME] (« nous », « AURUM ») collecte, utilise et partage les données personnelles lorsque vous visitez le site ou effectuez un achat.',
         'Responsable / entreprise : [SELLER_LEGAL_NAME] — [BUSINESS_ADDRESS]. Contact confidentialité : [PRIVACY_EMAIL].',
         'En utilisant le site, vous reconnaissez la présente Politique, à lire conjointement avec la Politique de Cookies et les Conditions de Service.',
       ],

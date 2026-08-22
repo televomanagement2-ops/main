@@ -30,7 +30,7 @@ const en: TermsData = {
     {
       title: '1. Seller Information & Acceptance',
       content: [
-        'These Terms of Service ("Terms") are a binding agreement between you ("you", "customer") and [SELLER_LEGAL_NAME] ("we", "us", "CommerceJet"), the operator of this website.',
+        'These Terms of Service ("Terms") are a binding agreement between you ("you", "customer") and [SELLER_LEGAL_NAME] ("we", "us", "AURUM"), the operator of this website.',
         'Seller: [SELLER_LEGAL_NAME] ([SELLER_ENTITY_TYPE]) — Address: [BUSINESS_ADDRESS] — Email: [CONTACT_EMAIL] — Phone: [SUPPORT_PHONE].',
         'By accessing the site, creating an account, or placing an order, you confirm that you have read, understood, and agree to be bound by these Terms and by our Privacy Policy and Cookie Policy, which are incorporated by reference.',
         'If you do not agree with these Terms, do not use the site or place an order.',
@@ -117,7 +117,7 @@ const en: TermsData = {
       content: [
         'All content on the site — including text, graphics, logos, images, and software — is owned by [SELLER_LEGAL_NAME] or its licensors and is protected by intellectual property laws.',
         'You may use the site only for lawful, personal, non-commercial purposes. You may not copy, reproduce, distribute, or create derivative works from our content without prior written permission.',
-        'CommerceJet and related marks are trademarks of [SELLER_LEGAL_NAME]. Other names and logos are the property of their respective owners.',
+        'AURUM and related marks are trademarks of [SELLER_LEGAL_NAME]. Other names and logos are the property of their respective owners.',
       ],
     },
     {
@@ -178,7 +178,7 @@ const it: TermsData = {
     {
       title: '1. Dati del Venditore e Accettazione',
       content: [
-        'I presenti Termini di Servizio ("Termini") costituiscono un accordo vincolante tra l\'utente ("tu", "cliente") e [SELLER_LEGAL_NAME] ("noi", "CommerceJet"), gestore di questo sito web.',
+        'I presenti Termini di Servizio ("Termini") costituiscono un accordo vincolante tra l\'utente ("tu", "cliente") e [SELLER_LEGAL_NAME] ("noi", "AURUM"), gestore di questo sito web.',
         'Venditore: [SELLER_LEGAL_NAME] ([SELLER_ENTITY_TYPE]) — Indirizzo: [BUSINESS_ADDRESS] — Email: [CONTACT_EMAIL] — Telefono: [SUPPORT_PHONE].',
         'Accedendo al sito, creando un account o effettuando un ordine, dichiari di aver letto, compreso e accettato i presenti Termini, nonché la Privacy Policy e la Cookie Policy, qui richiamate per riferimento.',
         'Se non accetti i presenti Termini, non utilizzare il sito e non effettuare ordini.',
@@ -265,7 +265,7 @@ const it: TermsData = {
       content: [
         'Tutti i contenuti del sito — inclusi testi, grafica, loghi, immagini e software — sono di proprietà di [SELLER_LEGAL_NAME] o dei suoi licenzianti e sono protetti dalle leggi sulla proprietà intellettuale.',
         'Puoi utilizzare il sito solo per scopi leciti, personali e non commerciali. Non puoi copiare, riprodurre, distribuire o creare opere derivate dai nostri contenuti senza previa autorizzazione scritta.',
-        'CommerceJet e i marchi correlati sono marchi di [SELLER_LEGAL_NAME]. Altri nomi e loghi appartengono ai rispettivi proprietari.',
+        'AURUM e i marchi correlati sono marchi di [SELLER_LEGAL_NAME]. Altri nomi e loghi appartengono ai rispettivi proprietari.',
       ],
     },
     {
@@ -326,7 +326,7 @@ const es: TermsData = {
     {
       title: '1. Datos del Vendedor y Aceptación',
       content: [
-        'Estas Condiciones del Servicio ("Condiciones") constituyen un acuerdo vinculante entre tú ("usuario", "cliente") y [SELLER_LEGAL_NAME] ("nosotros", "CommerceJet"), operador de este sitio web.',
+        'Estas Condiciones del Servicio ("Condiciones") constituyen un acuerdo vinculante entre tú ("usuario", "cliente") y [SELLER_LEGAL_NAME] ("nosotros", "AURUM"), operador de este sitio web.',
         'Vendedor: [SELLER_LEGAL_NAME] ([SELLER_ENTITY_TYPE]) — Dirección: [BUSINESS_ADDRESS] — Correo: [CONTACT_EMAIL] — Teléfono: [SUPPORT_PHONE].',
         'Al acceder al sitio, crear una cuenta o realizar un pedido, confirmas que has leído, entendido y aceptado estas Condiciones, así como la Política de Privacidad y la Política de Cookies, incorporadas por referencia.',
         'Si no aceptas estas Condiciones, no utilices el sitio ni realices pedidos.',
@@ -413,7 +413,7 @@ const es: TermsData = {
       content: [
         'Todo el contenido del sitio — textos, gráficos, logotipos, imágenes y software — es propiedad de [SELLER_LEGAL_NAME] o de sus licenciantes y está protegido por las leyes de propiedad intelectual.',
         'Solo puedes usar el sitio con fines lícitos, personales y no comerciales. No puedes copiar, reproducir, distribuir ni crear obras derivadas de nuestro contenido sin autorización previa por escrito.',
-        'CommerceJet y las marcas relacionadas son marcas de [SELLER_LEGAL_NAME]. Otros nombres y logotipos pertenecen a sus respectivos titulares.',
+        'AURUM y las marcas relacionadas son marcas de [SELLER_LEGAL_NAME]. Otros nombres y logotipos pertenecen a sus respectivos titulares.',
       ],
     },
     {
@@ -474,7 +474,7 @@ const fr: TermsData = {
     {
       title: '1. Informations sur le Vendeur et Acceptation',
       content: [
-        'Les présentes Conditions de Service (« Conditions ») constituent un accord contraignant entre vous (« utilisateur », « client ») et [SELLER_LEGAL_NAME] (« nous », « CommerceJet »), exploitant de ce site web.',
+        'Les présentes Conditions de Service (« Conditions ») constituent un accord contraignant entre vous (« utilisateur », « client ») et [SELLER_LEGAL_NAME] (« nous », « AURUM »), exploitant de ce site web.',
         'Vendeur : [SELLER_LEGAL_NAME] ([SELLER_ENTITY_TYPE]) — Adresse : [BUSINESS_ADDRESS] — Courriel : [CONTACT_EMAIL] — Téléphone : [SUPPORT_PHONE].',
         'En accédant au site, en créant un compte ou en passant commande, vous confirmez avoir lu, compris et accepté les présentes Conditions, ainsi que la Politique de Confidentialité et la Politique de Cookies, incorporées par référence.',
         'Si vous n\'acceptez pas les présentes Conditions, n\'utilisez pas le site et ne passez pas commande.',
@@ -561,7 +561,7 @@ const fr: TermsData = {
       content: [
         'Tout le contenu du site — textes, graphismes, logos, images et logiciels — appartient à [SELLER_LEGAL_NAME] ou à ses concédants et est protégé par les lois sur la propriété intellectuelle.',
         'Vous ne pouvez utiliser le site qu\'à des fins licites, personnelles et non commerciales. Vous ne pouvez pas copier, reproduire, distribuer ni créer d\'œuvres dérivées de notre contenu sans autorisation écrite préalable.',
-        'CommerceJet et les marques associées sont des marques de [SELLER_LEGAL_NAME]. Les autres noms et logos appartiennent à leurs propriétaires respectifs.',
+        'AURUM et les marques associées sont des marques de [SELLER_LEGAL_NAME]. Les autres noms et logos appartiennent à leurs propriétaires respectifs.',
       ],
     },
     {

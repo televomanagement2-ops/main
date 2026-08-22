@@ -1,5 +1,5 @@
 /* ============================================================================
-   COMMERCEJET — DESIGN TOKENS
+   AURUM — DESIGN TOKENS
    "Quiet editorial commerce": warm paper, ink type, hairline structure,
    one restrained accent. Every value below is referenced semantically —
    components never hardcode a colour, size, radius or duration.
@@ -247,4 +247,48 @@ html.dark {
   --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent-line);
 
   color-scheme: dark;
+}
+
+/* ══ HANDHELD — a re-tuned scale, not a shrunken one ══════════════════════
+   The desktop scale bottoms out at 11–13px. That is comfortable at arm's
+   length on a large display and genuinely hard to read at 30cm in the hand,
+   which is what made the store feel unreadable on a phone. Below 720px the
+   four smallest steps each move up one notch, keeping the same 2/1/1 spacing
+   between them so the hierarchy is unchanged — only the floor moves.
+
+   16px body text is also the threshold below which iOS Safari zooms the
+   viewport when a visitor focuses an input, so this single change also stops
+   the page snapping to a zoomed, half-off-screen state at every form field. */
+@media (max-width: 720px) {
+  :root {
+    --fs-body-lg: 1.125rem;   /* 17 → 18 */
+    --fs-body:    1rem;       /* 15 → 16 */
+    --fs-sm:      0.875rem;   /* 13 → 14 */
+    --fs-xs:      0.8125rem;  /* 12 → 13 */
+    --fs-label:   0.75rem;    /* 11 → 12 */
+
+    /* Narrow measures need slightly less leading to avoid looking loose. */
+    --lh-body: 1.58;
+
+    /* A 76px bar costs a tenth of a phone screen before anything is read. */
+    --header-h:    60px;
+    --header-h-sm: 52px;
+
+    /* Desktop section rhythm becomes an unreasonable amount of scrolling on a
+       phone; the composition still breathes at these values. */
+    --section-y: clamp(48px, 11vw, 76px);
+    --gutter: 14px;
+  }
+}
+
+/* Below 480px the display clamps have long since bottomed out at their minimum
+   (6.4vw reaches 44px at a 688px viewport), so the largest type stops
+   responding exactly where the screen gets tightest. These let it scale again. */
+@media (max-width: 480px) {
+  :root {
+    --fs-display: clamp(2.125rem, 10.4vw, 2.75rem);  /* 34 → 44 */
+    --fs-h1:      clamp(1.75rem, 7.4vw, 2rem);       /* 28 → 32 */
+    --fs-h2:      clamp(1.375rem, 5.4vw, 1.5rem);    /* 22 → 24 */
+    --page-pad:   18px;
+  }
 }
