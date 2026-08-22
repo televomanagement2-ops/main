@@ -59,6 +59,117 @@ describe('checkout.session.completed', () => {
   });
 });
 
+describe('amount reconciliation (M4)', () => {
+  it('holds an UNDERPAID order instead of marking it paid', () => {
+    // Recorded 100, Stripe only collected 40.
+    const d = decide(completed({ amountTotal: 4000, amountTax: 0 }), order('processing', 100));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('requires_action');
+    expect(d.updates.needs_review).toBe(true);
+    expect(d.updates.review_reason).toContain('amount mismatch');
+    expect(d.sendConfirmationEmail).toBe(false);
+  });
+
+  it('never rewrites the recorded total down to match an underpayment', () => {
+    const d = decide(completed({ amountTotal: 4000, amountTax: 0 }), order('processing', 100));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.total).toBeUndefined();
+    expect(d.updates.tax_amount).toBeUndefined();
+  });
+
+  it('still records the Stripe ids on a held order so it can be investigated', () => {
+    const d = decide(completed({ amountTotal: 4000, amountTax: 0 }), order('processing', 100));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.stripe_payment_intent_id).toBe('pi_1');
+    expect(d.updates.stripe_session_id).toBe('cs_1');
+  });
+
+  it('holds an OVERCHARGED order too (flat-rate mode is exact)', () => {
+    const d = decide(completed({ amountTotal: 15000, amountTax: 0 }), order('processing', 100));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('requires_action');
+    expect(d.updates.needs_review).toBe(true);
+  });
+
+  it('accepts a one-cent rounding difference', () => {
+    const d = decide(completed({ amountTotal: 10001, amountTax: 0 }), order('processing', 100));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('paid');
+    expect(d.updates.needs_review).toBeUndefined();
+  });
+
+  it('reconciles flat-rate mode where tax is already inside the recorded total', () => {
+    // create-checkout-session recorded 107 (100 + 7 tax) and charged 107.
+    const d = decide(completed({ amountTotal: 10700, amountTax: 0 }), order('processing', 107));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('paid');
+    expect(d.updates.total).toBe(107);
+  });
+
+  it('Stripe Tax mode: tax added on top of the recorded total reconciles', () => {
+    // Recorded 100 with tax_amount 0; Stripe charged 107 of which 7 is tax.
+    const d = decide(
+      completed({ amountTotal: 10700, amountTax: 700 }),
+      order('processing', 100),
+      { stripeTaxEnabled: true },
+    );
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('paid');
+    expect(d.updates.total).toBe(107);
+    expect(d.updates.tax_amount).toBe(7);
+  });
+
+  it('Stripe Tax mode: an underpayment beyond the tax delta is still held', () => {
+    const d = decide(
+      completed({ amountTotal: 5700, amountTax: 700 }),
+      order('processing', 100),
+      { stripeTaxEnabled: true },
+    );
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('requires_action');
+    expect(d.updates.needs_review).toBe(true);
+  });
+
+  it('skips reconciliation when the order has no recorded total', () => {
+    const d = decide(completed({ amountTotal: 4000 }), order('processing', null));
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('paid');
+  });
+
+  it('payment_intent.succeeded holds an underpayment', () => {
+    const d = decide(
+      { type: 'payment_intent.succeeded', orderId: 'order-1', paymentIntentId: 'pi_1', amountReceived: 4000 },
+      order('processing', 100),
+    );
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('requires_action');
+    expect(d.updates.needs_review).toBe(true);
+    expect(d.updates.total).toBeUndefined();
+  });
+
+  it('payment_intent.succeeded under Stripe Tax tolerates the tax surcharge', () => {
+    // No tax breakdown on this event: anything >= recorded is accepted.
+    const d = decide(
+      { type: 'payment_intent.succeeded', orderId: 'order-1', paymentIntentId: 'pi_1', amountReceived: 10700 },
+      order('processing', 100),
+      { stripeTaxEnabled: true },
+    );
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('paid');
+    expect(d.updates.total).toBe(107);
+  });
+
+  it('payment_intent.succeeded under Stripe Tax still holds an underpayment', () => {
+    const d = decide(
+      { type: 'payment_intent.succeeded', orderId: 'order-1', paymentIntentId: 'pi_1', amountReceived: 4000 },
+      order('processing', 100),
+      { stripeTaxEnabled: true },
+    );
+    if (d.action !== 'update') throw new Error('expected update');
+    expect(d.updates.status).toBe('requires_action');
+  });
+});
+
 describe('payment_intent.succeeded', () => {
   const succeeded: WebhookEventInfo = {
     type: 'payment_intent.succeeded',

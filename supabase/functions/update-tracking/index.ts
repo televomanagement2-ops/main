@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
-import { getCorsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, isForbiddenOrigin } from '../_shared/cors.ts';
 import { sendEmail } from '../_shared/email.ts';
 
 function jsonResponse(payload: unknown, status = 200, origin: string | null = null) {
@@ -19,6 +19,15 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405, origin);
+  }
+
+  // Fail closed on an unauthorized browser origin rather than doing the work
+  // and only withholding the CORS header (matches create-checkout-session).
+  if (isForbiddenOrigin(origin)) {
+    return jsonResponse({
+      error: 'Origin not allowed.',
+      code: 'ORIGIN_NOT_ALLOWED',
+    }, 403, origin);
   }
 
   try {

@@ -1,7 +1,7 @@
 import Stripe from 'npm:stripe@18';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { formatMoney, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
-import { getCorsHeaders } from '../_shared/cors.ts';
+import { getCorsHeaders, isForbiddenOrigin } from '../_shared/cors.ts';
 import { sendEmail } from '../_shared/email.ts';
 
 const STRIPE_API_VERSION = '2025-03-31.basil';
@@ -91,6 +91,16 @@ Deno.serve(async (req) => {
 
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405, origin);
+  }
+
+  // Fail closed on an unauthorized browser origin rather than doing the work
+  // and only withholding the CORS header (matches create-checkout-session).
+  if (isForbiddenOrigin(origin)) {
+    return jsonResponse({
+      error: 'Origin not allowed.',
+      code: 'ORIGIN_NOT_ALLOWED',
+      phase: 'request.validate_origin',
+    }, 403, origin);
   }
 
   try {

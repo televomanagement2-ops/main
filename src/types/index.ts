@@ -122,6 +122,13 @@ export interface ProductReview {
   updated_at: string;
 }
 
+/**
+ * A review as it is read back from the API. `product_reviews` is world-readable
+ * (RLS `USING (TRUE)`), so the reviewer's `user_id` is deliberately never
+ * selected — `author_name` is the display snapshot the UI actually renders.
+ */
+export type PublicProductReview = Omit<ProductReview, 'user_id'>;
+
 export interface OrderItem {
   id: string;
   order_id: string;

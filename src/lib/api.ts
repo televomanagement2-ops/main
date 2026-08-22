@@ -10,7 +10,7 @@ import type {
   PaginatedResponse,
   Address,
   ShippingMethod,
-  ProductReview,
+  PublicProductReview,
   ProductVariant,
   ProductImage,
   AdminAnalytics,
@@ -208,17 +208,21 @@ export async function fetchShippingMethods(): Promise<ShippingMethod[]> {
 // PRODUCT REVIEWS
 // ============================================================
 
-export async function fetchReviews(productId: string): Promise<ProductReview[]> {
-  // author_name is a trigger-maintained snapshot — reviews never join
-  // profiles (that would expose reviewer emails).
+// Reviews are world-readable (RLS `USING (TRUE)`), so the column list is an
+// allowlist rather than `*`: author_name is the trigger-maintained display
+// snapshot, and user_id stays out of the response so an anonymous visitor
+// cannot enumerate the auth UUID behind every review.
+const PUBLIC_REVIEW_COLUMNS = 'id, product_id, rating, body, author_name, created_at, updated_at';
+
+export async function fetchReviews(productId: string): Promise<PublicProductReview[]> {
   const { data, error } = await supabase
     .from('product_reviews')
-    .select('*')
+    .select(PUBLIC_REVIEW_COLUMNS)
     .eq('product_id', productId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return (data as ProductReview[]) ?? [];
+  return (data as unknown as PublicProductReview[]) ?? [];
 }
 
 export async function hasPurchasedProduct(productId: string): Promise<boolean> {
@@ -234,18 +238,18 @@ export async function submitReview(
   userId: string,
   rating: number,
   body: string
-): Promise<ProductReview> {
+): Promise<PublicProductReview> {
   const { data, error } = await supabase
     .from('product_reviews')
     .upsert(
       { product_id: productId, user_id: userId, rating, body },
       { onConflict: 'product_id,user_id' }
     )
-    .select('*')
+    .select(PUBLIC_REVIEW_COLUMNS)
     .single();
 
   if (error) throw error;
-  return data as ProductReview;
+  return data as unknown as PublicProductReview;
 }
 
 // ============================================================

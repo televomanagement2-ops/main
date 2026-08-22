@@ -200,14 +200,52 @@ Deno.serve(async (req) => {
     };
     const requestedItems = items as CheckoutItem[];
 
-    const productIds = [...new Set(requestedItems.map((i) => i.product_id))];
-    if (productIds.some((id) => !id)) {
+    if (requestedItems.some((i) => !i || !i.product_id)) {
       return jsonResponse({
         error: 'One or more items are missing product_id.',
         code: 'VALIDATION_MISSING_PRODUCT_ID',
         phase: 'request.validate_items',
       }, 400);
     }
+
+    // ── SECURITY: collapse duplicate lines BEFORE validating. The stock and
+    // quantity checks below are only meaningful against the TOTAL quantity
+    // requested for a variant. Checking each line independently let 50 separate
+    // lines of the same product, each at the stock limit, pass individually and
+    // oversell by 50× (the DB deliberately allows negative stock, so there is
+    // no backstop there).
+    const variantKey = (productId: string, size: string | null) => `${productId}::${size ?? ''}`;
+
+    const merged = new Map<
+      string,
+      { product_id: string; selected_size: string | null; quantity: number }
+    >();
+    for (const i of requestedItems) {
+      const quantity = Math.trunc(Number(i.quantity));
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return jsonResponse({
+          error: 'Invalid quantity.',
+          code: 'INVALID_QUANTITY',
+          phase: 'request.validate_items',
+        }, 400);
+      }
+      const size = i.selected_size ?? null;
+      const key = variantKey(i.product_id, size);
+      const existing = merged.get(key);
+      if (existing) existing.quantity += quantity;
+      else merged.set(key, { product_id: i.product_id, selected_size: size, quantity });
+    }
+    const mergedItems = [...merged.values()];
+
+    // products.stock_quantity is shared across every size of a product (the
+    // deduct trigger decrements it for each order_item regardless of variant),
+    // so the product-level check has to use the combined total, not per-size.
+    const quantityByProduct = new Map<string, number>();
+    for (const i of mergedItems) {
+      quantityByProduct.set(i.product_id, (quantityByProduct.get(i.product_id) ?? 0) + i.quantity);
+    }
+
+    const productIds = [...quantityByProduct.keys()];
 
     const { data: dbProducts, error: productsErr } = await supabase
       .from('products')
@@ -227,8 +265,8 @@ Deno.serve(async (req) => {
 
     // ── Variant enforcement: a sized item must reference an active variant
     // with sufficient stock — the size selector can't be bypassed.
-    const sizedItems = requestedItems.filter((i) => i.selected_size);
-    let variantKey = new Map<string, { stock_qty: number }>();
+    const sizedItems = mergedItems.filter((i) => i.selected_size);
+    let variantStock = new Map<string, { stock_qty: number }>();
     if (sizedItems.length > 0) {
       const { data: variants, error: variantsErr } = await supabase
         .from('product_variants')
@@ -244,16 +282,16 @@ Deno.serve(async (req) => {
           `Failed to load product variants: ${variantsErr.message}`,
         );
       }
-      variantKey = new Map(
+      variantStock = new Map(
         (variants ?? []).map((v) => [
-          `${v.product_id}::${v.size}`,
+          variantKey(v.product_id as string, v.size as string),
           { stock_qty: Number(v.stock_qty) },
         ]),
       );
     }
 
     // Build trusted line items from DB data only.
-    const resolvedItems = requestedItems.map((i) => {
+    const resolvedItems = mergedItems.map((i) => {
       const product = productById.get(i.product_id);
       if (!product) {
         throw new CheckoutHttpError(
@@ -271,16 +309,20 @@ Deno.serve(async (req) => {
           `Product "${product.name}" is no longer available.`,
         );
       }
-      const quantity = Math.trunc(Number(i.quantity));
-      if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY_PER_ITEM) {
+      // Already summed across duplicate lines and validated as a positive
+      // integer while merging.
+      const quantity = i.quantity;
+      if (quantity > MAX_QUANTITY_PER_ITEM) {
         throw new CheckoutHttpError(
           400,
           'INVALID_QUANTITY',
           'request.resolve_prices',
-          `Invalid quantity for product "${product.name}".`,
+          `Invalid quantity for product "${product.name}" (max ${MAX_QUANTITY_PER_ITEM}).`,
         );
       }
-      if (typeof product.stock_quantity === 'number' && quantity > product.stock_quantity) {
+      // Combined across every size of this product — product stock is shared.
+      const productTotal = quantityByProduct.get(i.product_id) ?? quantity;
+      if (typeof product.stock_quantity === 'number' && productTotal > product.stock_quantity) {
         throw new CheckoutHttpError(
           409,
           'INSUFFICIENT_STOCK',
@@ -289,7 +331,7 @@ Deno.serve(async (req) => {
         );
       }
       if (i.selected_size) {
-        const variant = variantKey.get(`${i.product_id}::${i.selected_size}`);
+        const variant = variantStock.get(variantKey(i.product_id, i.selected_size));
         if (!variant) {
           throw new CheckoutHttpError(
             409,

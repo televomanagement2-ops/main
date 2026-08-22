@@ -11,6 +11,13 @@ const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
+// MUST match create-checkout-session: it decides whether the recorded order
+// total already includes tax, which is what amount reconciliation compares
+// against. Setting it in only one of the two functions will park paid orders
+// for review (fail-safe, but noisy) — keep the secret in sync.
+const stripeTaxEnabled =
+  (Deno.env.get('STRIPE_TAX_ENABLED') ?? 'false').toLowerCase() === 'true';
+
 let stripe: Stripe | null = null;
 let supabase: ReturnType<typeof createClient> | null = null;
 
@@ -327,7 +334,7 @@ Deno.serve(async (req) => {
       };
 
       const order = await fetchOrder(client, ids);
-      const decision = decide(info, order);
+      const decision = decide(info, order, { stripeTaxEnabled });
 
       switch (decision.action) {
         case 'skip':
@@ -342,6 +349,13 @@ Deno.serve(async (req) => {
 
         case 'update': {
           try {
+            if (decision.updates.needs_review) {
+              // Loud on purpose: the charge did not reconcile against the
+              // recorded total, so the order is held instead of fulfilled.
+              console.error(
+                `[webhook] ${event.type} HELD FOR REVIEW (order ${order?.id ?? 'unknown'}): ${decision.updates.review_reason}`,
+              );
+            }
             updatedOrderId = await updateOrder(client, ids, decision.updates);
 
             if (decision.sendConfirmationEmail && updatedOrderId) {
