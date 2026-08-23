@@ -57,8 +57,12 @@ export function AdminCatalogPage() {
     );
   }
 
+  // `<= 0`, not `=== 0`: stock can be NEGATIVE for an oversold product
+  // (migration 013). With `=== 0` an oversold item matched NEITHER tab and
+  // disappeared from the catalog altogether — exactly the item the operator
+  // most needs to see, because it has orders to cover.
   const activeProducts = filtered.filter((p) => p.is_active && p.stock_quantity > 0);
-  const archivedProducts = filtered.filter((p) => !p.is_active || p.stock_quantity === 0);
+  const archivedProducts = filtered.filter((p) => !p.is_active || p.stock_quantity <= 0);
   const visible = tab === 'active' ? activeProducts : archivedProducts;
 
   const saveStock = (product: Product) => {
@@ -174,11 +178,16 @@ export function AdminCatalogPage() {
                   ?? null;
                 const draft = stockDrafts[product.id];
                 const dirty = draft != null && Number(draft) !== product.stock_quantity;
-                const out = product.stock_quantity === 0;
+                const out = product.stock_quantity <= 0;
                 const low = !out && product.stock_quantity <= product.low_stock_threshold;
                 const fill = Math.min(
                   100,
-                  Math.round((product.stock_quantity / Math.max(product.low_stock_threshold * 4, 1)) * 100)
+                  Math.max(
+                    0,
+                    Math.round(
+                      (product.stock_quantity / Math.max(product.low_stock_threshold * 4, 1)) * 100
+                    )
+                  )
                 );
 
                 return (

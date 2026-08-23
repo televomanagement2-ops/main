@@ -20,6 +20,7 @@ import {
   IconTruck,
 } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
+import { availableStock } from '../../../lib/stock';
 import type { Product, ProductImage, ProductVariant } from '../../../types';
 
 export function ProductDetailPage() {
@@ -71,7 +72,12 @@ function ProductView({ product }: { product: Product }) {
   const displayed = activeImage ?? primary;
   const support = images.filter((i) => i.id !== displayed?.id).slice(0, 2);
 
-  const isOut = product.stock_quantity === 0;
+  // Oversold products report negative stock (migration 013), so `<= 0`.
+  const isOut = product.stock_quantity <= 0;
+  // The stepper's ceiling is the SELECTED SIZE's stock, not the product total.
+  // A shirt with 300 units but 2 left in XL used to let you pick 300 XL and
+  // only fail at the very end, when the checkout function rejected the order.
+  const maxQuantity = availableStock(product, selectedSize);
 
   const { data: relatedPage } = useProducts({
     categorySlug: product.categories?.slug,
@@ -189,7 +195,7 @@ function ProductView({ product }: { product: Product }) {
               </span>
               <div className="size-grid">
                 {variants.map((variant) => {
-                  const soldOut = variant.stock_qty === 0;
+                  const soldOut = variant.stock_qty <= 0;
                   return (
                     <button
                       key={variant.id}
@@ -198,6 +204,9 @@ function ProductView({ product }: { product: Product }) {
                       onClick={() => {
                         setSelectedSize(variant.size);
                         setSizeError(false);
+                        // The new size may hold less than the quantity already
+                        // dialled in against the previous one.
+                        setQuantity((q) => Math.max(1, Math.min(q, availableStock(product, variant.size))));
                       }}
                       disabled={soldOut}
                       aria-pressed={selectedSize === variant.size}
@@ -212,7 +221,12 @@ function ProductView({ product }: { product: Product }) {
             </div>
           )}
 
-          <StockStatus quantity={product.stock_quantity} threshold={product.low_stock_threshold} />
+          {/* Once a size is chosen, availability is that size's, not the
+              product's total across all sizes. */}
+          <StockStatus
+            quantity={selectedSize ? maxQuantity : product.stock_quantity}
+            threshold={product.low_stock_threshold}
+          />
 
           {isOut ? (
             <button type="button" className="btn btn--secondary btn--lg btn--block" disabled>
@@ -235,8 +249,8 @@ function ProductView({ product }: { product: Product }) {
                   <button
                     type="button"
                     className="stepper__btn"
-                    onClick={() => setQuantity((q) => Math.min(q + 1, product.stock_quantity))}
-                    disabled={quantity >= product.stock_quantity}
+                    onClick={() => setQuantity((q) => Math.min(q + 1, maxQuantity))}
+                    disabled={quantity >= maxQuantity}
                     aria-label={t('cart.increase')}
                   >
                     <IconPlus size={14} />

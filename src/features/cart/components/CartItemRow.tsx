@@ -3,12 +3,16 @@ import { Media } from '../../../components/ui/Media';
 import { IconMinus, IconPlus } from '../../../components/ui/icons';
 import { useCartStore } from '../../../store/cartStore';
 import { useI18n } from '../../../lib/i18n';
+import { availableStock } from '../../../lib/stock';
 import type { CartItemLocal } from '../../../types';
 
 export function CartItemRow({ item }: { item: CartItemLocal }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
   const { t, formatCurrency } = useI18n();
+
+  // Cap by the selected size's stock, not the product total across all sizes.
+  const max = availableStock(item.product, item.selectedSize);
 
   const image =
     item.product.product_images?.find((i) => i.is_primary)?.url ??
@@ -53,7 +57,7 @@ export function CartItemRow({ item }: { item: CartItemLocal }) {
               type="button"
               className="stepper__btn"
               onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)}
-              disabled={item.quantity >= item.product.stock_quantity}
+              disabled={item.quantity >= max}
               aria-label={t('cart.increase')}
             >
               <IconPlus size={13} />

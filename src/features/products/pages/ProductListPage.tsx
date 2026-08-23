@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useProducts } from '../../../hooks/useProducts';
 import { useCategories } from '../../../hooks/useCategories';
 import { ProductGrid } from '../components/ProductGrid';
@@ -49,6 +49,16 @@ export function ProductListPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const activeCategory = categories.find((c) => c.slug === categorySlug);
 
+  // Price lives in component state, not the URL, so navigating to "/products"
+  // cleared only search and category and silently left the price range applied
+  // (the route component never unmounts). Reset every dimension explicitly.
+  const clearAllFilters = () => {
+    setMinPrice(undefined);
+    setMaxPrice(undefined);
+    setPage(1);
+    setSearchParams(new URLSearchParams(), { replace: true });
+  };
+
   const update = (partial: Partial<ProductFilters>) => {
     if ('search' in partial || 'categorySlug' in partial) {
       setSearchParams((prev) => {
@@ -90,7 +100,13 @@ export function ProductListPage() {
         </p>
       </header>
 
-      <ProductFiltersBar filters={filters} onChange={update} totalCount={total} isLoading={isLoading} />
+      <ProductFiltersBar
+        filters={filters}
+        onChange={update}
+        onClearAll={clearAllFilters}
+        totalCount={total}
+        isLoading={isLoading}
+      />
 
       <ProductGrid
         products={products}
@@ -98,9 +114,9 @@ export function ProductListPage() {
         error={error as Error | null}
         skeletonCount={PAGE_SIZE}
         emptyAction={
-          <Link to="/products" className="btn btn--secondary">
+          <button type="button" className="btn btn--secondary" onClick={clearAllFilters}>
             {t('products.clearFilters')}
-          </Link>
+          </button>
         }
       />
 

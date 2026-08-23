@@ -38,7 +38,9 @@ export function StockStatus({
   threshold: number;
 }) {
   const { t } = useI18n();
-  if (quantity === 0) return <span className="status status--neutral">{t('product.stockOut')}</span>;
+  // `<= 0`, not `=== 0`: an oversold product carries a NEGATIVE stock figure
+  // (migration 013), which used to read as "in stock" and render "Only -5 left".
+  if (quantity <= 0) return <span className="status status--neutral">{t('product.stockOut')}</span>;
   if (quantity <= threshold) {
     return <span className="status status--caution">{t('product.stockLow', { count: quantity })}</span>;
   }

@@ -35,6 +35,16 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
 
+  // Most call sites pass an inline arrow (`onClose={() => setOpen(false)}`),
+  // whose identity changes on every parent render. Depending on it directly
+  // re-ran this effect mid-interaction and yanked focus back to the close
+  // button after every keystroke, making the drawer's own inputs untypable.
+  // The effect owns only `open`; the latest handler is read through a ref.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -43,7 +53,7 @@ export function Drawer({
     document.body.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
 
@@ -58,7 +68,7 @@ export function Drawer({
       document.body.style.overflow = overflow;
       restoreTo.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

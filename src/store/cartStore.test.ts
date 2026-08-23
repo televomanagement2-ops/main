@@ -1,6 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useCartStore } from './cartStore';
-import type { Product } from '../types';
+import type { Product, ProductVariant } from '../types';
+
+function makeVariant(size: string, stock_qty: number): ProductVariant {
+  return {
+    id: `v-${size}`,
+    product_id: 'shirt',
+    size,
+    sku: null,
+    stock_qty,
+    sort_order: 0,
+    is_active: true,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+}
 
 function makeProduct(overrides: Partial<Product> = {}): Product {
   return {
@@ -146,6 +160,113 @@ describe('cartStore', () => {
 
       expect(changed).toBe(false);
       expect(useCartStore.getState().items[0].quantity).toBe(2);
+    });
+
+    it('clamps a sized line against the VARIANT stock, not the product total', () => {
+      const shirt = makeProduct({
+        id: 'shirt',
+        stock_quantity: 300,
+        product_variants: [makeVariant('M', 50), makeVariant('XL', 2)],
+      });
+      useCartStore.getState().addItem(shirt, 2, 'XL');
+
+      // Product total is untouched but XL dropped to 1.
+      const changed = useCartStore.getState().syncWithCatalog([
+        makeProduct({
+          id: 'shirt',
+          stock_quantity: 300,
+          product_variants: [makeVariant('M', 50), makeVariant('XL', 1)],
+        }),
+      ]);
+
+      expect(changed).toBe(true);
+      expect(useCartStore.getState().items[0].quantity).toBe(1);
+    });
+
+    it('drops a line whose size sold out even though the product has stock', () => {
+      const shirt = makeProduct({
+        id: 'shirt',
+        stock_quantity: 300,
+        product_variants: [makeVariant('XL', 5)],
+      });
+      useCartStore.getState().addItem(shirt, 2, 'XL');
+
+      useCartStore.getState().syncWithCatalog([
+        makeProduct({
+          id: 'shirt',
+          stock_quantity: 300,
+          product_variants: [makeVariant('XL', 0)],
+        }),
+      ]);
+
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it('drops a line when the product is oversold (negative stock)', () => {
+      useCartStore.getState().addItem(makeProduct({ id: 'over', stock_quantity: 10 }), 2);
+
+      useCartStore.getState().syncWithCatalog([makeProduct({ id: 'over', stock_quantity: -5 })]);
+
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+  });
+
+  describe('oversold and variant stock (negative stock is legal — migration 013)', () => {
+    it('refuses to add an oversold product instead of storing a negative quantity', () => {
+      useCartStore.getState().addItem(makeProduct({ stock_quantity: -5 }), 1);
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it('refuses to add a sold-out product', () => {
+      useCartStore.getState().addItem(makeProduct({ stock_quantity: 0 }), 1);
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it('caps a sized add at the variant stock, not the product total', () => {
+      const shirt = makeProduct({
+        id: 'shirt',
+        stock_quantity: 300,
+        product_variants: [makeVariant('M', 50), makeVariant('XL', 2)],
+      });
+      useCartStore.getState().addItem(shirt, 50, 'XL');
+      expect(useCartStore.getState().items[0].quantity).toBe(2);
+    });
+
+    it('refuses a size that is sold out even when the product has stock', () => {
+      const shirt = makeProduct({
+        id: 'shirt',
+        stock_quantity: 300,
+        product_variants: [makeVariant('XL', 0)],
+      });
+      useCartStore.getState().addItem(shirt, 1, 'XL');
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it('falls back to product stock when variants were not loaded', () => {
+      // fetchProductsByIds used to omit product_variants; a cart line must not
+      // silently become unpurchasable because the data simply is not there.
+      const shirt = makeProduct({ id: 'shirt', stock_quantity: 4 });
+      useCartStore.getState().addItem(shirt, 10, 'XL');
+      expect(useCartStore.getState().items[0].quantity).toBe(4);
+    });
+
+    it('removes the line when updateQuantity clamps to zero', () => {
+      const shirt = makeProduct({
+        id: 'shirt',
+        stock_quantity: 300,
+        product_variants: [makeVariant('XL', 3)],
+      });
+      useCartStore.getState().addItem(shirt, 2, 'XL');
+      // The size sold out while the cart sat open.
+      useCartStore.setState({
+        items: useCartStore.getState().items.map((i) => ({
+          ...i,
+          product: { ...i.product, product_variants: [makeVariant('XL', 0)] },
+        })),
+      });
+
+      useCartStore.getState().updateQuantity('shirt', 1, 'XL');
+      expect(useCartStore.getState().items).toHaveLength(0);
     });
   });
 });

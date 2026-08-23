@@ -60,13 +60,21 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: fullName } },
         });
         if (error) throw error;
-        setMessage(t('auth.checkEmail'));
+        // Supabase returns a live session when email confirmation is turned OFF
+        // for the project — the account is already signed in, so "check your
+        // email" would strand the user on this page waiting for a mail that is
+        // never sent. Only ask them to confirm when there is no session.
+        if (data.session) {
+          navigate(from, { replace: true });
+        } else {
+          setMessage(t('auth.checkEmail'));
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

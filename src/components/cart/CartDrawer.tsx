@@ -5,6 +5,7 @@ import { IconMinus, IconPlus } from '../ui/icons';
 import { useCartStore } from '../../store/cartStore';
 import { useUiStore } from '../../store/uiStore';
 import { useI18n } from '../../lib/i18n';
+import { availableStock } from '../../lib/stock';
 
 /**
  * The bag as a sheet: an extension of the storefront, not a separate screen.
@@ -62,6 +63,8 @@ export function CartDrawer() {
               item.product.product_images?.find((i) => i.is_primary)?.url ??
               item.product.product_images?.[0]?.url ??
               null;
+            // Cap by the selected size's stock, not the product total.
+            const max = availableStock(item.product, item.selectedSize);
             return (
               <div key={`${item.product.id}-${item.selectedSize ?? ''}`} className="drawer-line">
                 <Link
@@ -98,7 +101,7 @@ export function CartDrawer() {
                         type="button"
                         className="stepper__btn"
                         onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)}
-                        disabled={item.quantity >= item.product.stock_quantity}
+                        disabled={item.quantity >= max}
                         aria-label={t('cart.increase')}
                       >
                         <IconPlus size={13} />

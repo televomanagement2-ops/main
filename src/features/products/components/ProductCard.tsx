@@ -28,7 +28,9 @@ export function ProductCard({ product, variant = 'default', ratio = 'square', in
   const alt =
     product.product_images?.find((img) => img.is_primary)?.alt_text ?? product.name;
 
-  const isOut = product.stock_quantity === 0;
+  // Oversold products report negative stock (migration 013), so `<= 0` — the
+  // old `=== 0` showed them as available and printed "Only -5 left".
+  const isOut = product.stock_quantity <= 0;
   const isLow = !isOut && product.stock_quantity <= product.low_stock_threshold;
 
   return (

@@ -38,7 +38,13 @@ export function Media({
   loading = 'lazy',
   sizes,
 }: Props) {
-  const [loaded, setLoaded] = useState(false);
+  // Track WHICH src finished, not just "something finished": a bare boolean
+  // stayed true when the source changed (the PDP gallery, a re-fetched cart
+  // line), so the incoming image inherited `is-loaded` and was painted at full
+  // opacity while it was still downloading.
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  const loaded = src != null && loadedSrc === src;
+
   const classes = ['media', RATIO_CLASS[ratio], zoom ? 'media--zoom' : '', className]
     .filter(Boolean)
     .join(' ');
@@ -58,9 +64,9 @@ export function Media({
         className={loaded ? 'is-loaded' : undefined}
         ref={(node) => {
           // Cached images can complete before React attaches onLoad.
-          if (node?.complete && !loaded) setLoaded(true);
+          if (node?.complete && !loaded) setLoadedSrc(src);
         }}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => setLoadedSrc(src)}
       />
     </div>
   );

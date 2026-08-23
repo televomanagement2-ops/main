@@ -118,12 +118,17 @@ export async function fetchFeaturedProducts(): Promise<Product[]> {
   return (data as unknown as Product[]) ?? [];
 }
 
-/** Fetch fresh price/stock/availability for the given products (cart sync). */
+/**
+ * Fetch fresh price/stock/availability for the given products (cart sync).
+ * product_variants is included because the cart clamps sized lines against the
+ * SELECTED SIZE's stock — without it the sync would overwrite each cart item's
+ * product with a variant-less row and silently lose that limit.
+ */
 export async function fetchProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('products')
-    .select('*, product_images(*)')
+    .select('*, product_images(*), product_variants(*)')
     .in('id', ids)
     .eq('is_active', true);
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItemLocal, Product } from '../types';
+import { availableStock } from '../lib/stock';
 
 interface CartState {
   items: CartItemLocal[];
@@ -30,14 +31,17 @@ export const useCartStore = create<CartState>()(
 
       addItem: (product, quantity = 1, selectedSize = null) => {
         set((state) => {
+          // The cap is the SELECTED SIZE's stock when there is one, and it is
+          // clamped at 0 — an oversold product reports negative stock, which
+          // used to put a negative quantity straight into the cart.
+          const max = availableStock(product, selectedSize);
+          if (max === 0) return state; // sold out: nothing to add
+
           const existing = state.items.find(
             (i) => i.product.id === product.id && (i.selectedSize ?? null) === (selectedSize ?? null)
           );
           if (existing) {
-            const newQty = Math.min(
-              existing.quantity + quantity,
-              product.stock_quantity
-            );
+            const newQty = Math.min(existing.quantity + quantity, max);
             return {
               items: state.items.map((i) =>
                 itemKey(i.product.id, i.selectedSize) === itemKey(product.id, selectedSize)
@@ -51,7 +55,7 @@ export const useCartStore = create<CartState>()(
               ...state.items,
               {
                 product,
-                quantity: Math.min(quantity, product.stock_quantity),
+                quantity: Math.min(Math.max(1, quantity), max),
                 selectedSize: selectedSize ?? null,
               },
             ],
@@ -68,15 +72,20 @@ export const useCartStore = create<CartState>()(
       },
 
       updateQuantity: (productId, quantity, selectedSize = null) => {
-        if (quantity <= 0) {
+        const key = itemKey(productId, selectedSize);
+        const target = get().items.find((i) => itemKey(i.product.id, i.selectedSize) === key);
+        // Clamping can land on 0 (the size sold out while the cart sat open);
+        // a 0-quantity line would render as "× 0", so drop it instead.
+        const clamped = target
+          ? Math.min(quantity, availableStock(target.product, target.selectedSize))
+          : quantity;
+        if (clamped <= 0) {
           get().removeItem(productId, selectedSize);
           return;
         }
         set((state) => ({
           items: state.items.map((i) =>
-            itemKey(i.product.id, i.selectedSize) === itemKey(productId, selectedSize)
-              ? { ...i, quantity: Math.min(quantity, i.product.stock_quantity) }
-              : i
+            itemKey(i.product.id, i.selectedSize) === key ? { ...i, quantity: clamped } : i
           ),
         }));
       },
@@ -99,11 +108,14 @@ export const useCartStore = create<CartState>()(
 
           if (fresh.price !== item.product.price) changed = true;
 
-          const quantity = Math.min(item.quantity, Math.max(fresh.stock_quantity, 0));
+          // Against the SELECTED SIZE's stock — a product with 300 units but 2
+          // left in XL must clamp an XL line to 2, not 300.
+          const quantity = Math.min(item.quantity, availableStock(fresh, item.selectedSize));
           if (quantity === 0) {
             changed = true;
             continue;
           }
+          if (quantity !== item.quantity) changed = true;
 
           nextItems.push({ ...item, product: fresh, quantity });
         }

@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Drawer } from '../../../components/ui/Drawer';
 import { IconClose, IconFilter, IconSearch } from '../../../components/ui/icons';
 import { useCategories } from '../../../hooks/useCategories';
 import { useI18n } from '../../../lib/i18n';
 import type { ProductFilters } from '../../../types';
 
+/** Matches the command palette's search cadence (SearchOverlay). */
+const SEARCH_DEBOUNCE_MS = 250;
+
 interface Props {
   filters: ProductFilters;
   onChange: (partial: Partial<ProductFilters>) => void;
+  /** Resets every dimension, including the ones that don't live in the URL. */
+  onClearAll: () => void;
   totalCount: number;
   isLoading: boolean;
 }
@@ -17,12 +22,44 @@ interface Props {
  * drawer for price. Active filters are shown as removable chips, so the state
  * of the view is always legible without a wall of outlined controls.
  */
-export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: Props) {
+export function ProductFiltersBar({ filters, onChange, onClearAll, totalCount, isLoading }: Props) {
   const { data: categories = [] } = useCategories();
   const { t, tCount, formatCurrency } = useI18n();
   const [refineOpen, setRefineOpen] = useState(false);
   const [minDraft, setMinDraft] = useState(filters.minPrice?.toString() ?? '');
   const [maxDraft, setMaxDraft] = useState(filters.maxPrice?.toString() ?? '');
+
+  // The search box is uncontrolled-with-a-draft so typing stays responsive:
+  // it used to write the URL and refire the catalogue query on EVERY keystroke.
+  const [searchDraft, setSearchDraft] = useState(filters.search ?? '');
+
+  // Keep the drafts in step when the filters are reset from OUTSIDE (the empty
+  // state's "clear filters", a category link, the back button). Adjusted during
+  // render — the pattern already used in ProductListPage and SearchOverlay —
+  // rather than in an effect, which would queue a cascading render.
+  const externalKey = `${filters.search ?? ''}|${filters.minPrice ?? ''}|${filters.maxPrice ?? ''}`;
+  const [prevExternalKey, setPrevExternalKey] = useState(externalKey);
+  if (externalKey !== prevExternalKey) {
+    setPrevExternalKey(externalKey);
+    // Skip when the change is the one our own debounce just pushed, otherwise
+    // committing a search would rewrite the box mid-typing.
+    if ((filters.search ?? '') !== searchDraft.trim()) setSearchDraft(filters.search ?? '');
+    setMinDraft(filters.minPrice?.toString() ?? '');
+    setMaxDraft(filters.maxPrice?.toString() ?? '');
+  }
+
+  useEffect(() => {
+    const next = searchDraft.trim();
+    if (next === (filters.search ?? '')) return;
+    const id = window.setTimeout(
+      () => onChange({ search: next || undefined, page: 1 }),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(id);
+    // `onChange` is a fresh closure each render; re-running on it would reset
+    // the timer every render and the search would never fire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDraft, filters.search]);
 
   const activeCategory = categories.find((c) => c.slug === filters.categorySlug);
   const hasPrice = filters.minPrice != null || filters.maxPrice != null;
@@ -42,6 +79,13 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
     onChange({ minPrice: undefined, maxPrice: undefined, page: 1 });
   };
 
+  // The refine drawer holds price AND category, so its reset clears everything
+  // rather than just the price range its label used to imply.
+  const clearAllFromDrawer = () => {
+    onClearAll();
+    setRefineOpen(false);
+  };
+
   return (
     <>
       <div className="filter-bar">
@@ -51,8 +95,8 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
             type="search"
             className="input input--underline"
             placeholder={t('products.searchPlaceholder')}
-            value={filters.search ?? ''}
-            onChange={(e) => onChange({ search: e.target.value || undefined, page: 1 })}
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
             aria-label={t('products.searchPlaceholder')}
           />
         </div>
@@ -120,7 +164,7 @@ export function ProductFiltersBar({ filters, onChange, totalCount, isLoading }: 
         closeLabel={t('common.close')}
         footer={
           <div className="row gap-3">
-            <button type="button" className="btn btn--secondary" onClick={clearPrice}>
+            <button type="button" className="btn btn--secondary" onClick={clearAllFromDrawer}>
               {t('products.clearFilters')}
             </button>
             <button type="button" className="btn btn--primary" style={{ flex: 1 }} onClick={applyPrice}>

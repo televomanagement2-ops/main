@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCookieConsentStore } from '../../store/cookieConsentStore';
 import { useI18n } from '../../lib/i18n';
-import { IconSettings } from '../ui/icons';
+import { IconClose, IconSettings } from '../ui/icons';
 
 /**
  * Self-hosted cookie consent banner.
@@ -20,11 +20,30 @@ export function CookieConsentBanner() {
   const rejectAll = useCookieConsentStore((s) => s.rejectAll);
   const savePreferences = useCookieConsentStore((s) => s.savePreferences);
   const openPreferences = useCookieConsentStore((s) => s.openPreferences);
+  const closePanel = useCookieConsentStore((s) => s.closePanel);
 
   const [customizing, setCustomizing] = useState(false);
   const [analytics, setAnalytics] = useState(storedAnalytics);
 
+  // Re-seed the draft every time the panel OPENS. This component stays mounted
+  // for the life of the session, so `analytics` was otherwise frozen at its
+  // mount-time value: someone who accepted analytics and later reopened the
+  // panel from Settings or the Cookie Policy page saw the box unchecked, and
+  // "Save preferences" then silently revoked the consent they had given. (The
+  // floating button reseeded it by hand; the other two entry points did not.)
+  const [panelWasOpen, setPanelWasOpen] = useState(isPanelOpen);
+  if (isPanelOpen !== panelWasOpen) {
+    setPanelWasOpen(isPanelOpen);
+    if (isPanelOpen) {
+      setAnalytics(storedAnalytics);
+      setCustomizing(false);
+    }
+  }
+
   const bannerVisible = status === 'pending' || isPanelOpen;
+  // A first-time visitor must decide; someone revisiting a decision already
+  // made can back out without changing it.
+  const dismissible = isPanelOpen && status !== 'pending';
 
   // Once a decision exists the banner collapses to a small, quiet control so
   // the choice stays reachable without occupying the page.
@@ -35,11 +54,8 @@ export function CookieConsentBanner() {
         className="consent-fab"
         aria-label={t('cookies.banner.manageFloating')}
         title={t('cookies.banner.manageFloating')}
-        onClick={() => {
-          setAnalytics(storedAnalytics);
-          setCustomizing(false);
-          openPreferences();
-        }}
+        // Seeding the draft is handled by the open-transition sync above.
+        onClick={openPreferences}
       >
         <IconSettings size={15} />
       </button>
@@ -53,7 +69,19 @@ export function CookieConsentBanner() {
       aria-modal="false"
       aria-label={t('cookies.banner.title')}
     >
-      <p className="consent__title">{t('cookies.banner.title')}</p>
+      <div className="row row--between gap-3" style={{ alignItems: 'flex-start' }}>
+        <p className="consent__title">{t('cookies.banner.title')}</p>
+        {dismissible && (
+          <button
+            type="button"
+            className="drawer__close"
+            onClick={closePanel}
+            aria-label={t('common.close')}
+          >
+            <IconClose size={16} />
+          </button>
+        )}
+      </div>
       <p className="consent__body">
         {t('cookies.banner.body')}{' '}
         <Link to="/cookies" className="link">{t('footer.cookie')}</Link>
