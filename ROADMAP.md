@@ -13,8 +13,8 @@ checked off as it lands. Severity codes (C/H/M/L) reference the audit findings.
 ## Phase 0 — Repo & secrets hygiene (H8)
 
 - [x] Untrack `supabase/.temp` (leaked project ref / org id / pooler URL)
-- [x] Untrack `.claude/settings.local.json`
-- [ ] Add `.claude/settings.local.json` to `.gitignore`
+- [x] Untrack local AI-tool settings file (`.claude/settings.local.json`)
+- [x] Add local AI-tool settings file to `.gitignore`
 - [x] Remove `tools/supabase.exe` + `tools/supabase.tar.gz` (130 MB binaries)
 - [ ] Rewrite `tools/README.md` to point at official Supabase CLI install
 - [ ] `.env`: remove `SUPABASE_SERVICE_ROLE_KEY` + dead `VITE_IUBENDA_*` vars

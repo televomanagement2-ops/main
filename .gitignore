@@ -23,7 +23,7 @@ dist-ssr
 # Supabase CLI local cache (leaks your project ref / org IDs — never ship)
 supabase/.temp
 
-# Claude Code local settings (machine-specific permissions)
+# Local AI coding tool settings (machine-specific permissions)
 .claude/settings.local.json
 
 # Editor directories and files
