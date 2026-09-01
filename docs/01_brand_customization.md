@@ -80,10 +80,14 @@ Edge Functions → Secrets). All have safe defaults, so set only what you want t
 STORE_NAME=Your Store
 SUPPORT_EMAIL=support@yourstore.com
 RESEND_FROM_EMAIL=Your Store <support@yourstore.com>
-STORE_CURRENCY=USD
 STORE_LOCALE=en-US
 STORE_BRAND_COLOR=#111111
 ```
+
+> **The currency is not here.** It has to match what Stripe charges and what the
+> storefront shows, so it is a constant in
+> [`supabase/functions/_shared/money.ts`](../supabase/functions/_shared/money.ts)
+> that all three import — not a secret only the emails would read.
 
 The shared email template lives in
 [`supabase/functions/_shared/store.ts`](../supabase/functions/_shared/store.ts) if you want to

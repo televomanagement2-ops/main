@@ -9,6 +9,18 @@ const STRIPE_API_VERSION = '2025-03-31.basil';
 // Customer self-service cancel+refund abuse limit: max refunds per rolling 24 h.
 const MAX_SELF_REFUNDS_PER_DAY = 3;
 
+// Statuses where no money has moved yet: cancelling only needs the Stripe
+// Checkout session closed, never a refund.
+const PRE_PAYMENT_STATUSES = ['pending', 'processing', 'requires_action'];
+
+const KNOWN_ACTIONS = ['cancel', 'refund', 'deliver'];
+
+// A partial refund leaves the order fulfillable, so it must NOT move to
+// 'refunded': that status restores every line's stock (migration 013) and locks
+// the order against any further refund. Same rule as charge.refunded in
+// _shared/webhook-logic.ts — half a cent of slack for NUMERIC rounding.
+const REFUND_FULL_TOLERANCE = 0.005;
+
 class OrderActionError extends Error {
   status: number;
   code: string;
@@ -148,10 +160,39 @@ Deno.serve(async (req) => {
       throw new OrderActionError(400, 'VALIDATION_MISSING_FIELDS', 'request.validate', 'Missing action or order_id.');
     }
 
+    if (!KNOWN_ACTIONS.includes(action)) {
+      throw new OrderActionError(400, 'VALIDATION_UNKNOWN_ACTION', 'request.validate', 'Unknown action.');
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // ── SECURITY: authorise BEFORE touching the order.
+    // The admin check needs no order at all, so it runs first: a non-admin
+    // asking for 'refund' or 'deliver' is turned away without a lookup, and
+    // therefore learns nothing about whether the id exists. Ownership for
+    // 'cancel' needs the row, so it is checked immediately after the fetch and
+    // answers 404 — not 403 — so an authenticated user cannot tell a real
+    // order belonging to someone else from an id that was never issued.
+    // (Previously the refund_id check ran first and answered
+    // 409 ORDER_ALREADY_REFUNDED to anyone, for any order.)
+    if (action === 'refund' || action === 'deliver') {
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) {
+        throw new OrderActionError(500, 'DB_PROFILE_LOOKUP_ERROR', 'db.fetch_profile', profileError.message);
+      }
+      if (profile?.role !== 'admin') {
+        throw new OrderActionError(403, 'AUTH_NOT_ADMIN', 'auth.authorize_admin', 'Admin access required.');
+      }
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, user_id, status, total, stripe_payment_intent_id, refund_id')
+      .select('id, user_id, status, total, stripe_session_id, stripe_payment_intent_id, refund_id')
       .eq('id', orderId)
       .single();
 
@@ -159,19 +200,85 @@ Deno.serve(async (req) => {
       throw new OrderActionError(404, 'ORDER_NOT_FOUND', 'db.fetch_order', 'Order not found.');
     }
 
+    if (action === 'cancel' && order.user_id !== user.id) {
+      throw new OrderActionError(404, 'ORDER_NOT_FOUND', 'auth.authorize_owner', 'Order not found.');
+    }
+
     if (order.refund_id) {
       throw new OrderActionError(409, 'ORDER_ALREADY_REFUNDED', 'refund.validate', 'Order already refunded.');
     }
 
     if (action === 'cancel') {
+      // ── Pre-payment cancel: no money has moved, so there is nothing to
+      // refund — but the Stripe Checkout session stays payable for an hour
+      // after it is created. Cancelling the order row while leaving that
+      // session open is what used to charge a customer for an order the
+      // transition guard then refused to mark paid, parking it in
+      // needs_review. So: expire the session first, and refuse the cancel
+      // outright if the payment has already gone through in the meantime.
+      // (Migration 016 removes the direct PostgREST route for these statuses,
+      // which could not close a Stripe session.)
+      if (PRE_PAYMENT_STATUSES.includes(order.status)) {
+        const stripeSecret = Deno.env.get('STRIPE_SECRET_KEY');
+        if (order.stripe_session_id) {
+          if (!stripeSecret) {
+            throw new OrderActionError(
+              500,
+              'CONFIG_MISSING_SECRETS',
+              'config.validate_secrets',
+              'Missing required Edge Function secret: STRIPE_SECRET_KEY',
+            );
+          }
+          const stripe = new Stripe(stripeSecret, { apiVersion: STRIPE_API_VERSION });
+          const session = await stripe.checkout.sessions.retrieve(order.stripe_session_id);
+
+          if (session.payment_status === 'paid' || session.status === 'complete') {
+            throw new OrderActionError(
+              409,
+              'ORDER_ALREADY_PAID',
+              'cancel.validate',
+              'Payment for this order has already completed. Reload the order and cancel it as a paid order to get a refund.',
+            );
+          }
+          if (session.status === 'open') {
+            await stripe.checkout.sessions.expire(order.stripe_session_id);
+          }
+        }
+
+        // Re-assert the pre-payment status in the WHERE clause: the webhook may
+        // have marked the order paid between the check above and this write.
+        const { data: cancelled, error: cancelError } = await supabase
+          .from('orders')
+          .update({ status: 'cancelled' })
+          .eq('id', orderId)
+          .in('status', PRE_PAYMENT_STATUSES)
+          .select('*, order_items(*), profiles(full_name, email, phone)')
+          .maybeSingle();
+
+        if (cancelError) {
+          throw new OrderActionError(
+            500,
+            'DB_ORDER_UPDATE_ERROR',
+            'db.update_order',
+            cancelError.message,
+          );
+        }
+        if (!cancelled) {
+          throw new OrderActionError(
+            409,
+            'ORDER_NOT_CANCELABLE',
+            'cancel.validate',
+            'The order changed status while it was being cancelled. Reload and try again.',
+          );
+        }
+
+        return jsonResponse({ order: cancelled }, 200, origin);
+      }
+
       // Customer-initiated cancellation of a PAID (not yet shipped) order:
       // issue a FULL Stripe refund and move the order to 'refunded'. Using
       // 'refunded' (not 'cancelled') keeps the subsequent charge.refunded /
       // refund.updated webhooks idempotent (refunded → refunded is a no-op).
-      if (order.user_id !== user.id) {
-        throw new OrderActionError(403, 'AUTH_NOT_OWNER', 'auth.authorize_owner', 'Order ownership required.');
-      }
-
       if (order.status !== 'paid') {
         throw new OrderActionError(
           409,
@@ -183,11 +290,18 @@ Deno.serve(async (req) => {
 
       // Rate limit: instant self-refunds are convenient but abusable
       // (buy→cancel loops cost the store Stripe fees). Cap per rolling 24 h.
+      //
+      // Counts refunds the CUSTOMER initiated, not every refund touching their
+      // orders. Filtering on user_id meant a partial refund the shop issued as
+      // a goodwill gesture counted against the customer — three of those and
+      // they could no longer cancel anything for a day, over refunds they never
+      // asked for. Historical rows have refund_requested_by NULL and so do not
+      // count, which errs permissive rather than locking someone out.
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { count: recentRefunds, error: refundCountErr } = await supabase
         .from('orders')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('refund_requested_by', user.id)
         .gte('refunded_at', oneDayAgo);
 
       if (refundCountErr) {
@@ -249,6 +363,8 @@ Deno.serve(async (req) => {
           refunded_at: refund.created
             ? new Date(refund.created * 1000).toISOString()
             : new Date().toISOString(),
+          // The customer asked for this one, so it counts against their limit.
+          refund_requested_by: user.id,
           status: 'refunded',
         })
         .eq('id', orderId)
@@ -281,20 +397,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'refund') {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        throw new OrderActionError(500, 'DB_PROFILE_LOOKUP_ERROR', 'db.fetch_profile', profileError.message);
-      }
-
-      if (profile?.role !== 'admin') {
-        throw new OrderActionError(403, 'AUTH_NOT_ADMIN', 'auth.authorize_admin', 'Admin access required.');
-      }
-
+      // Admin role was verified before the order lookup, above.
       const refundableStatuses = ['paid', 'shipped', 'delivered'] as const;
       if (!refundableStatuses.includes(order.status as (typeof refundableStatuses)[number])) {
         throw new OrderActionError(
@@ -354,15 +457,31 @@ Deno.serve(async (req) => {
 
       const refundValue = refundAmount ?? Math.round((refund.amount ?? 0) / 100 * 100) / 100;
 
-      // Always mark as refunded once Stripe accepts the refund request,
-      // regardless of refund.status ('succeeded' or 'pending').
+      // ── Only a FULL refund moves the order to 'refunded'.
+      // That status is not a label: manage_stock_on_status_change() (migration
+      // 013) puts EVERY line back into stock on paid → refunded, and
+      // admin_analytics() drops the order from revenue. Refunding $10 of a $500
+      // order used to do both. A partial refund records the amount and leaves
+      // the order fulfillable, matching what the charge.refunded webhook
+      // already does in _shared/webhook-logic.ts.
+      const isFullRefund = refundValue >= Number(order.total) - REFUND_FULL_TOLERANCE;
+
+      // refund_id is still recorded either way: it is the per-order lock, and
+      // the Stripe idempotency key (`refund_${orderId}`) means one order maps to
+      // exactly one refund object regardless. A second, differently-sized
+      // refund on the same order has to be issued from the Stripe dashboard.
       const updatePayload: Record<string, unknown> = {
         refund_id: refund.id,
         refund_amount: refundValue,
         refunded_at: refund.created
           ? new Date(refund.created * 1000).toISOString()
           : new Date().toISOString(),
-        status: 'refunded',
+        // The ADMIN initiated this one. Recording who asked is what keeps it
+        // out of the customer's self-service rate limit.
+        refund_requested_by: user.id,
+        // Marked once Stripe accepts the request, regardless of whether
+        // refund.status is 'succeeded' or 'pending'.
+        ...(isFullRefund ? { status: 'refunded' } : {}),
       };
 
       const { data: updatedOrder, error: updateError } = await supabase
@@ -398,20 +517,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'deliver') {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) {
-        throw new OrderActionError(500, 'DB_PROFILE_LOOKUP_ERROR', 'db.fetch_profile', profileError.message);
-      }
-
-      if (profile?.role !== 'admin') {
-        throw new OrderActionError(403, 'AUTH_NOT_ADMIN', 'auth.authorize_admin', 'Admin access required.');
-      }
-
+      // Admin role was verified before the order lookup, above.
       if (order.status !== 'shipped') {
         throw new OrderActionError(
           409,

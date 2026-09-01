@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Supabase CLI project configuration.
+#
+# This file is the ONLY place the CLI reads Edge Function settings from. There
+# used to be a config.toml inside each function directory — the CLI never looked
+# at any of them, so `supabase functions deploy` fell back to its default,
+# verify_jwt = true, for every function.
+#
+# For stripe-webhook that default is not a small problem: Stripe's POST is
+# authenticated by its own signature and carries no Authorization header, so the
+# platform gateway rejects it with 401 BEFORE the function runs. Paid orders
+# then never reach 'paid' — no stock deduction, no confirmation email — and the
+# expire-pending-orders cron cancels them two hours later, with the customer's
+# card already charged. Setting it here keeps that correct across redeploys and
+# on any fresh install of this repo.
+#
+# project_id is a placeholder on purpose — this repo ships to other operators.
+# `supabase link --project-ref <your-ref>` fills it in, and deploys use the
+# linked project regardless, so an unedited placeholder does not misdirect a
+# deploy. The [functions.*] settings below apply either way.
+# ─────────────────────────────────────────────────────────────────────────────
+
+project_id = "your-project-ref"
+
+# Verifies its own JWT in-function (supabaseAnon.auth.getUser) so it can return
+# a JSON error the checkout page can display, instead of an opaque gateway 401.
+[functions.create-checkout-session]
+verify_jwt = false
+
+# MUST stay false: authenticated by the Stripe webhook signature, not a JWT.
+[functions.stripe-webhook]
+verify_jwt = false
+
+# Verifies its own JWT, then authorises per action (owner / admin).
+[functions.handle-order-action]
+verify_jwt = false
+
+# Admin-only and always called from the app with a real user token, so the
+# gateway check is a free extra layer here.
+[functions.update-tracking]
+verify_jwt = true

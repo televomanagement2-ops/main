@@ -1,3 +1,4 @@
+import { Suspense, lazy, type ComponentType, type ReactElement } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { StoreLayout } from '../components/layout/StoreLayout';
 import { HomePage } from '../features/products/pages/HomePage';
@@ -15,18 +16,47 @@ import { CheckoutCancelPage } from '../features/checkout/pages/CheckoutCancelPag
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { SettingsPage } from '../features/settings/pages/SettingsPage';
 import { HelpPage } from '../features/help/pages/HelpPage';
-import { PrivacyPage } from '../features/legal/pages/PrivacyPage';
-import { PrivacyPolicyPage } from '../features/legal/pages/PrivacyPolicyPage';
-import { TermsPage } from '../features/legal/pages/TermsPage';
-import { CookiePolicyPage } from '../features/legal/pages/CookiePolicyPage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { AdminRoute } from './AdminRoute';
 import { AuthBoundary, BareLayout } from '../components/layout/AuthBoundary';
-import { AdminLayout } from '../features/admin/layout/AdminLayout';
-import { AdminDashboardPage } from '../features/admin/pages/AdminDashboardPage';
-import { AdminOrdersPage } from '../features/admin/pages/AdminOrdersPage';
-import { AdminCatalogPage } from '../features/admin/pages/AdminCatalogPage';
-import { AdminFinancePage } from '../features/admin/pages/AdminFinancePage';
+
+// ── Split out of the entry chunk ─────────────────────────────────────────────
+// The admin console pulls in recharts, and the legal pages carry the full text
+// of three policies in three languages. Neither is on any storefront path, but
+// a static import put both in the bundle every visitor downloads before the
+// first product renders. These load on navigation instead.
+//
+// The pages use named exports, hence the .then() unwrap: React.lazy resolves
+// the module's `default`.
+const named = <P,>(
+  loader: () => Promise<Record<string, unknown>>,
+  key: string,
+) => lazy(async () => ({ default: (await loader())[key] as ComponentType<P> }));
+
+const AdminLayout = named(() => import('../features/admin/layout/AdminLayout'), 'AdminLayout');
+const AdminDashboardPage = named(() => import('../features/admin/pages/AdminDashboardPage'), 'AdminDashboardPage');
+const AdminOrdersPage = named(() => import('../features/admin/pages/AdminOrdersPage'), 'AdminOrdersPage');
+const AdminCatalogPage = named(() => import('../features/admin/pages/AdminCatalogPage'), 'AdminCatalogPage');
+const AdminFinancePage = named(() => import('../features/admin/pages/AdminFinancePage'), 'AdminFinancePage');
+const PrivacyPage = named(() => import('../features/legal/pages/PrivacyPage'), 'PrivacyPage');
+const PrivacyPolicyPage = named(() => import('../features/legal/pages/PrivacyPolicyPage'), 'PrivacyPolicyPage');
+const TermsPage = named(() => import('../features/legal/pages/TermsPage'), 'TermsPage');
+const CookiePolicyPage = named(() => import('../features/legal/pages/CookiePolicyPage'), 'CookiePolicyPage');
+
+/** Wrap a lazy route element in the same spinner the route guards already use. */
+function deferred(element: ReactElement): ReactElement {
+  return (
+    <Suspense
+      fallback={
+        <div className="page-loading">
+          <div className="spinner" />
+        </div>
+      }
+    >
+      {element}
+    </Suspense>
+  );
+}
 
 const router = createBrowserRouter([
   // ── Storefront: editorial shell (header + footer + overlay surfaces) ──
@@ -102,10 +132,10 @@ const router = createBrowserRouter([
         ),
       },
       { path: 'help', element: <HelpPage /> },
-      { path: 'privacy', element: <PrivacyPage /> },
-      { path: 'privacy-policy', element: <PrivacyPolicyPage /> },
-      { path: 'terms', element: <TermsPage /> },
-      { path: 'cookies', element: <CookiePolicyPage /> },
+      { path: 'privacy', element: deferred(<PrivacyPage />) },
+      { path: 'privacy-policy', element: deferred(<PrivacyPolicyPage />) },
+      { path: 'terms', element: deferred(<TermsPage />) },
+      { path: 'cookies', element: deferred(<CookiePolicyPage />) },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
@@ -126,16 +156,14 @@ const router = createBrowserRouter([
     path: '/admin',
     element: (
       <AuthBoundary>
-        <AdminRoute>
-          <AdminLayout />
-        </AdminRoute>
+        <AdminRoute>{deferred(<AdminLayout />)}</AdminRoute>
       </AuthBoundary>
     ),
     children: [
-      { index: true, element: <AdminDashboardPage /> },
-      { path: 'orders', element: <AdminOrdersPage /> },
-      { path: 'catalog', element: <AdminCatalogPage /> },
-      { path: 'finance', element: <AdminFinancePage /> },
+      { index: true, element: deferred(<AdminDashboardPage />) },
+      { path: 'orders', element: deferred(<AdminOrdersPage />) },
+      { path: 'catalog', element: deferred(<AdminCatalogPage />) },
+      { path: 'finance', element: deferred(<AdminFinancePage />) },
     ],
   },
 ]);

@@ -1,9 +1,9 @@
 # CommerceJet — Security & Payments Audit
 
-_Last reviewed: 2026-08-22 (full-codebase review; previous pass 2026-06-22). Scope: the
-whole repository — Edge Functions, schema/RLS/migrations, the client data layer, auth and
-routing, headers, CI, and secret handling. Stack: React 19 + Vite frontend, Supabase
-(Postgres + RLS, Deno Edge Functions), Stripe Checkout._
+_Last reviewed: 2026-08-25 (pre-launch review; previous passes 2026-08-22, 2026-06-22).
+Scope: the whole repository — Edge Functions, schema/RLS/migrations, the client data layer,
+auth and routing, headers, CI, dependencies, and secret handling. Stack: React 19 + Vite
+frontend, Supabase (Postgres + RLS, Deno Edge Functions), Stripe Checkout._
 
 ## Summary
 
@@ -19,7 +19,17 @@ vulnerability**, and fixed five issues: the amount reconciliation this document 
 claimed but which was never actually implemented in code; a duplicate-line-item bypass of
 the checkout stock caps; `set_user_role()` authorising by elimination rather than by
 allowlist; CORS trusting every `*.vercel.app` host; and reviewer `user_id` exposed on the
-public reviews endpoint. Details below, each with the code location and its test coverage.
+public reviews endpoint.
+
+The **2026-08-25** pre-launch review again found **no directly exploitable high-severity
+vulnerability from an unauthenticated attacker**, and fixed eight issues: `products.cost_price`
+(the store's margin) readable by any visitor; a shipping address accepted with no validation
+of type, length or destination country; unbounded rows and text writable by any registered
+account; a partial admin refund silently marking the order fully refunded and restoring all
+stock; an authorisation check running after an order lookup that leaked order existence; a
+customer-cancellable `processing` order whose Stripe session stayed payable; deploy
+configuration for `verify_jwt` sitting in a path the CLI never reads; and a dependency
+advisory. Details below, each with the code location and its test coverage.
 
 > **Keep this file honest.** A security document that asserts a control the code does not
 > implement is worse than no document — it manufactures false assurance. The reconciliation
@@ -27,6 +37,108 @@ public reviews endpoint. Details below, each with the code location and its test
 > change this file in the same commit.
 
 ## Findings & status
+
+### FIXED (2026-08-25) — `products.cost_price` published to every visitor
+`products` is world-readable (RLS `products: public read active`) and every client query
+selected `*`, so `cost_price` — what the store pays per item, i.e. its margin on the whole
+catalog — came back to anyone. RLS is row-level and could not help, and the anon key is
+public by design, so `GET /rest/v1/products?select=name,price,cost_price` was a complete
+margin dump for any visitor. No UI has ever read the column.
+
+- **Fix:** column-level grants. Migration 016 revokes table-wide `SELECT` on `products`
+  from `anon`/`authenticated` and re-grants every column *except* `cost_price` (derived
+  from the live table, so a project with extra columns keeps them). `service_role` keeps
+  full access for reporting. Consequence: `SELECT *` on `products` is now refused for API
+  roles, so `src/lib/api.ts` names its columns via `PRODUCT_COLUMNS`.
+- **Verify:** `select has_column_privilege('anon','public.products','cost_price','SELECT');`
+  must be `false`.
+
+### FIXED (2026-08-25) — Shipping address accepted without validation
+`create-checkout-session` checked only that six address fields were *truthy*, then wrote the
+object verbatim into the `orders.shipping_address` JSONB and, with Stripe Tax on, into
+`stripe.customers.create`. There was no check of type, length or destination. An
+authenticated caller posting hand-written JSON could persist arbitrarily large blobs, send
+non-strings (`String({})` is `"[object Object]"`, which passes a presence check and reaches
+the warehouse as a real address), and order to **any country** — the country list and postal
+patterns lived only in the checkout form, and the cart is not the trust boundary.
+
+- **Fix:** `sanitizeAddress()` in `supabase/functions/_shared/address.ts` — string-typed
+  fields, control characters stripped, per-field length caps, country allowlist, postal
+  pattern re-checked server-side, and a return value containing only the eight known keys
+  so unknown ones are dropped. The module is the single source of truth: the checkout form
+  imports the same country list, patterns and caps, so the two cannot drift. Backstopped by
+  `orders_shipping_address_size_check` in migration 016.
+- **Tests:** `supabase/functions/_shared/address.test.ts` (19 cases, including the
+  `[object Object]` coercion, the country allowlist and the boundary lengths).
+
+### FIXED (2026-08-25) — Unbounded writes from any registered account
+`addresses` had an ownership-only INSERT policy, no per-user row cap and no column length
+limits, so one signed-up account could write unlimited rows of unlimited `TEXT`.
+`product_reviews.body` had no length cap either, and reviews are served to every anonymous
+visitor of the product page.
+
+- **Fix:** migration 016 adds `CHECK` length constraints on `addresses`,
+  `product_reviews.body` (2000), and `profiles.full_name`/`phone` (the latter feeds the
+  `author_name` review snapshot), plus a `BEFORE INSERT` trigger capping saved addresses at
+  20 per user. Client-side, the address form and the review textarea carry matching
+  `maxLength`, and `submitReview()` trims and clamps. The constraints are added `NOT VALID`
+  and validated separately, so pre-existing oversize rows are reported rather than aborting
+  the migration — new and updated rows are constrained either way.
+
+### FIXED (2026-08-25) — Partial admin refund marked the order fully refunded
+`handle-order-action`'s `refund` action always wrote `status: 'refunded'`, whatever `amount`
+was passed. `refunded` is not a label: `manage_stock_on_status_change()` (migration 013)
+puts **every** line back into stock on `paid → refunded`, and `admin_analytics()` drops the
+order from revenue. Refunding $10 of a $500 order did both. The Finance UI only issues full
+refunds, so this was latent — but `refundOrder(orderId, amount?)` exposes the parameter and
+any admin could reach it over the API.
+
+- **Fix:** the order moves to `refunded` only when the refund covers the total
+  (`refundValue >= order.total - 0.005`); a partial refund records `refund_amount` and
+  leaves the order fulfillable. Same rule already used for `charge.refunded` in
+  `_shared/webhook-logic.ts`, now applied on both paths.
+
+### FIXED (2026-08-25) — Authorisation ran after the order lookup
+`handle-order-action` fetched the order and checked `refund_id` **before** verifying that
+the caller owned it, so the responses distinguished `404 ORDER_NOT_FOUND`,
+`409 ORDER_ALREADY_REFUNDED` and `403 AUTH_NOT_OWNER` for any order id. UUIDv4 made
+enumeration impractical, but the shape was wrong.
+
+- **Fix:** the admin check for `refund`/`deliver` needs no order at all and now runs before
+  the lookup; ownership for `cancel` is checked immediately after the fetch and answers a
+  uniform `404`. `refund_id` is checked only once the caller is entitled to the row.
+
+### FIXED (2026-08-25) — A customer could cancel a still-payable order
+The `orders: owner cancel` RLS policy allowed `processing → cancelled` directly over
+PostgREST. A Stripe Checkout session stays payable for an hour, so cancelling the row and
+then paying took the money for an order the transition guard refused to mark `paid`, parking
+it in `needs_review`. It failed safe, but only if the operator watches that queue.
+
+- **Fix:** migration 016 narrows the policy to `status = 'pending'` (no Stripe session
+  open yet). Pre-payment cancels now go through `handle-order-action`, which retrieves the
+  session, **refuses the cancel** if payment already completed, expires the session
+  otherwise, and re-asserts the pre-payment status in the `UPDATE ... WHERE` so it cannot
+  race the webhook.
+
+### FIXED (2026-08-25) — `verify_jwt` config in a path the CLI does not read
+`supabase/functions/<name>/config.toml` is not a location the Supabase CLI reads; function
+settings come from `supabase/config.toml`, which did not exist. The three files declaring
+`verify_jwt = false` were inert, so `supabase functions deploy` fell back to `true`. On
+`stripe-webhook` that means the gateway rejects Stripe's (signature-authenticated, JWT-less)
+POST with 401 before the function runs: paid orders never reach `paid`, and the
+expire-pending-orders cron cancels them two hours later with the card already charged. The
+live deployment was configured correctly by hand, so this was a redeploy/reinstall trap
+rather than an active outage.
+
+- **Fix:** `supabase/config.toml` declares `verify_jwt` for all four functions; the three
+  inert files are deleted; `SETUP_CHECKLIST.md` documents the one-line `curl` that
+  distinguishes a reachable webhook (400) from a gateway-blocked one (401).
+
+### FIXED (2026-08-25) — Dependency advisory
+`react-router`/`react-router-dom` 7.18.1 carried GHSA-qwww-vcr4-c8h2 (CSRF bypass in RSC
+mode). The app uses `createBrowserRouter` in data mode and no RSC, so the vulnerable path
+was not reachable — bumped to 7.18.2 regardless. `npm audit` is clean for production and
+dev dependencies.
 
 ### FIXED — Tax recorded but not charged (correctness / legal)
 `create-checkout-session` recorded `order.total = subtotal + shipping + 10% tax`, but the
@@ -151,6 +263,25 @@ Queries go through the parameterized Supabase SDK (no raw SQL from user input). 
 key; secret keys (Stripe, service role, Resend) live in Edge Function env, not in the repo.
 `.env` is gitignored.
 
+### NOTE (2026-08-25) — Legal and contact placeholders still unfilled
+`src/config/storeConfig.ts` still carries `[SELLER_LEGAL_NAME]`, `[SELLER_ENTITY_TYPE]`,
+`[BUSINESS_ADDRESS]`, `[GOVERNING_STATE]`, `[ARBITRATION_BODY]`, `[RETURN_WINDOW]`,
+`support@example.com` and `privacy@example.com`. Those values are injected **verbatim** into
+the Privacy Policy, Terms and Cookie Policy, so a live store collecting personal data would
+name its data controller as `[SELLER_LEGAL_NAME]` (GDPR Art. 13). `hasUnfilledPlaceholders()`
+exists in that file but is not called anywhere. Deliberately left to the operator — nobody
+else can supply these — but it is a launch blocker, not cosmetic.
+
+Related: `_shared/store.ts` defaults `SUPPORT_EMAIL` to `support@example.com`. Without
+`RESEND_FROM_EMAIL` pointing at a domain verified in Resend, transactional mail sends from a
+non-existent address and fails SPF/DKIM.
+
+### NOTE (2026-08-25) — `supabase/.temp` in git history
+The Supabase CLI cache (project ref + organization id) is present in eight historical
+commits; it is correctly `.gitignore`d now. The project ref is public anyway — it is in the
+frontend bundle as `VITE_SUPABASE_URL` — so there is no exposure to fix, but the history
+should be scrubbed before handing the repository to a licensee.
+
 ### NOTE — Dead stylesheets
 `src/App.css` and `src/index.css` are not imported anywhere (legacy template cruft). They
 reference their own local tokens and have no runtime effect. Safe to delete later; left in
@@ -158,6 +289,13 @@ place to avoid unrelated churn.
 
 ## Pre-production checklist
 
+- [ ] Apply migrations **015 and 016** — both are security migrations. Then run the
+      verification queries in `supabase/SETUP_CHECKLIST.md` (`set_user_role` allowlist form,
+      the four length constraints, and `has_column_privilege('anon', …, 'cost_price')`
+      returning false).
+- [ ] `curl -X POST https://<ref>.supabase.co/functions/v1/stripe-webhook` must return
+      **400**, not 401. A 401 means the gateway is rejecting Stripe before the function runs.
+- [ ] Fill in `src/config/storeConfig.ts` — the legal pages render the placeholders verbatim.
 - [ ] Set `ALLOWED_ORIGINS` (Edge Function secret) to the real production domain(s), and
       make sure it does **not** contain `*` (the function logs a warning if it does).
 - [ ] Set `ALLOW_VERCEL_PREVIEWS=false` in production to disable preview-subdomain CORS.

@@ -32,6 +32,33 @@ function slugify(input: string): string {
 // PRODUCTS
 // ============================================================
 
+// Explicit allowlist instead of '*'. products is world-readable, and '*' was
+// publishing products.cost_price — what the store pays per item — to every
+// visitor holding the (public) anon key. Migration 016 revokes that column at
+// the database level, which also means SELECT * is now refused for
+// anon/authenticated: name the columns.
+const PRODUCT_COLUMNS = [
+  'id',
+  'category_id',
+  'name',
+  'slug',
+  'description',
+  'price',
+  'compare_at_price',
+  'sku',
+  'stock_quantity',
+  'low_stock_threshold',
+  'weight_grams',
+  'is_active',
+  'is_featured',
+  'metadata',
+  'created_at',
+  'updated_at',
+].join(', ');
+
+// Listing views only need enough to render a card and link it.
+const PRODUCT_IMAGE_COLUMNS = 'id, url, alt_text, is_primary, sort_order';
+
 export async function fetchProducts(
   filters: ProductFilters = {}
 ): Promise<PaginatedResponse<Product>> {
@@ -49,12 +76,15 @@ export async function fetchProducts(
   // categories.slug only nulls out the embedded category instead of
   // excluding the product rows.
   const select = categorySlug
-    ? '*, product_images(*), categories!inner(*)'
-    : '*, product_images(*), categories(*)';
+    ? `${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), categories!inner(*)`
+    : `${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), categories(*)`;
 
+  // 'estimated' returns the exact count for a small result set and the planner's
+  // estimate for a large one. 'exact' made every page, filter and search
+  // keystroke pay for a full COUNT(*) on top of the rows themselves.
   let query = supabase
     .from('products')
-    .select(select, { count: 'exact' })
+    .select(select, { count: 'estimated' })
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
@@ -83,7 +113,7 @@ export async function fetchProducts(
 export async function fetchProductBySlug(slug: string): Promise<Product> {
   const { data, error } = await supabase
     .from('products')
-    .select('*, product_images(*), categories(*)')
+    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
     .eq('slug', slug)
     .eq('is_active', true)
     .single();
@@ -108,7 +138,7 @@ export async function fetchProductBySlug(slug: string): Promise<Product> {
 export async function fetchFeaturedProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
-    .select('*, product_images(*), categories(*)')
+    .select(`${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), categories(*)`)
     .eq('is_active', true)
     .eq('is_featured', true)
     .order('created_at', { ascending: false })
@@ -128,7 +158,7 @@ export async function fetchProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('products')
-    .select('*, product_images(*), product_variants(*)')
+    .select(`${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), product_variants(*)`)
     .in('id', ids)
     .eq('is_active', true);
 
@@ -238,16 +268,26 @@ export async function hasPurchasedProduct(productId: string): Promise<boolean> {
   return Boolean(data);
 }
 
+/**
+ * Cap on a review body, mirrored by product_reviews_body_length_check in
+ * migration 016. Reviews are world-readable, so an unbounded body was a blob
+ * one purchaser could make every visitor of that product page download.
+ */
+export const REVIEW_BODY_MAX_LENGTH = 2000;
+
 export async function submitReview(
   productId: string,
   userId: string,
   rating: number,
   body: string
 ): Promise<PublicProductReview> {
+  const safeRating = Math.min(5, Math.max(1, Math.round(Number(rating) || 0)));
+  const safeBody = body.trim().slice(0, REVIEW_BODY_MAX_LENGTH);
+
   const { data, error } = await supabase
     .from('product_reviews')
     .upsert(
-      { product_id: productId, user_id: userId, rating, body },
+      { product_id: productId, user_id: userId, rating: safeRating, body: safeBody },
       { onConflict: 'product_id,user_id' }
     )
     .select(PUBLIC_REVIEW_COLUMNS)
@@ -442,7 +482,7 @@ export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
 export async function fetchAdminProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
-    .select('*, product_images(*), categories(*)')
+    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -457,7 +497,7 @@ export async function updateProduct(
     .from('products')
     .update(updates)
     .eq('id', productId)
-    .select('*, product_images(*), categories(*)')
+    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
     .single();
 
   if (error) throw error;
@@ -511,7 +551,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
       is_active: input.is_active ?? true,
       is_featured: input.is_featured ?? false,
     })
-    .select('*, product_images(*), categories(*)')
+    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
     .single();
 
   if (error) throw error;

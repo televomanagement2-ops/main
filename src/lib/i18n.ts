@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { usePreferencesStore } from '../store/preferencesStore';
 import type { AppLanguageCode } from '../store/preferencesStore';
 import { editorialCopy } from './i18nCopy';
+import { STORE_CURRENCY } from '../../supabase/functions/_shared/money.ts';
 
 const LOCALE_MAP: Record<AppLanguageCode, string> = {
   it: 'it-IT',
@@ -2886,11 +2887,14 @@ export function useI18n() {
     };
   }, [language, locale]);
 
+  // Currency comes from the shared module, locale from the language picker:
+  // what the card is charged in is a property of the STORE and must match
+  // Stripe exactly, while the punctuation is a property of the reader.
   const formatCurrency = useMemo(() => {
     return (value: number) =>
       new Intl.NumberFormat(locale, {
         style: 'currency',
-        currency: 'USD',
+        currency: STORE_CURRENCY,
         maximumFractionDigits: 2,
       }).format(value);
   }, [locale]);

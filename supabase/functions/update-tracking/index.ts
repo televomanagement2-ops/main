@@ -3,6 +3,15 @@ import { renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
 import { getCorsHeaders, isForbiddenOrigin } from '../_shared/cors.ts';
 import { sendEmail } from '../_shared/email.ts';
 
+// Mirrors orders_tracking_id_length_check (migration 017).
+const MAX_TRACKING_ID_LENGTH = 100;
+
+// Saving a tracking ID is what SHIPS an order — this is the only route that
+// does, so that the customer notification below cannot be bypassed. 'shipped'
+// is included so a wrong number can still be corrected afterwards (the DB
+// transition guard treats shipped → shipped as a no-op).
+const TRACKABLE_STATUSES = ['paid', 'shipped'];
+
 function jsonResponse(payload: unknown, status = 200, origin: string | null = null) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -68,6 +77,15 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Missing orderId or trackingId.' }, 400, origin);
     }
 
+    // Checked here so an over-long value is a clean 400 rather than a Postgres
+    // constraint error surfacing as a 500.
+    if (trackingId.length > MAX_TRACKING_ID_LENGTH) {
+      return jsonResponse({
+        error: `Tracking ID exceeds ${MAX_TRACKING_ID_LENGTH} characters.`,
+        code: 'TRACKING_ID_TOO_LONG',
+      }, 400, origin);
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
@@ -85,6 +103,9 @@ Deno.serve(async (req) => {
 
     // Adding tracking means the order shipped — the status is never taken from
     // the client (an arbitrary client status could corrupt the order lifecycle).
+    // The status filter is asserted in the WHERE clause rather than read first:
+    // the order could change between a check and this write, and the DB
+    // transition guard would then surface as raw Postgres text to the admin.
     const { data: updated, error: updateError } = await supabase
       .from('orders')
       .update({
@@ -93,8 +114,9 @@ Deno.serve(async (req) => {
         status: 'shipped',
       })
       .eq('id', orderId)
+      .in('status', TRACKABLE_STATUSES)
       .select('*, order_items(*), profiles(full_name, email, phone)')
-      .single();
+      .maybeSingle();
 
     if (updateError) {
       const statusCode = updateError.code === 'P0001' ? 400 : 500;
@@ -102,7 +124,22 @@ Deno.serve(async (req) => {
     }
 
     if (!updated) {
-      return jsonResponse({ error: 'Order not found.' }, 404, origin);
+      // No row matched: either the id does not exist, or the order is not in a
+      // status that can be shipped. Only the error path pays for telling the
+      // two apart, and the difference is what the admin needs to act on.
+      const { data: existing } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .maybeSingle();
+
+      if (!existing) {
+        return jsonResponse({ error: 'Order not found.', code: 'ORDER_NOT_FOUND' }, 404, origin);
+      }
+      return jsonResponse({
+        error: `Order status ${existing.status} cannot be shipped. Only a paid order can be given tracking.`,
+        code: 'ORDER_NOT_SHIPPABLE',
+      }, 409, origin);
     }
 
     let customerEmail = updated.profiles?.email ?? null;

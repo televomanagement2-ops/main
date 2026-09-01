@@ -1,4 +1,4 @@
-# CommerceJet — Store Owner Setup & Handover Guide
+# AURUM — Store Owner Setup & Handover Guide
 
 Welcome. This guide is for the **store operator** (the person/company that licensed this
 software and will run the store). Follow it end-to-end before going live. It links to

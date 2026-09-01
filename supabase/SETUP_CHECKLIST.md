@@ -7,10 +7,49 @@
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
 3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
-   `014_role_management.sql`. Run each one.
-   > Already-migrated database (ran 001–013 before)? Only run
-   > `014_role_management.sql`, then `NOTIFY pgrst, 'reload schema';`
+   `017_international_shipping.sql`. Run each one — do not stop early.
+   > Already-migrated database? Run whatever is newer than your last one, then
+   > `NOTIFY pgrst, 'reload schema';`
+   >
+   > **015 and 016 are security migrations, not optional polish.** 015 turns
+   > `set_user_role()` from authorise-by-elimination into an allowlist. 016 adds the
+   > anti-abuse limits, narrows the customer cancel window, and stops publishing
+   > `products.cost_price` to every visitor. A database left at 014 has all three gaps.
+   >
+   > **017 changes what you charge for shipping.** It scopes the three stock methods
+   > to the US and adds international ones at placeholder prices. Before this, one
+   > flat rate applied to every destination — Standard shipped to Australia for the
+   > same 0.00 it charged in-state. Read the `NOTICE` it prints and set your real
+   > rates; see "Configure your shipping zones" below.
 4. `supabase/seeds/002_mock_products.sql` ← optional sample products
+
+### Verify the security migrations actually landed
+
+```sql
+-- 015: must print the allowlist form (looks for "is_direct_session").
+select case
+         when pg_get_functiondef(p.oid) like '%is_direct_session%' then 'OK — 015 applied'
+         else 'STALE — re-run 015_set_user_role_deny_by_default.sql'
+       end as set_user_role_status
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public' and p.proname = 'set_user_role';
+
+-- 016: the four abuse limits and the cost_price lockdown.
+select conname from pg_constraint
+ where conname in ('addresses_field_length_check',
+                   'product_reviews_body_length_check',
+                   'profiles_full_name_length_check',
+                   'orders_shipping_address_size_check');
+
+select has_column_privilege('anon', 'public.products', 'cost_price', 'SELECT')
+       as anon_can_read_cost_price;  -- must be false
+```
+
+If `016` reported a `WARNING` about a constraint it could not validate, some pre-existing
+row is longer than the new cap. The cap is already enforced for new and updated rows; find
+and shorten the offending rows, then run the `VALIDATE CONSTRAINT` statement the warning
+printed.
 
 ### Assign the admin role
 
@@ -124,9 +163,15 @@ STRIPE_TAX_ENABLED=false
 RESEND_FROM_EMAIL=Your Store <support@your-domain.com>
 STORE_NAME=Your Store
 SUPPORT_EMAIL=support@your-domain.com
-# Optional: STORE_CURRENCY (default USD), STORE_LOCALE (default en-US),
-# STORE_BRAND_COLOR (default #111111).
+# Optional: STORE_LOCALE (default en-US), STORE_BRAND_COLOR (default #111111).
 ```
+
+> **The currency is NOT a secret here.** It used to be, and that was the bug: an
+> operator who set `STORE_CURRENCY=EUR` got euro signs in the confirmation email
+> while Stripe still charged the card in dollars, because the checkout function
+> and the storefront had their own hard-coded copies. It now lives in
+> `supabase/functions/_shared/money.ts`, a single file both the Edge Functions
+> and the storefront import — see "Set your currency" under Stripe Setup below.
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically.
 CORS **fails closed**: if `ALLOWED_ORIGINS` is unset, every browser origin is
 rejected (the functions log a warning). When set, only those origins (plus
@@ -167,6 +212,48 @@ ZIP — the service-role key bypasses RLS entirely.
        - `refund.updated`
 5. Copy **Signing secret** → add as `STRIPE_WEBHOOK_SECRET` in Supabase secrets
 
+### Set your currency
+
+Edit `STORE_CURRENCY` in **`supabase/functions/_shared/money.ts`** (default `'USD'`).
+That one constant is imported by the checkout function, the storefront and the
+emails, so there is no second place to keep in sync. It must be a currency
+enabled on your Stripe account. Redeploy the Edge Functions and rebuild the
+frontend after changing it.
+
+### Enable the payment methods you want
+
+Dashboard → Settings → **Payment methods**. Checkout now uses whatever is enabled
+there, filtered by amount, currency and buyer country — the code no longer pins
+the session to cards.
+
+> **The local European methods are currency-bound.** iDEAL and Bancontact are
+> EUR-only, so with `STORE_CURRENCY = 'USD'` a Dutch shopper still sees only
+> cards no matter what you tick in the Dashboard. Selling into the eurozone means
+> setting the currency to `'EUR'` as well.
+
+### Configure your shipping zones
+
+`shipping_methods.countries` is an array of ISO country codes, UPPERCASE.
+`NULL` means "offered everywhere". Migration 017 leaves you with US-only stock
+methods plus two international ones at **placeholder prices** — change them:
+
+```sql
+-- What am I currently offering, and where?
+SELECT name, price, countries FROM public.shipping_methods WHERE is_active ORDER BY sort_order;
+
+-- Example: charge 19.99 to the EU, 24.99 to the rest of the world
+UPDATE public.shipping_methods SET price = 19.99, countries = ARRAY['DE','FR','IT','ES']
+ WHERE id = 'c1000000-0000-0000-0000-000000000005';
+```
+
+Two rules worth knowing:
+
+- Every country in `SHIPPING_COUNTRIES` (`supabase/functions/_shared/address.ts`)
+  needs at least one method covering it, or checkout to that country is blocked
+  with "we do not ship there yet". Those two lists are what you are promising.
+- If you do **not** ship from the US, re-scope the three stock methods — 017 set
+  them to `ARRAY['US']` on the assumption of a US seller.
+
 ---
 
 ## 5. Deploy Edge Functions
@@ -175,7 +262,7 @@ Install Supabase CLI if not already: `npm install -g supabase`
 
 ```bash
 supabase login
-supabase link --project-ref <your-project-ref>
+supabase link --project-ref <your-project-ref>   # also writes project_id into supabase/config.toml
 supabase functions deploy create-checkout-session
 supabase functions deploy stripe-webhook
 supabase functions deploy update-tracking
@@ -184,6 +271,26 @@ supabase functions deploy handle-order-action
 
 > Deploy **all four** functions. `handle-order-action` powers cancellations,
 > refunds and delivery; `update-tracking` sends the shipping email.
+
+### JWT verification is set in `supabase/config.toml` — leave it alone
+
+`supabase/config.toml` declares `verify_jwt` per function, and it is the **only** file the
+CLI reads that from. `stripe-webhook` must stay `verify_jwt = false`: Stripe authenticates
+its POST with a signature, not a JWT, so with verification on the platform gateway rejects
+it with **401 before the function runs**. Paid orders then never reach `paid` — no stock
+deduction, no confirmation email — and the expire-pending-orders cron cancels them two
+hours later with the customer's card already charged.
+
+Verify after deploying (no auth header on purpose):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  https://<project-ref>.supabase.co/functions/v1/stripe-webhook
+```
+
+- **400** → correct. The function ran and refused a request with no `stripe-signature`.
+- **401** → the gateway blocked it. Dashboard → Edge Functions → `stripe-webhook` → turn
+  **Verify JWT** off, or redeploy with `--no-verify-jwt`.
 
 Test locally first:
 ```bash

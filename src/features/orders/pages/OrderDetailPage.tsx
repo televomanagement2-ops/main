@@ -155,7 +155,9 @@ export function OrderDetailPage() {
               <p className="detail-block__body">
                 {addr.full_name}<br />
                 {addr.line1}{addr.line2 ? `, ${addr.line2}` : ''}<br />
-                {addr.city}, {addr.state} {addr.postal_code}<br />
+                {/* state is empty for countries that do not use one — filter
+                    rather than render a stray comma. */}
+                {[addr.city, addr.state].filter(Boolean).join(', ')} {addr.postal_code}<br />
                 {addr.country}
               </p>
             </>

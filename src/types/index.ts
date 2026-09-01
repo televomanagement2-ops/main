@@ -91,6 +91,8 @@ export interface ShippingMethod {
   is_active: boolean;
   sort_order: number;
   created_at: string;
+  /** ISO country codes this method is offered for; null = everywhere. */
+  countries: string[] | null;
 }
 
 export interface Address {
@@ -161,6 +163,8 @@ export interface Order {
   refunded_at?: string | null;
   refund_id?: string | null;
   refund_amount?: number | null;
+  /** Who asked for the refund — keeps admin refunds out of the customer's rate limit. */
+  refund_requested_by?: string | null;
   delivered_at?: string | null;
   // Operator attention flag (e.g. 'oversold', or a webhook business-rule
   // rejection). Paid orders are always honored; this surfaces the ones that

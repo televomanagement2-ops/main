@@ -9,18 +9,24 @@
 //   STORE_NAME          Public brand name shown in emails (default "AURUM")
 //   SUPPORT_EMAIL       Reply/support address (default "support@example.com")
 //   RESEND_FROM_EMAIL   Full "from" header; overrides the two above if set
-//   STORE_CURRENCY      ISO currency for money in emails (default "USD")
-//   STORE_LOCALE        Locale for number/currency formatting (default "en-US")
+//   STORE_LOCALE        Locale for number/date formatting in emails (default "en-US")
 //   STORE_BRAND_COLOR   Header color in emails (default "#111111")
+//
+// The CURRENCY is deliberately NOT a secret here. It has to match what Stripe
+// actually charges and what the storefront displays, so it lives in
+// _shared/money.ts — a module both runtimes import. See the note there.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { STORE_CURRENCY, formatMoneyIn } from './money.ts';
 
 export const STORE_NAME = Deno.env.get('STORE_NAME') ?? 'AURUM';
 export const SUPPORT_EMAIL = Deno.env.get('SUPPORT_EMAIL') ?? 'support@example.com';
 export const FROM_EMAIL =
   Deno.env.get('RESEND_FROM_EMAIL') ?? `${STORE_NAME} <${SUPPORT_EMAIL}>`;
-export const STORE_CURRENCY = Deno.env.get('STORE_CURRENCY') ?? 'USD';
 export const STORE_LOCALE = Deno.env.get('STORE_LOCALE') ?? 'en-US';
 export const BRAND_COLOR = Deno.env.get('STORE_BRAND_COLOR') ?? '#111111';
+
+export { STORE_CURRENCY };
 
 /** Escape user-supplied text before embedding it in email HTML. */
 export function escapeHtml(value: string): string {
@@ -32,9 +38,9 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/** Format a money amount using the store currency + locale. */
+/** Format a money amount using the store currency + the email locale. */
 export function formatMoney(amount: number, currency: string = STORE_CURRENCY): string {
-  return new Intl.NumberFormat(STORE_LOCALE, { style: 'currency', currency }).format(amount);
+  return formatMoneyIn(amount, STORE_LOCALE, currency);
 }
 
 /**

@@ -22,11 +22,17 @@ import type { Order, OrderStatus } from '../../../types';
 
 type StatusFilter = 'all' | OrderStatus;
 
+// Transitions offered by the plain status dropdown, which writes to PostgREST
+// directly. 'paid' deliberately has NO options: shipping an order has to go
+// through the update-tracking Edge Function, because that is what records the
+// tracking ID and emails the customer. Offering paid → shipped here shipped the
+// order silently — no tracking, no notification — and then the tracking field
+// (which only accepted a paid order) could never be filled in again.
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['processing', 'cancelled'],
   processing: ['requires_action', 'paid', 'failed', 'cancelled'],
   requires_action: ['paid', 'failed', 'cancelled'],
-  paid: ['shipped'],
+  paid: [],
   shipped: ['delivered'],
   delivered: [],
   failed: [],
@@ -322,7 +328,11 @@ function OrderDetailPanel({
   const nextStatuses = [order.status, ...STATUS_TRANSITIONS[order.status]].filter(
     (value, index, arr) => arr.indexOf(value) === index
   );
-  const canSaveTracking = order.status === 'paid' && trackingDraft.trim().length > 0;
+  // 'shipped' is included so a wrong tracking number can still be corrected —
+  // the Edge Function re-sends the notification with the new one, and the DB
+  // treats shipped → shipped as a no-op.
+  const canTrack = order.status === 'paid' || order.status === 'shipped';
+  const canSaveTracking = canTrack && trackingDraft.trim().length > 0;
   const stopped = TERMINAL_STATUSES.includes(order.status);
   const progress = TIMELINE_STEPS.indexOf(order.status);
 
@@ -491,7 +501,14 @@ function OrderDetailPanel({
               ))}
             </select>
             {nextStatuses.length === 1 && (
-              <p className="field__hint">{t('admin.orders.noTransitions')}</p>
+              <p className="field__hint">
+                {/* A paid order is not stuck — it just advances via tracking,
+                    not via this dropdown. Saying "no further transitions"
+                    would tell the admin the opposite of the truth. */}
+                {order.status === 'paid'
+                  ? t('admin.orders.shipViaTracking')
+                  : t('admin.orders.noTransitions')}
+              </p>
             )}
           </div>
 
@@ -523,7 +540,7 @@ function OrderDetailPanel({
                 {updateTracking.isPending ? t('admin.orders.savingTracking') : t('admin.orders.saveTracking')}
               </button>
             </div>
-            {order.status !== 'paid' && <p className="field__hint">{t('admin.orders.trackingHint')}</p>}
+            {!canTrack && <p className="field__hint">{t('admin.orders.trackingHint')}</p>}
           </div>
 
           {order.status === 'shipped' && (

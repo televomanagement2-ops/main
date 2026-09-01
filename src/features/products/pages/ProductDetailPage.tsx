@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useProduct, useProducts } from '../../../hooks/useProducts';
 import { useReviews, useSubmitReview, useHasPurchased } from '../../../hooks/useReviews';
+import { REVIEW_BODY_MAX_LENGTH } from '../../../lib/api';
 import { useCartStore } from '../../../store/cartStore';
 import { useUiStore } from '../../../store/uiStore';
 import { useAuth } from '../../../hooks/useAuth';
@@ -497,6 +498,7 @@ function ReviewsSection({ productId }: { productId: string }) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
+              maxLength={REVIEW_BODY_MAX_LENGTH}
             />
             {submitError && <p className="field__error">{(submitError as Error).message}</p>}
             <button type="submit" className="btn btn--secondary btn--sm" disabled={isPending} style={{ alignSelf: 'flex-start' }}>

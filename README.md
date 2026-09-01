@@ -198,10 +198,15 @@ Shipping, refund, and delivery emails are sent from the Edge Functions (via Rese
 **English by default, in USD/en-US**. Because Edge Functions can't read
 [`storeConfig.ts`](src/config/storeConfig.ts) (it's frontend-only), their branding is set with
 Edge Function secrets, all with demo-safe defaults:
-`STORE_NAME`, `SUPPORT_EMAIL`, `RESEND_FROM_EMAIL`, `STORE_CURRENCY`, `STORE_LOCALE`,
+`STORE_NAME`, `SUPPORT_EMAIL`, `RESEND_FROM_EMAIL`, `STORE_LOCALE`,
 `STORE_BRAND_COLOR`. The shared template lives in
 [`supabase/functions/_shared/store.ts`](supabase/functions/_shared/store.ts). Sign-up /
 password-reset emails are sent by Supabase Auth and are customized in the Supabase dashboard.
+
+The **currency** is not among those secrets: it must agree with what Stripe charges and what
+the storefront displays, so it is a single constant in
+[`supabase/functions/_shared/money.ts`](supabase/functions/_shared/money.ts) that the checkout
+function, the storefront and the emails all import.
 
 ## Build and Quality Checks
 

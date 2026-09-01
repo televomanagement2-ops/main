@@ -1,6 +1,8 @@
 import Stripe from 'npm:stripe@18';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { resolveAllowedOrigin, getCorsHeaders } from '../_shared/cors.ts';
+import { sanitizeAddress } from '../_shared/address.ts';
+import { STRIPE_CURRENCY } from '../_shared/money.ts';
 
 const STRIPE_API_VERSION = '2025-03-31.basil';
 
@@ -151,17 +153,22 @@ Deno.serve(async (req) => {
       }, 400);
     }
 
-    // Validate shipping address fields
-    const addr = shipping_address ?? {};
-    const requiredAddrFields = ['full_name', 'line1', 'city', 'state', 'postal_code', 'country'];
-    const missingFields = requiredAddrFields.filter((f) => !addr[f]);
-    if (missingFields.length > 0) {
+    // ── SECURITY: validate, normalise and whitelist the shipping address.
+    // It is persisted verbatim into the orders.shipping_address JSONB and, with
+    // Stripe Tax on, sent to stripe.customers.create — so a presence check was
+    // not enough: unbounded blobs, non-string values and countries the store
+    // does not ship to all got through. The country list and postal patterns
+    // live in _shared/address.ts, shared with the checkout form, so the two can
+    // never drift apart.
+    const addressCheck = sanitizeAddress(shipping_address);
+    if (!addressCheck.ok) {
       return jsonResponse({
-        error: `Missing shipping address fields: ${missingFields.join(', ')}`,
-        code: 'VALIDATION_MISSING_SHIPPING_ADDRESS_FIELDS',
+        error: addressCheck.message,
+        code: addressCheck.code,
         phase: 'request.validate_shipping_address',
       }, 400);
     }
+    const addr = addressCheck.address;
 
     console.log('[checkout] items:', items.length);
 
@@ -363,12 +370,14 @@ Deno.serve(async (req) => {
     });
 
     // ── SECURITY: resolve shipping cost from the DB, never from the client.
+    // `countries` scopes a method to a set of ISO codes; NULL means it is
+    // offered everywhere (migration 017).
     let resolvedShippingCost = 0;
     let resolvedShippingName: string | null = null;
     if (shipping_method_id) {
       const { data: method, error: methodErr } = await supabase
         .from('shipping_methods')
-        .select('id, name, price, is_active')
+        .select('id, name, price, is_active, countries')
         .eq('id', shipping_method_id)
         .maybeSingle();
 
@@ -387,8 +396,50 @@ Deno.serve(async (req) => {
           phase: 'request.resolve_shipping',
         }, 400);
       }
+
+      // The storefront filters the list by country, but the client is never the
+      // trust boundary: a hand-written request could name the cheap domestic
+      // method for an overseas address.
+      const methodCountries = (method.countries ?? null) as string[] | null;
+      if (methodCountries && !methodCountries.some((c) => String(c).toUpperCase() === addr.country)) {
+        return jsonResponse({
+          error: `"${method.name}" is not available for ${addr.country}.`,
+          code: 'SHIPPING_METHOD_NOT_AVAILABLE_FOR_COUNTRY',
+          phase: 'request.resolve_shipping',
+        }, 400);
+      }
+
       resolvedShippingCost = Math.round(Number(method.price) * 100) / 100;
       resolvedShippingName = method.name as string;
+    } else {
+      // ── Omitting shipping_method_id used to mean free shipping, anywhere.
+      // The storefront always sends one, so only a hand-written request took
+      // this path — and it got an overseas parcel carried for nothing. If the
+      // store publishes any method for this country, choosing one is mandatory.
+      // addr.country is interpolated into the filter, which is only safe because
+      // sanitizeAddress() has already narrowed it to one of the literal codes in
+      // SHIPPING_COUNTRIES — never take this shortcut with a raw body value.
+      const { count: availableMethods, error: availErr } = await supabase
+        .from('shipping_methods')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .or(`countries.is.null,countries.cs.{${addr.country}}`);
+
+      if (availErr) {
+        throw new CheckoutHttpError(
+          500,
+          'DB_SHIPPING_LOOKUP_ERROR',
+          'db.fetch_shipping_method',
+          `Failed to load shipping methods: ${availErr.message}`,
+        );
+      }
+      if ((availableMethods ?? 0) > 0) {
+        return jsonResponse({
+          error: 'A shipping method must be selected for this destination.',
+          code: 'SHIPPING_METHOD_REQUIRED',
+          phase: 'request.resolve_shipping',
+        }, 400);
+      }
     }
 
     const subtotal = Math.round(
@@ -470,7 +521,7 @@ Deno.serve(async (req) => {
     // Build Stripe line items from resolved (DB-trusted) data
     const lineItems = resolvedItems.map((i) => ({
       price_data: {
-        currency: 'usd',
+        currency: STRIPE_CURRENCY,
         product_data: {
           name: i.selected_size ? `${i.name} (${i.selected_size})` : i.name,
           ...(i.image ? { images: [i.image] } : {}),
@@ -483,7 +534,7 @@ Deno.serve(async (req) => {
     if (resolvedShippingCost > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: STRIPE_CURRENCY,
           product_data: { name: `Shipping — ${resolvedShippingName ?? 'Standard'}` },
           unit_amount: Math.round(resolvedShippingCost * 100),
         },
@@ -497,7 +548,7 @@ Deno.serve(async (req) => {
     if (!stripeTaxEnabled && tax > 0) {
       lineItems.push({
         price_data: {
-          currency: 'usd',
+          currency: STRIPE_CURRENCY,
           product_data: { name: 'Estimated sales tax' },
           unit_amount: Math.round(tax * 100),
         },
@@ -509,7 +560,13 @@ Deno.serve(async (req) => {
     try {
       console.log('[checkout] phase=stripe.create_session');
       const sessionParams: Stripe.Checkout.SessionCreateParams = {
-        payment_method_types: ['card'],
+        // payment_method_types is deliberately NOT set. Checkout Sessions use
+        // dynamic payment methods by default — Stripe shows what is enabled in
+        // the Dashboard, filtered by amount, currency and country. Passing
+        // ['card'] was an override that switched that off, so a Dutch or German
+        // shopper never saw iDEAL, Bancontact or Klarna even with those enabled.
+        // Note the currency dependency: the local European methods are EUR-only,
+        // so they only appear once STORE_CURRENCY (_shared/money.ts) is 'EUR'.
         line_items: lineItems,
         mode: 'payment',
         // Server-built redirect URLs on the verified origin (never client input).

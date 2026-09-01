@@ -134,6 +134,8 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
     checkout: {
       assurance1: 'Payment is encrypted and handled by Stripe.',
       assurance2: 'Returns accepted within the published window.',
+      dutiesNotice: 'Import duties and taxes may be charged on delivery and are paid by the recipient.',
+      noShippingToCountry: 'We do not ship to the selected country yet. Choose a different address.',
     },
 
     checkoutSuccess: { label: 'Confirmation' },
@@ -209,6 +211,7 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
         statusUpdated: 'Status updated',
         noTransitions: 'No further transitions from this state.',
         trackingHint: 'Tracking can be saved once the order is paid.',
+        shipViaTracking: 'To ship this order, save a tracking ID below. That is what notifies the customer.',
         deliveredConfirmed: 'Marked as delivered',
         activity: 'Activity',
         activityPlaced: 'Order placed',
@@ -388,6 +391,8 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
     checkout: {
       assurance1: 'Pagamento cifrato e gestito da Stripe.',
       assurance2: 'Resi accettati entro i termini indicati.',
+      dutiesNotice: 'Dazi e IVA di importazione possono essere addebitati alla consegna e sono a carico del destinatario.',
+      noShippingToCountry: 'Non spediamo ancora nel paese selezionato. Scegli un altro indirizzo.',
     },
 
     checkoutSuccess: { label: 'Conferma' },
@@ -463,6 +468,7 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
         statusUpdated: 'Stato aggiornato',
         noTransitions: 'Nessuna transizione disponibile da questo stato.',
         trackingHint: 'Il tracciamento si salva quando l ordine e pagato.',
+        shipViaTracking: 'Per spedire questo ordine salva un codice di tracciamento qui sotto. Il cliente viene avvisato cosi.',
         deliveredConfirmed: 'Segnato come consegnato',
         activity: 'Attivita',
         activityPlaced: 'Ordine effettuato',
@@ -642,6 +648,8 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
     checkout: {
       assurance1: 'El pago esta cifrado y gestionado por Stripe.',
       assurance2: 'Devoluciones aceptadas dentro del plazo publicado.',
+      dutiesNotice: 'Los aranceles e impuestos de importacion pueden cobrarse en la entrega y los paga el destinatario.',
+      noShippingToCountry: 'Todavia no enviamos al pais seleccionado. Elige otra direccion.',
     },
 
     checkoutSuccess: { label: 'Confirmacion' },
@@ -717,6 +725,7 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
         statusUpdated: 'Estado actualizado',
         noTransitions: 'No hay mas transiciones desde este estado.',
         trackingHint: 'El seguimiento se guarda cuando el pedido esta pagado.',
+        shipViaTracking: 'Para enviar este pedido guarda un codigo de seguimiento abajo. Asi es como se avisa al cliente.',
         deliveredConfirmed: 'Marcado como entregado',
         activity: 'Actividad',
         activityPlaced: 'Pedido realizado',
@@ -896,6 +905,8 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
     checkout: {
       assurance1: 'Paiement chiffre et gere par Stripe.',
       assurance2: 'Retours acceptes dans le delai indique.',
+      dutiesNotice: 'Les droits de douane et taxes peuvent etre factures a la livraison et sont payes par le destinataire.',
+      noShippingToCountry: 'Nous ne livrons pas encore dans le pays selectionne. Choisissez une autre adresse.',
     },
 
     checkoutSuccess: { label: 'Confirmation' },
@@ -971,6 +982,7 @@ export const editorialCopy: Record<AppLanguageCode, CopyDict> = {
         statusUpdated: 'Statut mis a jour',
         noTransitions: 'Aucune transition possible depuis cet etat.',
         trackingHint: 'Le suivi peut etre enregistre une fois la commande payee.',
+        shipViaTracking: 'Pour expedier cette commande, enregistrez un numero de suivi ci-dessous. Le client est alors prevenu.',
         deliveredConfirmed: 'Marquee comme livree',
         activity: 'Activite',
         activityPlaced: 'Commande passee',

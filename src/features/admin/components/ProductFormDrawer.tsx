@@ -48,7 +48,7 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
   const [lowStock, setLowStock] = useState(String(product?.low_stock_threshold ?? 5));
   const [weight, setWeight] = useState(product?.weight_grams != null ? String(product.weight_grams) : '');
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
-  const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? false);
+  const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? false); 
 
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);

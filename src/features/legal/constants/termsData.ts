@@ -77,6 +77,7 @@ const en: TermsData = {
         'We ship to the destinations made available at checkout. Estimated delivery times are shown on the product page and/or at checkout and are estimates, not guarantees.',
         'Title and risk of loss for products pass to you upon delivery to the carrier, except where mandatory consumer law provides otherwise (see the EU/EEA section below, where risk passes on physical delivery to the consumer).',
         'A tracking number is provided by email once the parcel is handed to the carrier. We are not responsible for carrier delays outside our control, but we will assist with lost or damaged shipments.',
+        'International orders: prices shown at checkout do not include import duties, customs fees, or import VAT. Where these apply they are levied by the destination country, collected by the carrier on delivery, and are the responsibility of the recipient. Refusing a parcel to avoid such charges does not entitle you to a refund of the original shipping cost.',
         'You are responsible for providing an accurate shipping address. We are not liable for orders delivered to an incorrect address provided by you.',
       ],
     },

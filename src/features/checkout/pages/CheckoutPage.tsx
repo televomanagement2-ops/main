@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCartStore } from '../../../store/cartStore';
@@ -10,6 +10,13 @@ import { supabase } from '../../../lib/supabaseClient';
 import { createAddress } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
 import { computeOrderTotals } from '../../../lib/pricing';
+import {
+  SHIPPING_COUNTRIES,
+  isValidPostalCode,
+  isStateRequired,
+  ADDRESS_MAX_LENGTHS,
+} from '../../../../supabase/functions/_shared/address.ts';
+import { storeConfig } from '../../../config/storeConfig';
 import { Media } from '../../../components/ui/Media';
 import { Spinner } from '../../../components/ui/Spinner';
 import { Badge } from '../../../components/ui/Badge';
@@ -35,35 +42,13 @@ type CheckoutBody = {
   shipping_method_id: string;
 };
 
-// ISO 3166-1 alpha-2 codes the store ships to. US first (US-market template);
-// extend the list when you enable more shipping destinations in Stripe.
-const COUNTRIES = [
-  { code: 'US', name: 'United States' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'FR', name: 'France' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'ES', name: 'Spain' },
-] as const;
-
-const POSTAL_PATTERNS: Record<string, RegExp> = {
-  US: /^\d{5}(-\d{4})?$/,
-  CA: /^[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d$/i,
-  GB: /^[A-Za-z]{1,2}\d[A-Za-z\d]? ?\d[A-Za-z]{2}$/i,
-  AU: /^\d{4}$/,
-  DE: /^\d{5}$/,
-  FR: /^\d{5}$/,
-  IT: /^\d{5}$/,
-  ES: /^\d{5}$/,
-};
-
-function isValidPostalCode(country: string, postalCode: string): boolean {
-  const pattern = POSTAL_PATTERNS[country];
-  if (!pattern) return postalCode.trim().length > 0;
-  return pattern.test(postalCode.trim());
-}
+// The country list, the postal patterns and the field length caps live in the
+// Edge Function's shared module, because the server is where they are actually
+// enforced — this form only mirrors them so the shopper gets the error before
+// the round-trip. Two copies meant the client list was the only thing keeping
+// out an order for a country the store does not ship to, and hand-written JSON
+// walked straight past it.
+const COUNTRIES = SHIPPING_COUNTRIES;
 
 async function resolveCheckoutError(err: unknown, fallback: string): Promise<string> {
   if (!err || typeof err !== 'object') return fallback;
@@ -148,7 +133,9 @@ function AddressChoice({
           {address.line1}{address.line2 ? `, ${address.line2}` : ''}
         </span>
         <span className="choice__line" style={{ display: 'block' }}>
-          {address.city}, {address.state} {address.postal_code} · {address.country}
+          {/* state is empty for countries that do not use one (see
+              STATE_REQUIRED_COUNTRIES) — filter rather than render a stray comma. */}
+          {[address.city, address.state].filter(Boolean).join(', ')} {address.postal_code} · {address.country}
         </span>
       </span>
       {address.is_default && <Badge>{defaultLabel}</Badge>}
@@ -240,6 +227,8 @@ function NewAddressForm({
   const [saveForLater, setSaveForLater] = useState(true);
   const [postalError, setPostalError] = useState(false);
 
+  const stateRequired = isStateRequired(form.country);
+
   const set = (k: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -275,6 +264,7 @@ function NewAddressForm({
             value={form.full_name}
             onChange={set('full_name')}
             placeholder={labels.placeholders.fullName}
+            maxLength={ADDRESS_MAX_LENGTHS.full_name}
             autoComplete="name"
           />
         </div>
@@ -287,6 +277,7 @@ function NewAddressForm({
             value={form.line1}
             onChange={set('line1')}
             placeholder={labels.placeholders.addressLine1}
+            maxLength={ADDRESS_MAX_LENGTHS.line1}
             autoComplete="address-line1"
           />
         </div>
@@ -298,6 +289,7 @@ function NewAddressForm({
             value={form.line2}
             onChange={set('line2')}
             placeholder={labels.placeholders.addressLine2}
+            maxLength={ADDRESS_MAX_LENGTHS.line2}
             autoComplete="address-line2"
           />
         </div>
@@ -310,18 +302,26 @@ function NewAddressForm({
             value={form.city}
             onChange={set('city')}
             placeholder={labels.placeholders.city}
+            maxLength={ADDRESS_MAX_LENGTHS.city}
             autoComplete="address-level2"
           />
         </div>
         <div className="field">
-          <label className="field__label" htmlFor="ck-state">{labels.state} *</label>
+          {/* Required only where the administrative area is real and the carrier
+              uses it (US/CA/AU). Germany and the UK have no such field, so
+              demanding one made the shopper invent a value; Italy and Spain do
+              use a province, so it stays available rather than hidden. */}
+          <label className="field__label" htmlFor="ck-state">
+            {labels.state}{stateRequired ? ' *' : ''}
+          </label>
           <input
             id="ck-state"
             className="input"
-            required
+            required={stateRequired}
             value={form.state}
             onChange={set('state')}
             placeholder={labels.placeholders.state}
+            maxLength={ADDRESS_MAX_LENGTHS.state}
             autoComplete="address-level1"
           />
         </div>
@@ -334,6 +334,7 @@ function NewAddressForm({
             value={form.postal_code}
             onChange={set('postal_code')}
             placeholder={labels.placeholders.postalCode}
+            maxLength={ADDRESS_MAX_LENGTHS.postal_code}
             autoComplete="postal-code"
           />
           {postalError && <p className="field__error">{labels.invalidPostalCode}</p>}
@@ -362,6 +363,7 @@ function NewAddressForm({
             onChange={set('phone')}
             placeholder={labels.placeholders.phone}
             type="tel"
+            maxLength={ADDRESS_MAX_LENGTHS.phone}
             autoComplete="tel"
           />
         </div>
@@ -407,9 +409,36 @@ export function CheckoutPage() {
       ? null
       : (savedAddresses.find((a) => a.id === effectiveAddressId) ?? null);
 
-  const selectedMethod = shippingMethods.find((m) => m.id === selectedMethodId)
-    ?? shippingMethods[0]
+  // The destination country decides which shipping methods exist and whether an
+  // import-duties notice belongs on the page.
+  const activeCountry =
+    (effectiveAddressId === 'new' ? newAddress?.country : resolvedAddress?.country) ?? null;
+
+  // A method with `countries: null` is offered everywhere (migration 017).
+  // Before an address is picked there is nothing to filter against, so the full
+  // list is shown for information — the pay button is already held back by
+  // shippingAddressReady until an address exists.
+  const availableMethods = useMemo(
+    () =>
+      activeCountry
+        ? shippingMethods.filter((m) => !m.countries || m.countries.includes(activeCountry))
+        : shippingMethods,
+    [shippingMethods, activeCountry]
+  );
+
+  // Resolving against the FILTERED list is what handles a country change: if the
+  // method the shopper picked is no longer offered, the selection falls back to
+  // the first valid one instead of quietly keeping a method the server will
+  // reject.
+  const selectedMethod = availableMethods.find((m) => m.id === selectedMethodId)
+    ?? availableMethods[0]
     ?? null;
+
+  // Only a real misconfiguration (a country in SHIPPING_COUNTRIES with no method
+  // covering it) reaches this, but it has to stop the order rather than send a
+  // request the Edge Function will refuse.
+  const noShippingAvailable = activeCountry !== null && availableMethods.length === 0;
+  const showDutiesNotice = activeCountry !== null && activeCountry !== storeConfig.countryCode;
 
   const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const shippingCost = selectedMethod?.price ?? 0;
@@ -476,7 +505,11 @@ export function CheckoutPage() {
       setError(t('checkout.selectAddressError'));
       return;
     }
-    if (!selectedMethod && shippingMethods.length > 0) {
+    if (noShippingAvailable) {
+      setError(t('checkout.noShippingToCountry'));
+      return;
+    }
+    if (!selectedMethod && availableMethods.length > 0) {
       setError(t('checkout.selectShippingError'));
       return;
     }
@@ -614,13 +647,18 @@ export function CheckoutPage() {
 
             {shippingLoading ? (
               <p className="t-sm t-faint">{t('checkout.loadingShipping')}</p>
+            ) : noShippingAvailable ? (
+              <div className="notice notice--critical">
+                <IconAlert size={16} />
+                <div className="notice__body">{t('checkout.noShippingToCountry')}</div>
+              </div>
             ) : (
               <div className="stack gap-2">
-                {shippingMethods.map((method) => (
+                {availableMethods.map((method) => (
                   <ShippingChoice
                     key={method.id}
                     method={method}
-                    selected={(selectedMethodId ?? shippingMethods[0]?.id) === method.id}
+                    selected={selectedMethod?.id === method.id}
                     onSelect={() => setSelectedMethodId(method.id)}
                     estimatedLabel={t('checkout.estimated')}
                     freeLabel={t('common.free')}
@@ -715,7 +753,7 @@ export function CheckoutPage() {
           <button
             type="button"
             onClick={handleCheckout}
-            disabled={isLoading || !shippingAddressReady}
+            disabled={isLoading || !shippingAddressReady || noShippingAvailable}
             className="btn btn--primary btn--lg btn--block"
             style={{ marginTop: 'var(--s-6)' }}
           >
@@ -744,6 +782,15 @@ export function CheckoutPage() {
                 <span>{line}</span>
               </li>
             ))}
+            {/* Cross-border only. Duties are collected by the carrier on
+                delivery, so a buyer who was never told treats the bill as a
+                surprise charge from the store. */}
+            {showDutiesNotice && (
+              <li className="t-xs t-faint row gap-2" style={{ alignItems: 'flex-start' }}>
+                <IconInfo size={13} />
+                <span>{t('checkout.dutiesNotice')}</span>
+              </li>
+            )}
           </ul>
         </aside>
       </div>

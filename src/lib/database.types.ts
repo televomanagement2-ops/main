@@ -296,6 +296,7 @@ export type Database = {
           is_active: boolean;
           sort_order: number;
           created_at: string;
+          countries: string[] | null;
         };
         Insert: {
           id?: string;
@@ -307,6 +308,7 @@ export type Database = {
           is_active?: boolean;
           sort_order?: number;
           created_at?: string;
+          countries?: string[] | null;
         };
         Update: {
           id?: string;
@@ -318,6 +320,7 @@ export type Database = {
           is_active?: boolean;
           sort_order?: number;
           created_at?: string;
+          countries?: string[] | null;
         };
         Relationships: [];
       };
@@ -397,6 +400,7 @@ export type Database = {
           refund_id: string | null;
           refund_amount: number | null;
           refunded_at: string | null;
+          refund_requested_by: string | null;
           delivered_at: string | null;
           needs_review: boolean;
           review_reason: string | null;
@@ -423,6 +427,7 @@ export type Database = {
           refund_id?: string | null;
           refund_amount?: number | null;
           refunded_at?: string | null;
+          refund_requested_by?: string | null;
           delivered_at?: string | null;
           needs_review?: boolean;
           review_reason?: string | null;
@@ -449,6 +454,7 @@ export type Database = {
           refund_id?: string | null;
           refund_amount?: number | null;
           refunded_at?: string | null;
+          refund_requested_by?: string | null;
           delivered_at?: string | null;
           needs_review?: boolean;
           review_reason?: string | null;
