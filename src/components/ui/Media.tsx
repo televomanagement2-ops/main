@@ -11,6 +11,8 @@ interface Props {
   className?: string;
   style?: CSSProperties;
   loading?: 'lazy' | 'eager';
+  /** `high` for the one above-the-fold image that is the page's largest paint. */
+  fetchPriority?: 'high' | 'low' | 'auto';
   sizes?: string;
 }
 
@@ -36,6 +38,7 @@ export function Media({
   className,
   style,
   loading = 'lazy',
+  fetchPriority,
   sizes,
 }: Props) {
   // Track WHICH src finished, not just "something finished": a bare boolean
@@ -59,6 +62,7 @@ export function Media({
         src={src}
         alt={alt}
         loading={loading}
+        fetchPriority={fetchPriority}
         sizes={sizes}
         decoding="async"
         className={loaded ? 'is-loaded' : undefined}

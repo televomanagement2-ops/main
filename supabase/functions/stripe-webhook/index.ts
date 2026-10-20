@@ -186,7 +186,11 @@ async function sendOrderConfirmationEmail(client: SupabaseClient, orderId: strin
   const { data: order, error } = await client
     .from('orders')
     .select(
-      'id, total, shipping_cost, shipping_method_name, order_items(product_name, quantity, unit_price, selected_size), profiles(email, full_name)',
+      // The `!orders_user_id_fkey` hint is required, not decorative: orders
+      // references profiles twice (user_id and refund_requested_by, migration
+      // 017) and PostgREST rejects an ambiguous embed — which silently killed
+      // every order confirmation email.
+      'id, total, shipping_cost, shipping_method_name, order_items(product_name, quantity, unit_price, selected_size), profiles!orders_user_id_fkey(email, full_name)',
     )
     .eq('id', orderId)
     .single();

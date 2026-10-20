@@ -15,6 +15,14 @@ const PRE_PAYMENT_STATUSES = ['pending', 'processing', 'requires_action'];
 
 const KNOWN_ACTIONS = ['cancel', 'refund', 'deliver'];
 
+// orders has TWO foreign keys to profiles — user_id (the buyer) and
+// refund_requested_by (migration 017). A bare `profiles(...)` embed is ambiguous
+// and PostgREST refuses it ("more than one relationship was found for 'orders'
+// and 'profiles'"), which failed every action AFTER the money had already
+// moved. The `!constraint` hint names the relationship to follow: the buyer.
+const ORDER_WITH_CUSTOMER =
+  '*, order_items(*), profiles!orders_user_id_fkey(full_name, email, phone)';
+
 // A partial refund leaves the order fulfillable, so it must NOT move to
 // 'refunded': that status restores every line's stock (migration 013) and locks
 // the order against any further refund. Same rule as charge.refunded in
@@ -252,7 +260,7 @@ Deno.serve(async (req) => {
           .update({ status: 'cancelled' })
           .eq('id', orderId)
           .in('status', PRE_PAYMENT_STATUSES)
-          .select('*, order_items(*), profiles(full_name, email, phone)')
+          .select(ORDER_WITH_CUSTOMER)
           .maybeSingle();
 
         if (cancelError) {
@@ -368,7 +376,7 @@ Deno.serve(async (req) => {
           status: 'refunded',
         })
         .eq('id', orderId)
-        .select('*, order_items(*), profiles(full_name, email, phone)')
+        .select(ORDER_WITH_CUSTOMER)
         .single();
 
       if (updateError || !updatedOrder) {
@@ -488,7 +496,7 @@ Deno.serve(async (req) => {
         .from('orders')
         .update(updatePayload)
         .eq('id', orderId)
-        .select('*, order_items(*), profiles(full_name, email, phone)')
+        .select(ORDER_WITH_CUSTOMER)
         .single();
 
       if (updateError || !updatedOrder) {
@@ -531,7 +539,7 @@ Deno.serve(async (req) => {
         .from('orders')
         .update({ status: 'delivered', delivered_at: new Date().toISOString() })
         .eq('id', orderId)
-        .select('*, order_items(*), profiles(full_name, email, phone)')
+        .select(ORDER_WITH_CUSTOMER)
         .single();
 
       if (updateError || !updatedOrder) {

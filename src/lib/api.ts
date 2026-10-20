@@ -375,6 +375,14 @@ export async function cancelOrder(orderId: string): Promise<Order> {
 // ADMIN — ORDERS, ANALYTICS, CATALOG
 // ============================================================
 
+// orders has TWO foreign keys to profiles — user_id (the buyer) and
+// refund_requested_by (migration 017). A bare `profiles(...)` embed is therefore
+// ambiguous and PostgREST refuses it outright ("more than one relationship was
+// found for 'orders' and 'profiles'"), which is a 300 on every admin order list
+// and on every order-mutating Edge Function response. The `!constraint` hint
+// names the relationship to follow: always the buyer.
+export const ORDER_CUSTOMER_EMBED = 'profiles!orders_user_id_fkey(full_name, email, phone)';
+
 export const ADMIN_ORDERS_PAGE_SIZE = 50;
 
 export interface AdminOrdersFilters {
@@ -391,7 +399,7 @@ export async function fetchAdminOrders(
 
   let query = supabase
     .from('orders')
-    .select('*, order_items(*), profiles(full_name, email, phone)', { count: 'exact' })
+    .select(`*, order_items(*), ${ORDER_CUSTOMER_EMBED}`, { count: 'exact' })
     .order('created_at', { ascending: false })
     .range((page - 1) * pageSize, page * pageSize - 1);
 
@@ -414,7 +422,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
     .from('orders')
     .update({ status })
     .eq('id', orderId)
-    .select('*, order_items(*), profiles(full_name, email, phone)')
+    .select(`*, order_items(*), ${ORDER_CUSTOMER_EMBED}`)
     .single();
 
   if (error) throw error;

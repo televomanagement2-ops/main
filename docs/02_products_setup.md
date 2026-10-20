@@ -22,7 +22,7 @@ Products live in three database tables in Supabase:
 
 | Table | Purpose |
 |---|---|
-| `categories` | Product categories (e.g. Electronics, Clothing). |
+| `categories` | Product categories (e.g. Ready-to-Wear, Accessories). |
 | `products` | The products themselves. |
 | `product_images` | One or more images per product. |
 
@@ -56,8 +56,8 @@ DELETE FROM public.products;
 
 ## 3. Set up your categories
 
-The demo ships with these category slugs: `electronics`, `clothing`, `home-garden`,
-`smartphones`. Keep, rename, or replace them. To add one via SQL:
+The demo ships with these category slugs: `ready-to-wear`, `bags-leather-goods`,
+`watches-jewelry`, `accessories`, `fragrance`. Keep, rename, or replace them. To add one via SQL:
 
 ```sql
 INSERT INTO public.categories (name, slug, is_active, sort_order)
@@ -65,7 +65,7 @@ VALUES ('Shoes', 'shoes', TRUE, 1);
 ```
 
 > **Note —** The category `slug` is used in URLs and filters, so keep it lowercase with
-> hyphens (e.g. `home-garden`).
+> hyphens (e.g. `bags-leather-goods`).
 
 ---
 

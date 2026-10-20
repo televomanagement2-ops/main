@@ -51,17 +51,21 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Auto-create profile on signup
+-- Auto-create profile on signup. Same body as migration 014, so re-running this
+-- file never brings back the version that aborted signups on a duplicate id or
+-- a NULL email.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   INSERT INTO public.profiles (id, email, full_name, avatar_url)
   VALUES (
     NEW.id,
-    NEW.email,
+    COALESCE(NEW.email, NEW.raw_user_meta_data->>'email', ''),
     NEW.raw_user_meta_data->>'full_name',
     NEW.raw_user_meta_data->>'avatar_url'
-  );
+  )
+  ON CONFLICT (id) DO NOTHING;
+
   RETURN NEW;
 END;
 $$;
@@ -249,47 +253,14 @@ CREATE INDEX IF NOT EXISTS idx_order_items_product ON public.order_items(product
 -- migration 013 which drops the legacy carts/cart_items tables.)
 
 -- ============================================================
--- STOCK RESERVATION (deduct on order, restore on cancel)
+-- STOCK
 -- ============================================================
-
-CREATE OR REPLACE FUNCTION public.deduct_stock()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE public.products
-  SET stock_quantity = stock_quantity - NEW.quantity
-  WHERE id = NEW.product_id
-    AND stock_quantity >= NEW.quantity;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Insufficient stock for product %', NEW.product_id;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS order_item_deduct_stock ON public.order_items;
-CREATE TRIGGER order_item_deduct_stock
-  AFTER INSERT ON public.order_items
-  FOR EACH ROW EXECUTE FUNCTION public.deduct_stock();
-
-CREATE OR REPLACE FUNCTION public.restore_stock()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.status = 'cancelled' AND OLD.status <> 'cancelled' THEN
-    UPDATE public.products p
-    SET stock_quantity = p.stock_quantity + oi.quantity
-    FROM public.order_items oi
-    WHERE oi.order_id = NEW.id AND oi.product_id = p.id;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS order_restore_stock ON public.orders;
-CREATE TRIGGER order_restore_stock
-  AFTER UPDATE ON public.orders
-  FOR EACH ROW EXECUTE FUNCTION public.restore_stock();
+-- Stock moves only when an order's status changes: deducted on 'paid',
+-- restored when a paid order is cancelled/refunded (migration 013,
+-- manage_stock_on_status_change). This file used to create insert-time
+-- deduct/restore triggers here; re-running it on a migrated database put them
+-- back and made every paid order deduct its stock twice. Migration 019 removes
+-- them from databases that already re-ran an old copy.
 
 -- ============================================================
 -- SEED DATA

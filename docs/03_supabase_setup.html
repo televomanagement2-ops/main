@@ -81,14 +81,16 @@ click Run):</p>
   <li><code>supabase/schema.sql</code> — tables &amp; types</li>
   <li><code>supabase/rls.sql</code> — security policies</li>
   <li><strong>Every file in <code>supabase/migrations/</code> in numeric order</strong> — <code>001_fixes.sql</code> through
-    <code>014_role_management.sql</code>. Run each one.</li>
+    <code>019_reconcile_reverted_fixes.sql</code>. Run each one.</li>
   <li><code>supabase/seeds/002_mock_products.sql</code> — optional demo catalog (skip if you'll add your
     own products right away)</li>
 </ol>
 
 <blockquote><p><strong>Important —</strong> Run the migrations in order. They build on each other; skipping one can
-leave the checkout schema incomplete. If your database already ran 001–013, only run
-<code>014_role_management.sql</code>, then <code>NOTIFY pgrst, 'reload schema';</code></p></blockquote>
+leave the checkout schema incomplete. If your database already ran some of them, run every
+file newer than your last one, then <code>NOTIFY pgrst, 'reload schema';</code>. Re-ran <code>schema.sql</code>
+or an older migration on a migrated database? Run <code>019_reconcile_reverted_fixes.sql</code> again
+afterwards — it puts back the fixes those files revert.</p></blockquote>
 
 <p><code>014_role_management.sql</code> installs <code>set_user_role()</code>, the supported way to make somebody an
 admin (or put them back to customer) — see <em>Make the first admin</em> below.</p>

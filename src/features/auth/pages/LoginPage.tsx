@@ -7,14 +7,14 @@ import { Wordmark } from '../../../components/ui/Wordmark';
 import { Media } from '../../../components/ui/Media';
 import { Spinner } from '../../../components/ui/Spinner';
 import { IconAlert, IconCheck } from '../../../components/ui/icons';
-import heroFallback from '../../../assets/hero.png';
+import storyImage from '../../../assets/story.jpg';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
   const { t } = useI18n();
-  const { data: featured = [] } = useFeaturedProducts();
+  const { data: featured = [], isLoading: featuredLoading } = useFeaturedProducts();
 
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
@@ -26,10 +26,13 @@ export function LoginPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const asideImage =
-    featured[0]?.product_images?.find((i) => i.is_primary)?.url ??
-    featured[0]?.product_images?.[0]?.url ??
-    heroFallback;
+  // Same rule as the homepage hero: no stand-in while the featured product
+  // loads, so the panel never flashes one image and then swaps to another.
+  const asideImage = featuredLoading
+    ? null
+    : (featured[0]?.product_images?.find((i) => i.is_primary)?.url ??
+      featured[0]?.product_images?.[0]?.url ??
+      storyImage);
 
   const switchMode = (next: 'login' | 'signup') => {
     setMode(next);

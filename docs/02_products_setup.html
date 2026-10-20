@@ -69,7 +69,7 @@ immediately. Before going live, replace it with your own.</p></blockquote>
 <table>
   <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
   <tbody>
-    <tr><td><code>categories</code></td><td>Product categories (e.g. Electronics, Clothing).</td></tr>
+    <tr><td><code>categories</code></td><td>Product categories (e.g. Ready-to-Wear, Accessories).</td></tr>
     <tr><td><code>products</code></td><td>The products themselves.</td></tr>
     <tr><td><code>product_images</code></td><td>One or more images per product.</td></tr>
   </tbody>
@@ -103,14 +103,14 @@ products (products reference a category).</p></blockquote>
 
 <h2>3. Set up your categories</h2>
 
-<p>The demo ships with these category slugs: <code>electronics</code>, <code>clothing</code>, <code>home-garden</code>,
-<code>smartphones</code>. Keep, rename, or replace them. To add one via SQL:</p>
+<p>The demo ships with these category slugs: <code>ready-to-wear</code>, <code>bags-leather-goods</code>,
+<code>watches-jewelry</code>, <code>accessories</code>, <code>fragrance</code>. Keep, rename, or replace them. To add one via SQL:</p>
 
 <pre><code>INSERT INTO public.categories (name, slug, is_active, sort_order)
 VALUES ('Shoes', 'shoes', TRUE, 1);</code></pre>
 
 <blockquote><p><strong>Note —</strong> The category <code>slug</code> is used in URLs and filters, so keep it lowercase with
-hyphens (e.g. <code>home-garden</code>).</p></blockquote>
+hyphens (e.g. <code>bags-leather-goods</code>).</p></blockquote>
 
 <hr>
 

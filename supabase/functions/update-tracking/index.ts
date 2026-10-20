@@ -115,7 +115,10 @@ Deno.serve(async (req) => {
       })
       .eq('id', orderId)
       .in('status', TRACKABLE_STATUSES)
-      .select('*, order_items(*), profiles(full_name, email, phone)')
+      // profiles is embedded through the explicit `orders_user_id_fkey` hint:
+      // orders also references profiles via refund_requested_by (migration 017),
+      // and PostgREST refuses an ambiguous embed rather than picking one.
+      .select('*, order_items(*), profiles!orders_user_id_fkey(full_name, email, phone)')
       .maybeSingle();
 
     if (updateError) {

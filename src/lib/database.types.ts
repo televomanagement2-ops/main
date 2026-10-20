@@ -476,6 +476,17 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: 'shipping_methods';
             referencedColumns: ['id'];
+          },
+          // Second FK to profiles (migration 017). It is what makes a bare
+          // `profiles(...)` embed on orders ambiguous — every such embed must
+          // carry a `!orders_user_id_fkey` hint. Listed here so the client
+          // types model the ambiguity instead of silently resolving to user_id.
+          {
+            foreignKeyName: 'orders_refund_requested_by_fkey';
+            columns: ['refund_requested_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
           }
         ];
       };

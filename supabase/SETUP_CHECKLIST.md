@@ -7,9 +7,14 @@
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
 3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
-   `017_international_shipping.sql`. Run each one — do not stop early.
+   `019_reconcile_reverted_fixes.sql`. Run each one — do not stop early.
    > Already-migrated database? Run whatever is newer than your last one, then
    > `NOTIFY pgrst, 'reload schema';`
+   >
+   > **Re-ran `schema.sql` or an older migration on a migrated database?** Run 019
+   > again afterwards. Older copies of `schema.sql` re-create insert-time stock
+   > triggers that make every paid order deduct its stock twice, and `004` puts back
+   > review policies that let any account review any product; 019 removes both.
    >
    > **015 and 016 are security migrations, not optional polish.** 015 turns
    > `set_user_role()` from authorise-by-elimination into an allowlist. 016 adds the

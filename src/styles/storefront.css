@@ -643,6 +643,11 @@
   border-radius: 0;
   min-height: clamp(420px, 62vh, 720px);
 }
+/* Focal point of the bundled story photograph (src/assets/story.jpg). On a
+   phone the frame is a narrow vertical slice of a 3:1 picture; 60% keeps the
+   chair whole instead of splitting it with the side table, and on wide screens
+   both pieces stay in frame. Re-aim it if you replace the photograph. */
+.story .media > img { object-position: 60% 50%; }
 .story__overlay {
   position: absolute;
   inset: 0;

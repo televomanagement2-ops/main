@@ -13,7 +13,7 @@ import {
   IconTruck,
 } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
-import heroFallback from '../../../assets/hero.png';
+import storyImage from '../../../assets/story.jpg';
 import type { Category, Product } from '../../../types';
 
 function primaryImage(product?: Product | null): string | null {
@@ -42,14 +42,15 @@ export function HomePage() {
   const products = featured.length > 0 ? featured : (fallback?.data ?? []);
 
   const heroProduct = products[0];
-  const heroImage = primaryImage(heroProduct) ?? heroFallback;
+  // Nothing stands in for the hero while the catalogue loads: the frame keeps
+  // its neutral bed and the product photograph fades in once it arrives. A
+  // stand-in image here was painted on every visit for as long as the request
+  // took, then swapped out. The editorial photograph only covers a store that
+  // has no products at all.
+  const heroImage = isLoading ? null : (primaryImage(heroProduct) ?? storyImage);
 
   const edit = products.slice(0, 6);
   const showcase = products.slice(6, 9);
-  const storyImage =
-    primaryImage(products[2]) ??
-    categories.find((c) => c.image_url)?.image_url ??
-    heroFallback;
 
   const sorted = [...categories].sort((a, b) => {
     const rootDelta = (a.parent_id ? 1 : 0) - (b.parent_id ? 1 : 0);
@@ -96,7 +97,13 @@ export function HomePage() {
           </div>
 
           <div className="hero__media">
-            <Media src={heroImage} alt={heroProduct?.name ?? ''} ratio="free" loading="eager" />
+            <Media
+              src={heroImage}
+              alt={heroProduct?.name ?? ''}
+              ratio="free"
+              loading="eager"
+              fetchPriority="high"
+            />
             {heroProduct && (
               <Link to={`/products/${heroProduct.slug}`} className="hero__badge">
                 <span>
@@ -228,6 +235,8 @@ export function HomePage() {
       </section>
 
       {/* ── 05 · FULL-WIDTH STORY ───────────────────────────────────── */}
+      {/* Editorial photography ships with the storefront (src/assets/story.jpg),
+          so this section never depends on which products are featured. */}
       <section className="story" id="story" aria-label={t('home.story.title')}>
         <Media src={storyImage} alt="" ratio="free" />
         <div className="story__overlay">

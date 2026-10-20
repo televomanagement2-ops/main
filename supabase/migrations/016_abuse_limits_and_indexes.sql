@@ -205,10 +205,28 @@ GRANT SELECT ON public.products TO service_role;
 -- fetchProducts() searches with ILIKE '%term%'. A leading wildcard cannot use a
 -- B-tree index, so every keystroke was a sequential scan over the catalog.
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Into `extensions`, not `public` (Supabase's linter flags extensions in the
+-- exposed schema). IF NOT EXISTS keeps a copy someone already installed
+-- elsewhere, so the operator class is looked up in whichever schema holds it
+-- instead of relying on search_path, which differs between the SQL Editor and
+-- `supabase db push`.
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
 
-CREATE INDEX IF NOT EXISTS idx_products_name_trgm
-  ON public.products USING GIN (name gin_trgm_ops);
+DO $$
+DECLARE
+  trgm_schema TEXT;
+BEGIN
+  SELECT n.nspname INTO trgm_schema
+    FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+   WHERE e.extname = 'pg_trgm';
+
+  EXECUTE format(
+    'CREATE INDEX IF NOT EXISTS idx_products_name_trgm ON public.products USING GIN (name %I.gin_trgm_ops)',
+    trgm_schema
+  );
+END
+$$;
 
 -- Storefront lists always filter is_active and sort by created_at.
 CREATE INDEX IF NOT EXISTS idx_products_active_created

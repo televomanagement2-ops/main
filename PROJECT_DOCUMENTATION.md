@@ -495,7 +495,7 @@ CommerceJet/
 │   ├── icons.svg                  SVG sprite
 │   └── theme-init.js              Pre-paint theme application (external for CSP)
 ├── src/
-│   ├── assets/                    Bundled images (hero.png and friends)
+│   ├── assets/                    Bundled images (story.jpg: homepage editorial photograph)
 │   ├── components/                Cross-feature UI
 │   │   ├── cart/CartDrawer.tsx
 │   │   ├── consent/CookieConsentBanner.tsx
@@ -520,8 +520,8 @@ CommerceJet/
 │   │   ├── handle-order-action/index.ts
 │   │   ├── stripe-webhook/index.ts
 │   │   └── update-tracking/index.ts
-│   ├── migrations/001…016.sql     Applied in numeric order
-│   ├── seeds/002_mock_products.sql  35 demo products across 4 categories
+│   ├── migrations/001…019.sql     Applied in numeric order
+│   ├── seeds/002_mock_products.sql  40 demo products across 5 categories
 │   ├── schema.sql                 Base tables, enums, triggers
 │   ├── rls.sql                    Base RLS policies + is_admin()
 │   └── SETUP_CHECKLIST.md
@@ -1084,7 +1084,7 @@ connection authenticated as and is unaffected by `SET ROLE`.
 
 ## 14. Migration history
 
-Run `schema.sql` → `rls.sql` → migrations `001`…`016` in numeric order → optionally
+Run `schema.sql` → `rls.sql` → migrations `001`…`019` in numeric order → optionally
 `seeds/002_mock_products.sql`. Already-migrated database? Run whatever is newer than your last
 one, then `NOTIFY pgrst, 'reload schema';`
 
@@ -1107,6 +1107,14 @@ one, then `NOTIFY pgrst, 'reload schema';`
 | 015 | `set_user_role_deny_by_default.sql` | 🔒 Turns `set_user_role()` from authorise-by-elimination into an allowlist |
 | 016 | `abuse_limits_and_indexes.sql` | 🔒 Address/review/profile/shipping-address length caps; 20-address cap; cancel window narrowed to `pending`; **`cost_price` revoked from API roles**; trigram + partial search indexes |
 | 017 | `international_shipping.sql` | `shipping_methods.countries` (NULL = everywhere) + US/international seed; `orders.refund_requested_by` (keeps admin refunds out of the customer's rate limit); `orders.tracking_id` length cap |
+| 018 | `refund_attribution_fk.sql` | `orders.refund_requested_by` gets `ON DELETE SET NULL` (017 left it `NO ACTION`, which blocked deleting any operator who had issued a refund); documents the `profiles` embed ambiguity 017 introduced |
+| 019 | `reconcile_reverted_fixes.sql` | Idempotent repair: drops the insert-time stock triggers an old `schema.sql` re-creates (every paid order deducted stock twice) and restores 010's verified-purchase review policies that re-running `004` reverts. Re-run it after re-running any older file |
+
+> **`orders` references `profiles` twice** (`user_id` and, since 017, `refund_requested_by`), so a
+> bare `profiles(...)` embed is rejected by PostgREST with
+> `PGRST201 — more than one relationship was found for 'orders' and 'profiles'`. Every embed must
+> name the relationship: `profiles!orders_user_id_fkey(...)`. The client-side constant is
+> `ORDER_CUSTOMER_EMBED` in [`src/lib/api.ts`](src/lib/api.ts).
 
 > **015 and 016 are security migrations, not optional polish.** A database left at 014 has three
 > gaps: role escalation from any GUC-less execution context, unbounded writes from any registered
@@ -1774,8 +1782,8 @@ Carried over from `SECURITY-AUDIT.md` and `ROADMAP.md`, still open at the time o
 |---|---|
 | `supabase/schema.sql` | Base tables, enums, triggers, initial seed |
 | `supabase/rls.sql` | Base policies + `is_admin()` |
-| `supabase/migrations/001…016.sql` | Schema evolution ([§14](#14-migration-history)) |
-| `supabase/seeds/002_mock_products.sql` | 35 demo products across 4 categories, 3 images each |
+| `supabase/migrations/001…019.sql` | Schema evolution ([§14](#14-migration-history)) |
+| `supabase/seeds/002_mock_products.sql` | 40 demo products across 5 categories (luxury ready-to-wear and accessories), 70 units each; images served from the demo project's `product-images/catalog/` |
 | `supabase/functions/create-checkout-session/index.ts` | Cart → order → Stripe session |
 | `supabase/functions/stripe-webhook/index.ts` | Authoritative order-state updater |
 | `supabase/functions/handle-order-action/index.ts` | Cancel / refund / deliver |
