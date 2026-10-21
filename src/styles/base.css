@@ -225,6 +225,107 @@ h1, h2, h3, h4, h5, h6 { font-weight: 400; }
   to   { background-position: -80% 0; }
 }
 
+/* ── THEME PAGE-TURN ─────────────────────────────────────────────────────
+   Switching light/dark turns the page: the old sheet peels up from the
+   bottom-right corner and folds back over itself, uncovering the new theme.
+   Geometry and timing live in lib/pageTurn.ts; this is the paint. All of it
+   is scoped to html[data-page-turn], which exists only mid-turn.           */
+
+/* Stand-in captured as its own layer, so the flap paints above the page. */
+.page-turn {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100lvh;
+  pointer-events: none;
+  view-transition-name: page-turn;
+}
+
+/* The page underneath is live: snap it straight to the new theme rather than
+   letting hover-colour transitions show half-switched under the fold. */
+html[data-page-turn] *,
+html[data-page-turn] *::before,
+html[data-page-turn] *::after { transition: none !important; }
+
+/* The departing and arriving pages are captured under names of their own, so
+   each gets its own group: the old page above, the new one beneath it. */
+html[data-page-turn] { view-transition-name: turn-old; }
+html[data-page-turned] { view-transition-name: turn-new; }
+
+/* Nothing fades: every piece is opaque and only ever moves. */
+html[data-page-turn]::view-transition-old(*),
+html[data-page-turn]::view-transition-new(*) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html[data-page-turn]::view-transition-group(turn-new) { z-index: 0; }
+html[data-page-turn]::view-transition-group(turn-old) { z-index: 1; }
+html[data-page-turn]::view-transition-group(page-turn) { z-index: 2; }
+
+/* Fold boxes: laid along the fold and reaching into the old page, so their
+   overflow clip is the fold's edge. The script slides them with the fold. */
+html[data-page-turn]::view-transition-image-pair(turn-old),
+html[data-page-turn]::view-transition-group(page-turn) {
+  inset: 0 auto auto 0;
+  width: var(--turn-span);
+  height: var(--turn-depth);
+  transform-origin: 0 0;
+  overflow: clip;
+}
+/* The old page holds still inside its fold box, whose edge throws the fold's
+   shadow onto the page it uncovers. */
+html[data-page-turn]::view-transition-image-pair(turn-old) { box-shadow: var(--turn-shade); }
+html[data-page-turn]::view-transition-old(turn-old) {
+  inset: 0 auto auto 0;
+  width: auto;
+  height: auto;
+  transform-origin: 0 0;
+}
+
+/* The flap — hidden unless the script places it. */
+html[data-page-turn]::view-transition-group(page-turn) { opacity: 0; }
+/* Its sheet: the departing page mirrored across the fold, lifted off the page
+   beneath by a soft shadow round its free edges. */
+html[data-page-turn]::view-transition-image-pair(page-turn) {
+  inset: 0 auto auto 0;
+  width: var(--turn-sheet-w);
+  height: var(--turn-sheet-h);
+  transform-origin: 0 0;
+  overflow: clip;
+  background: var(--turn-back);
+  box-shadow: var(--turn-lift);
+}
+/* The crease, a strip along the fold: dark where the paper bends, then the
+   light it catches as it curls over. */
+html[data-page-turn]::view-transition-old(page-turn) {
+  inset: 0 auto auto 0;
+  width: var(--turn-crease-w);
+  height: 96px;
+  transform-origin: 0 0;
+  background: var(--turn-crease);
+}
+
+/* Turning to dark: the departing sheet is the light paper. */
+html[data-page-turn='to-dark'] {
+  --turn-back: linear-gradient(to bottom right, #F4F1EB, #ECE8E0 55%, #E1DCD1);
+  --turn-crease: linear-gradient(to bottom,
+    rgba(22, 20, 15, 0.26) 0, rgba(22, 20, 15, 0.08) 7px,
+    rgba(255, 255, 255, 0.82) 22px, rgba(255, 255, 255, 0) 88px);
+  --turn-lift: 0 0 0 1px rgba(22, 20, 15, 0.09), 0 0 28px rgba(22, 20, 15, 0.18);
+  --turn-shade: 0 0 6px rgba(0, 0, 0, 0.5), 0 0 44px rgba(0, 0, 0, 0.65);
+}
+/* Turning to light: the departing sheet is the dark paper. */
+html[data-page-turn='to-light'] {
+  --turn-back: linear-gradient(to bottom right, #221F1A, #1B1915 55%, #13110E);
+  --turn-crease: linear-gradient(to bottom,
+    rgba(0, 0, 0, 0.75) 0, rgba(0, 0, 0, 0.26) 7px,
+    rgba(255, 240, 220, 0.1) 22px, rgba(255, 240, 220, 0) 88px);
+  --turn-lift: 0 0 0 1px rgba(242, 239, 232, 0.07), 0 0 28px rgba(0, 0, 0, 0.6);
+  --turn-shade: 0 0 4px rgba(22, 20, 15, 0.18), 0 0 44px rgba(22, 20, 15, 0.28);
+}
+
 /* ── UTILITIES ───────────────────────────────────────────────────────── */
 .sr-only {
   position: absolute;

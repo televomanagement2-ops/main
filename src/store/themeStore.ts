@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { turnPage } from '../lib/pageTurn';
 
 export type Theme = 'light' | 'dark' | 'system';
 
@@ -59,8 +60,18 @@ export const useThemeStore = create<ThemeState>()(
     (set) => ({
       theme: DEFAULT_THEME,
       setTheme: (theme) => {
-        set({ theme });
-        applyTheme(theme);
+        const dark = isDarkTheme(theme);
+        if (dark === document.documentElement.classList.contains('dark')) {
+          set({ theme });
+          applyTheme(theme);
+          return;
+        }
+        // A real light/dark switch turns the page. The browser chrome colour
+        // follows once the turn settles, changing with the last of the page.
+        void turnPage(dark, () => {
+          document.documentElement.classList.toggle('dark', dark);
+          set({ theme });
+        }).then(() => applyTheme(useThemeStore.getState().theme));
       },
     }),
     {
