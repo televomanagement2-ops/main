@@ -7,15 +7,27 @@ import {
   useAddProductImages,
   useDeleteProductImage,
   useSetPrimaryImage,
+  useSetProductInventory,
 } from '../../../hooks/useAdminProducts';
-import { uploadProductImage } from '../../../lib/api';
+import { fetchProductInventory, StockConflictError, uploadProductImage } from '../../../lib/api';
+import {
+  buildVariantPayload,
+  draftsFromVariants,
+  draftsTotal,
+  parseStock,
+  rebaseDrafts,
+  sizeListChanged,
+  validateDrafts,
+  type SizeDraft,
+} from '../../../lib/sizes';
 import { Drawer } from '../../../components/ui/Drawer';
 import { Media } from '../../../components/ui/Media';
 import { Spinner } from '../../../components/ui/Spinner';
-import { IconAlert } from '../../../components/ui/icons';
+import { IconAlert, IconInfo } from '../../../components/ui/icons';
 import { toast } from '../../../store/toastStore';
 import { useI18n } from '../../../lib/i18n';
-import type { Product } from '../../../types';
+import { SizeEditor } from './SizeEditor';
+import type { Product, SizeLabel } from '../../../types';
 
 interface Props {
   mode: 'create' | 'edit';
@@ -24,16 +36,30 @@ interface Props {
 }
 
 /**
+ * What the database holds for this product, as far as the editor knows. It is
+ * replaced after every step that succeeds, so a retry after a partial failure
+ * neither creates the product twice nor re-applies a stock change.
+ */
+interface Saved {
+  id: string | null;
+  hasSizes: boolean;
+  sizeLabel: SizeLabel;
+  stock: number;
+  sizes: SizeDraft[];
+}
+
+/**
  * Product editing as a focused workflow rather than a page: clear sections
  * (media, information, pricing, inventory, visibility) separated by rules —
  * no nested cards, no endless single form.
  */
 export function ProductFormDrawer({ mode, product, onClose }: Props) {
-  const { t } = useI18n();
+  const { t, tCount } = useI18n();
   const { data: categories = [] } = useAdminCategories();
   const createCategory = useCreateCategory();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateAdminProduct();
+  const setInventory = useSetProductInventory();
   const addImages = useAddProductImages();
   const deleteImage = useDeleteProductImage();
   const setPrimary = useSetPrimaryImage();
@@ -48,13 +74,41 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
   const [lowStock, setLowStock] = useState(String(product?.low_stock_threshold ?? 5));
   const [weight, setWeight] = useState(product?.weight_grams != null ? String(product.weight_grams) : '');
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
-  const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? false); 
+  const [isFeatured, setIsFeatured] = useState(product?.is_featured ?? false);
+
+  const [hasSizes, setHasSizes] = useState(product?.has_sizes ?? false);
+  const [sizeLabel, setSizeLabel] = useState<SizeLabel>(product?.size_label ?? 'size');
+  const [sizeDrafts, setSizeDrafts] = useState<SizeDraft[]>(() => draftsFromVariants(product?.product_variants));
+  const [showSizeErrors, setShowSizeErrors] = useState(false);
+
+  const [saved, setSaved] = useState<Saved>(() => ({
+    id: product?.id ?? null,
+    hasSizes: product?.has_sizes ?? false,
+    sizeLabel: product?.size_label ?? 'size',
+    stock: product?.stock_quantity ?? 0,
+    sizes: draftsFromVariants(product?.product_variants),
+  }));
 
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const existingImages = product?.product_images ?? [];
+  const lowStockThreshold = Math.max(0, Math.trunc(Number(lowStock) || 0));
+
+  // The single stock figure of an unsized product. Left untouched it is valid
+  // whatever it holds — a negative figure is the backorder depth the order
+  // trigger wrote, not an input error; an edited figure must be 0 or more.
+  const unsizedStock = (): number | null =>
+    stock.trim() === String(saved.stock) ? saved.stock : parseStock(stock);
+
+  const toggleSizes = () => {
+    // Sizes → one figure: start from what the sizes add up to. (An unsized
+    // product being tried with sizes keeps its own figure in `stock`.)
+    if (hasSizes && saved.hasSizes) setStock(String(draftsTotal(sizeDrafts)));
+    setHasSizes(!hasSizes);
+    setShowSizeErrors(false);
+  };
 
   const handleCreateCategory = async () => {
     const trimmed = newCategory.trim();
@@ -69,6 +123,29 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
     }
   };
 
+  /**
+   * Another writer (usually a paid order) moved a stock figure after this
+   * editor loaded it, and the database refused to overwrite it. Adopt the
+   * current figures and say which one moved; the admin saves again knowingly.
+   */
+  const recoverFromConflict = async (err: StockConflictError, productId: string) => {
+    try {
+      const fresh = await fetchProductInventory(productId);
+      const freshSizes = draftsFromVariants(fresh.product_variants);
+      setSizeDrafts((drafts) => rebaseDrafts(drafts, fresh.product_variants));
+      setSaved((prev) => ({ ...prev, stock: fresh.stock_quantity, sizes: freshSizes }));
+
+      const moved = err.size ? fresh.product_variants.find((v) => v.size === err.size) : undefined;
+      setError(
+        moved
+          ? t('admin.catalog.sizes.conflict', { size: moved.size, now: moved.stock_qty })
+          : t('admin.catalog.sizes.conflictGeneric', { now: fresh.stock_quantity })
+      );
+    } catch {
+      setError(err.message);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -76,33 +153,90 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
     if (!name.trim()) { setError(t('admin.catalog.form.nameRequired')); return; }
     if (!categoryId) { setError(t('admin.catalog.form.categoryRequired')); return; }
 
+    const stockValue = hasSizes ? null : unsizedStock();
+    if (!hasSizes && stockValue === null) {
+      setError(t('admin.catalog.sizes.errors.stock'));
+      return;
+    }
+    if (hasSizes) {
+      setShowSizeErrors(true);
+      if (sizeDrafts.length === 0) { setError(t('admin.catalog.sizes.errors.none')); return; }
+      const { first } = validateDrafts(sizeDrafts);
+      if (first) { setError(t(`admin.catalog.sizes.errors.${first}`)); return; }
+    }
+
     setBusy(true);
+    let current = saved;
     try {
+      // Stock is deliberately not among these fields: it only moves through
+      // the inventory call below, which refuses to overwrite a figure that an
+      // order changed while this drawer was open.
       const fields = {
         name: name.trim(),
         category_id: categoryId,
         price: Number(price) || 0,
         description: description.trim() || null,
         sku: sku.trim() || null,
-        stock_quantity: Math.max(0, Math.trunc(Number(stock) || 0)),
-        low_stock_threshold: Math.max(0, Math.trunc(Number(lowStock) || 0)),
+        low_stock_threshold: lowStockThreshold,
         weight_grams: weight.trim() ? Math.max(0, Math.trunc(Number(weight))) : null,
         is_active: isActive,
         is_featured: isFeatured,
       };
 
-      let productId = product?.id;
-      const hadImages = existingImages.length > 0;
+      if (!current.id) {
+        const created = await createProduct.mutateAsync({
+          ...fields,
+          stock_quantity: hasSizes ? 0 : stockValue ?? 0,
+        });
+        current = {
+          id: created.id,
+          hasSizes: created.has_sizes,
+          sizeLabel: created.size_label,
+          stock: created.stock_quantity,
+          sizes: [],
+        };
+        setSaved(current);
+      } else {
+        await updateProduct.mutateAsync({ productId: current.id, updates: fields });
+      }
+      const productId = current.id as string;
 
-      if (mode === 'create') {
-        const created = await createProduct.mutateAsync(fields);
-        productId = created.id;
-      } else if (productId) {
-        await updateProduct.mutateAsync({ productId, updates: fields });
+      // Sizes and stock — only when something about them changed, so editing
+      // a name never rewrites the size list underneath a concurrent order.
+      const inventoryChanged =
+        hasSizes !== current.hasSizes
+        || (hasSizes && (sizeLabel !== current.sizeLabel || sizeListChanged(sizeDrafts, current.sizes)))
+        || (!hasSizes && stockValue !== current.stock);
+
+      let archived = 0;
+      if (inventoryChanged) {
+        const result = await setInventory.mutateAsync({
+          productId,
+          hasSizes,
+          sizeLabel,
+          variants: hasSizes ? buildVariantPayload(sizeDrafts) : [],
+          stockQuantity: hasSizes ? undefined : stockValue ?? undefined,
+          // The optimistic check only applies to a figure the admin edited
+          // directly; switching sizes off sets a fresh total.
+          expectedStock: !hasSizes && !current.hasSizes ? current.stock : null,
+        });
+        archived = result.archived;
+        const resultSizes = draftsFromVariants(result.variants);
+        current = {
+          id: productId,
+          hasSizes: result.has_sizes,
+          sizeLabel: result.size_label,
+          stock: result.stock_quantity,
+          sizes: resultSizes,
+        };
+        setSaved(current);
+        setSizeDrafts(resultSizes);
+        setStock(String(result.stock_quantity));
       }
 
       // Upload any newly selected images and attach them.
-      if (productId && files.length > 0) {
+      if (files.length > 0) {
+        const hadImages = existingImages.length > 0;
         const urls = await Promise.all(files.map((f) => uploadProductImage(f)));
         await addImages.mutateAsync({
           productId,
@@ -116,9 +250,14 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
       }
 
       toast(mode === 'create' ? t('admin.catalog.form.created') : t('admin.catalog.form.saved'));
+      if (archived > 0) toast(tCount('admin.catalog.sizes.archived', archived));
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('admin.catalog.form.error'));
+      if (err instanceof StockConflictError && current.id) {
+        await recoverFromConflict(err, current.id);
+      } else {
+        setError(err instanceof Error ? err.message : t('admin.catalog.form.error'));
+      }
     } finally {
       setBusy(false);
     }
@@ -299,18 +438,62 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
           <div className="form-section__head">
             <p className="t-label">{t('admin.catalog.form.inventorySection')}</p>
           </div>
-          <div className="form-grid">
-            <div className="field">
-              <label className="field__label" htmlFor="product-stock">{t('admin.catalog.form.stock')}</label>
-              <input
-                id="product-stock"
-                className="input"
-                type="number"
-                min={0}
-                value={stock}
-                onChange={(e) => setStock(e.target.value)}
+
+          <div className="info-rows">
+            <div className="info-row">
+              <span>
+                <strong style={{ display: 'block' }}>{t('admin.catalog.sizes.toggle')}</strong>
+                <span className="t-xs t-faint">{t('admin.catalog.sizes.toggleHint')}</span>
+              </span>
+              <button
+                type="button"
+                className={`switch${hasSizes ? ' is-on' : ''}`}
+                role="switch"
+                aria-checked={hasSizes}
+                aria-label={t('admin.catalog.sizes.toggle')}
+                onClick={toggleSizes}
+                disabled={busy}
               />
             </div>
+          </div>
+
+          {hasSizes ? (
+            <SizeEditor
+              drafts={sizeDrafts}
+              onChange={setSizeDrafts}
+              label={sizeLabel}
+              onLabelChange={setSizeLabel}
+              productSku={sku}
+              lowStockThreshold={lowStockThreshold}
+              showErrors={showSizeErrors}
+              disabled={busy}
+            />
+          ) : (
+            <>
+              {saved.hasSizes && (
+                <div className="notice notice--caution">
+                  <IconInfo size={15} />
+                  <div className="notice__body">{t('admin.catalog.sizes.offNotice')}</div>
+                </div>
+              )}
+              <div className="form-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="product-stock">{t('admin.catalog.form.stock')}</label>
+                  {/* No min: an oversold product shows its negative backorder
+                      depth here, and a min would block saving any other field. */}
+                  <input
+                    id="product-stock"
+                    className="input"
+                    inputMode="numeric"
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="form-grid">
             <div className="field">
               <label className="field__label" htmlFor="product-low">{t('admin.catalog.form.lowStock')}</label>
               <input
@@ -321,7 +504,10 @@ export function ProductFormDrawer({ mode, product, onClose }: Props) {
                 value={lowStock}
                 onChange={(e) => setLowStock(e.target.value)}
               />
-              <p className="field__hint">{t('admin.catalog.form.lowStockHint')}</p>
+              <p className="field__hint">
+                {t('admin.catalog.form.lowStockHint')}
+                {hasSizes && <> {t('admin.catalog.sizes.lowStockHint')}</>}
+              </p>
             </div>
             <div className="field">
               <label className="field__label" htmlFor="product-weight">{t('admin.catalog.form.weight')}</label>

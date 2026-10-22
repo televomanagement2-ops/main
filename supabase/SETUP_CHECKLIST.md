@@ -7,14 +7,19 @@
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
 3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
-   `019_reconcile_reverted_fixes.sql`. Run each one — do not stop early.
+   `021_product_sizes.sql`. Run each one — do not stop early.
    > Already-migrated database? Run whatever is newer than your last one, then
    > `NOTIFY pgrst, 'reload schema';`
    >
    > **Re-ran `schema.sql` or an older migration on a migrated database?** Run 019
    > again afterwards. Older copies of `schema.sql` re-create insert-time stock
    > triggers that make every paid order deduct its stock twice, and `004` puts back
-   > review policies that let any account review any product; 019 removes both.
+   > review policies that let any account review any product; 019 removes both. If
+   > the file you re-ran was `005`, `007` or `013`, run `021` again too — those three
+   > redefine the stock trigger, and 021 is what makes it stock-per-size aware.
+   >
+   > **020 schedules the stale-order cron for you** and **021 turns on stock per size**
+   > for every product that already has sizes — see the two sections below.
    >
    > **015 and 016 are security migrations, not optional polish.** 015 turns
    > `set_user_role()` from authorise-by-elimination into an allowlist. 016 adds the
@@ -78,19 +83,43 @@ select u.email, coalesce(p.role::text, 'MISSING PROFILE') as role
  order by u.created_at desc;
 ```
 
-### Schedule the stale-order cron (REQUIRED)
+### The stale-order cron (REQUIRED — scheduled by migration 020)
 
 Orders abandoned before payment must be auto-cancelled or they pile up as
-`pending`/`processing` forever. Dashboard → Database → Extensions → enable
-**pg_cron**, then run in the SQL Editor:
+`pending`/`processing` forever (each one also counts against the customer's
+10-open-orders cap). `020_stale_order_expiry_cron.sql` enables **pg_cron**,
+schedules `expire-pending-orders` every 15 minutes, schedules a weekly purge of
+the job history, and cancels whatever is already stale. Confirm it is there:
 
 ```sql
-SELECT cron.schedule('expire-pending-orders', '*/15 * * * *',
-  $$SELECT public.expire_stale_pending_orders()$$);
+SELECT jobname, schedule, active FROM cron.job;
+-- expire-pending-orders | */15 * * * * | true
+-- purge-cron-history    | 30 3 * * 0   | true
+
+SELECT status, return_message, start_time
+  FROM cron.job_run_details ORDER BY start_time DESC LIMIT 5;  -- recent runs
 ```
+
+If 020 printed a WARNING that pg_cron could not be enabled, enable it in
+Dashboard → Database → Extensions → **pg_cron**, then run 020 again.
 
 (Checkout sessions expire after 1 hour; the cron cancels their orders after 2,
 so it can never cancel an order whose Stripe session is still payable.)
+
+### Products sold by size (migration 021)
+
+A product with **Sold by size** on (`products.has_sizes`) keeps one stock figure
+per size in `product_variants`; its `products.stock_quantity` is then calculated
+by the database — the sum of its sizes on sale — and cannot be set directly.
+Checkout refuses a sized product without a size. Manage sizes in Admin →
+Catalog → edit a product → Inventory (see `docs/02_products_setup.md`). Check
+that every sized product's total agrees with its sizes (must return no rows):
+
+```sql
+SELECT name, stock_quantity, public.sized_product_stock(id) AS sum_of_sizes
+  FROM public.products
+ WHERE has_sizes AND stock_quantity <> public.sized_product_stock(id);
+```
 
 ### Verify tables exist
 Go to **Table Editor** and confirm these tables are present:
@@ -321,7 +350,14 @@ select column_name
 from information_schema.columns
 where table_schema = 'public'
    and table_name = 'order_items'
-   and column_name in ('selected_size')
+   and column_name in ('selected_size', 'variant_id')
+order by column_name;
+
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+   and table_name = 'products'
+   and column_name in ('has_sizes', 'size_label')
 order by column_name;
 ```
 
@@ -329,6 +365,8 @@ If any column is missing, apply at least:
 
 - `supabase/migrations/001_fixes.sql`
 - `supabase/migrations/004_variants_reviews_shipping.sql`
+- `supabase/migrations/021_product_sizes.sql` — the checkout function reads
+  `has_sizes` and writes `variant_id`, so it must land **before** the function is deployed
 
 1. Sign up → check profiles table has a row
 2. Add products to cart → verify cart persists on refresh
@@ -336,8 +374,9 @@ If any column is missing, apply at least:
 4. Use test card `4242 4242 4242 4242` exp `12/34` CVC `123`
 5. After payment: redirected to /checkout/success + order confirmation email
 6. Check orders table: status should be `paid`
-7. Check stock_quantity decreased for ordered products (and `stock_qty` on the
-   matching product_variants row when a size was selected)
+7. Check stock decreased: `stock_quantity` for an unsized product; for a sized
+   one, `stock_qty` on the size bought (`order_items.variant_id`) — the product's
+   `stock_quantity` follows it automatically
 
 ### Backorder policy (`needs_review`)
 

@@ -6,6 +6,7 @@ import { useCartStore } from '../../store/cartStore';
 import { useUiStore } from '../../store/uiStore';
 import { useI18n } from '../../lib/i18n';
 import { availableStock } from '../../lib/stock';
+import { sizeLabelKey } from '../../lib/sizes';
 
 /**
  * The bag as a sheet: an extension of the storefront, not a separate screen.
@@ -83,7 +84,7 @@ export function CartDrawer() {
                   </Link>
                   {item.selectedSize && (
                     <p className="line-item__meta">
-                      {t('cart.size')}: {item.selectedSize}
+                      {t(sizeLabelKey(item.product.size_label))}: {item.selectedSize}
                     </p>
                   )}
                   <div className="row gap-4" style={{ marginTop: 'var(--s-3)' }}>

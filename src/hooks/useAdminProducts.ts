@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   fetchAdminProducts,
   updateProduct,
@@ -8,9 +8,28 @@ import {
   setPrimaryProductImage,
   fetchAdminCategories,
   createCategory,
+  setProductInventory,
+  setVariantStock,
+  updateProductStock,
+  type InventoryInput,
   type ProductInput,
   type ProductUpdate,
+  type VariantStockChange,
 } from '../lib/api';
+import { productKeys } from './useProducts';
+
+/**
+ * Stock is what the storefront reads to decide what can be bought, so a
+ * stock change also drops the cached product pages, not just the admin list.
+ * Returned so the mutation settles only once the list shows the new figures:
+ * an editor that clears its drafts on success then never flashes the old ones.
+ */
+function invalidateStock(qc: QueryClient) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['admin-products'] }),
+    qc.invalidateQueries({ queryKey: productKeys.all }),
+  ]);
+}
 
 export function useAdminProducts() {
   return useQuery({
@@ -37,6 +56,36 @@ export function useCreateProduct() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-products'] });
     },
+  });
+}
+
+/** Sizes and stock from the product editor (admin_set_product_inventory). */
+export function useSetProductInventory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: InventoryInput) => setProductInventory(input),
+    // Settled, not success: a stock conflict means the cached figures are the
+    // stale ones, and the admin needs the fresh ones to decide what to do.
+    onSettled: () => invalidateStock(qc),
+  });
+}
+
+/** Quick per-size restock from the catalog (admin_set_variant_stock). */
+export function useSetVariantStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (changes: VariantStockChange[]) => setVariantStock(changes),
+    onSettled: () => invalidateStock(qc),
+  });
+}
+
+/** Quick restock of an unsized product, refused if the figure moved meanwhile. */
+export function useUpdateProductStock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ productId, stock, expected }: { productId: string; stock: number; expected: number }) =>
+      updateProductStock(productId, stock, expected),
+    onSettled: () => invalidateStock(qc),
   });
 }
 

@@ -3,12 +3,18 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { resolveAllowedOrigin, getCorsHeaders } from '../_shared/cors.ts';
 import { sanitizeAddress } from '../_shared/address.ts';
 import { STRIPE_CURRENCY } from '../_shared/money.ts';
+import {
+  mergeItems,
+  productIdsNeedingSizes,
+  resolveLines,
+  type CatalogProduct,
+  type CatalogVariant,
+} from '../_shared/checkout-lines.ts';
 
 const STRIPE_API_VERSION = '2025-03-31.basil';
 
-// Abuse limits: a legitimate shopper never needs more than this.
-const MAX_LINE_ITEMS = 50;
-const MAX_QUANTITY_PER_ITEM = 100;
+// Abuse limit: a legitimate shopper never needs more than this. The per-order
+// line and quantity caps live in _shared/checkout-lines.ts.
 const MAX_ORDERS_PER_HOUR = 10;
 
 // Checkout sessions expire after 1 hour (Stripe minimum is 30 minutes). This
@@ -138,20 +144,18 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { items, shipping_address, shipping_method_id } = body;
 
-    if (!Array.isArray(items) || items.length === 0) {
+    // ── SECURITY: never trust client-supplied prices, names or images. The
+    // client only sends product_id / quantity / selected_size; duplicate lines
+    // are collapsed here so every stock check below sees the real total.
+    const itemsCheck = mergeItems(items);
+    if (!itemsCheck.ok) {
       return jsonResponse({
-        error: 'No items provided',
-        code: 'VALIDATION_NO_ITEMS',
-        phase: 'request.validate_items',
-      }, 400);
+        error: itemsCheck.message,
+        code: itemsCheck.code,
+        phase: itemsCheck.phase,
+      }, itemsCheck.status);
     }
-    if (items.length > MAX_LINE_ITEMS) {
-      return jsonResponse({
-        error: `Too many line items (max ${MAX_LINE_ITEMS}).`,
-        code: 'VALIDATION_TOO_MANY_ITEMS',
-        phase: 'request.validate_items',
-      }, 400);
-    }
+    const mergedItems = itemsCheck.items;
 
     // ── SECURITY: validate, normalise and whitelist the shipping address.
     // It is persisted verbatim into the orders.shipping_address JSONB and, with
@@ -170,7 +174,7 @@ Deno.serve(async (req) => {
     }
     const addr = addressCheck.address;
 
-    console.log('[checkout] items:', items.length);
+    console.log('[checkout] items:', mergedItems.length);
 
     // ── RATE LIMIT: cap checkout attempts per user per hour. The DB
     // pending-order-limit trigger (migration 013) is the backstop.
@@ -197,66 +201,12 @@ Deno.serve(async (req) => {
       }, 429);
     }
 
-    // ── SECURITY: never trust client-supplied prices, names or images.
-    // Everything is resolved from the database (service role); the client
-    // only sends product_id / quantity / selected_size.
-    type CheckoutItem = {
-      product_id: string;
-      quantity: number;
-      selected_size?: string | null;
-    };
-    const requestedItems = items as CheckoutItem[];
-
-    if (requestedItems.some((i) => !i || !i.product_id)) {
-      return jsonResponse({
-        error: 'One or more items are missing product_id.',
-        code: 'VALIDATION_MISSING_PRODUCT_ID',
-        phase: 'request.validate_items',
-      }, 400);
-    }
-
-    // ── SECURITY: collapse duplicate lines BEFORE validating. The stock and
-    // quantity checks below are only meaningful against the TOTAL quantity
-    // requested for a variant. Checking each line independently let 50 separate
-    // lines of the same product, each at the stock limit, pass individually and
-    // oversell by 50× (the DB deliberately allows negative stock, so there is
-    // no backstop there).
-    const variantKey = (productId: string, size: string | null) => `${productId}::${size ?? ''}`;
-
-    const merged = new Map<
-      string,
-      { product_id: string; selected_size: string | null; quantity: number }
-    >();
-    for (const i of requestedItems) {
-      const quantity = Math.trunc(Number(i.quantity));
-      if (!Number.isFinite(quantity) || quantity <= 0) {
-        return jsonResponse({
-          error: 'Invalid quantity.',
-          code: 'INVALID_QUANTITY',
-          phase: 'request.validate_items',
-        }, 400);
-      }
-      const size = i.selected_size ?? null;
-      const key = variantKey(i.product_id, size);
-      const existing = merged.get(key);
-      if (existing) existing.quantity += quantity;
-      else merged.set(key, { product_id: i.product_id, selected_size: size, quantity });
-    }
-    const mergedItems = [...merged.values()];
-
-    // products.stock_quantity is shared across every size of a product (the
-    // deduct trigger decrements it for each order_item regardless of variant),
-    // so the product-level check has to use the combined total, not per-size.
-    const quantityByProduct = new Map<string, number>();
-    for (const i of mergedItems) {
-      quantityByProduct.set(i.product_id, (quantityByProduct.get(i.product_id) ?? 0) + i.quantity);
-    }
-
-    const productIds = [...quantityByProduct.keys()];
+    // Everything a line is worth is resolved from the database (service role).
+    const productIds = [...new Set(mergedItems.map((i) => i.product_id))];
 
     const { data: dbProducts, error: productsErr } = await supabase
       .from('products')
-      .select('id, name, price, is_active, stock_quantity, product_images(url, is_primary)')
+      .select('id, name, price, is_active, stock_quantity, has_sizes, product_images(url, is_primary)')
       .in('id', productIds);
 
     if (productsErr) {
@@ -267,18 +217,18 @@ Deno.serve(async (req) => {
         `Failed to load products: ${productsErr.message}`,
       );
     }
+    const products = (dbProducts ?? []) as CatalogProduct[];
 
-    const productById = new Map((dbProducts ?? []).map((p) => [p.id as string, p]));
-
-    // ── Variant enforcement: a sized item must reference an active variant
-    // with sufficient stock — the size selector can't be bypassed.
-    const sizedItems = mergedItems.filter((i) => i.selected_size);
-    let variantStock = new Map<string, { stock_qty: number }>();
-    if (sizedItems.length > 0) {
+    // ── Size enforcement: a sized product needs a size that is on sale and has
+    // stock — the selector in the browser is not the trust boundary. Only
+    // ACTIVE sizes are loaded: a size switched off is not for sale.
+    let activeVariants: CatalogVariant[] = [];
+    const sizedProductIds = productIdsNeedingSizes(mergedItems, products);
+    if (sizedProductIds.length > 0) {
       const { data: variants, error: variantsErr } = await supabase
         .from('product_variants')
-        .select('product_id, size, stock_qty')
-        .in('product_id', [...new Set(sizedItems.map((i) => i.product_id))])
+        .select('id, product_id, size, stock_qty')
+        .in('product_id', sizedProductIds)
         .eq('is_active', true);
 
       if (variantsErr) {
@@ -289,85 +239,14 @@ Deno.serve(async (req) => {
           `Failed to load product variants: ${variantsErr.message}`,
         );
       }
-      variantStock = new Map(
-        (variants ?? []).map((v) => [
-          variantKey(v.product_id as string, v.size as string),
-          { stock_qty: Number(v.stock_qty) },
-        ]),
-      );
+      activeVariants = (variants ?? []) as CatalogVariant[];
     }
 
-    // Build trusted line items from DB data only.
-    const resolvedItems = mergedItems.map((i) => {
-      const product = productById.get(i.product_id);
-      if (!product) {
-        throw new CheckoutHttpError(
-          400,
-          'PRODUCT_NOT_FOUND',
-          'request.resolve_prices',
-          `Product ${i.product_id} does not exist.`,
-        );
-      }
-      if (product.is_active === false) {
-        throw new CheckoutHttpError(
-          409,
-          'PRODUCT_INACTIVE',
-          'request.resolve_prices',
-          `Product "${product.name}" is no longer available.`,
-        );
-      }
-      // Already summed across duplicate lines and validated as a positive
-      // integer while merging.
-      const quantity = i.quantity;
-      if (quantity > MAX_QUANTITY_PER_ITEM) {
-        throw new CheckoutHttpError(
-          400,
-          'INVALID_QUANTITY',
-          'request.resolve_prices',
-          `Invalid quantity for product "${product.name}" (max ${MAX_QUANTITY_PER_ITEM}).`,
-        );
-      }
-      // Combined across every size of this product — product stock is shared.
-      const productTotal = quantityByProduct.get(i.product_id) ?? quantity;
-      if (typeof product.stock_quantity === 'number' && productTotal > product.stock_quantity) {
-        throw new CheckoutHttpError(
-          409,
-          'INSUFFICIENT_STOCK',
-          'request.resolve_prices',
-          `Insufficient stock for "${product.name}".`,
-        );
-      }
-      if (i.selected_size) {
-        const variant = variantStock.get(variantKey(i.product_id, i.selected_size));
-        if (!variant) {
-          throw new CheckoutHttpError(
-            409,
-            'VARIANT_NOT_FOUND',
-            'request.resolve_variants',
-            `Size "${i.selected_size}" is not available for "${product.name}".`,
-          );
-        }
-        if (variant.stock_qty < quantity) {
-          throw new CheckoutHttpError(
-            409,
-            'INSUFFICIENT_STOCK',
-            'request.resolve_variants',
-            `Insufficient stock for "${product.name}" size ${i.selected_size}.`,
-          );
-        }
-      }
-      const unitPrice = Math.round(Number(product.price) * 100) / 100;
-      const images = (product.product_images ?? []) as { url: string; is_primary: boolean }[];
-      const image = images.find((img) => img.is_primary)?.url ?? images[0]?.url ?? null;
-      return {
-        product_id: product.id as string,
-        name: product.name as string,
-        unit_price: unitPrice,
-        quantity,
-        image,
-        selected_size: i.selected_size ?? null,
-      };
-    });
+    const resolution = resolveLines(mergedItems, products, activeVariants);
+    if (!resolution.ok) {
+      throw new CheckoutHttpError(resolution.status, resolution.code, resolution.phase, resolution.message);
+    }
+    const resolvedItems = resolution.lines;
 
     // ── SECURITY: resolve shipping cost from the DB, never from the client.
     // `countries` scopes a method to a set of ISO codes; NULL means it is
@@ -492,10 +371,13 @@ Deno.serve(async (req) => {
     orderId = order.id;
     console.log('[checkout] order created:', order.id);
 
-    // Insert order items (prices and images resolved from DB)
+    // Insert order items (prices and images resolved from DB). variant_id is
+    // the size row the paid order takes its stock from (migration 021);
+    // selected_size stays as the label the customer saw.
     const orderItems = resolvedItems.map((i) => ({
       order_id: order.id,
       product_id: i.product_id,
+      variant_id: i.variant_id,
       product_name: i.name,
       product_image: i.image,
       quantity: i.quantity,

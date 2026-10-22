@@ -170,7 +170,8 @@ after the role change so the app picks it up.
 ## Step 6 — Go-live checklist
 
 - [ ] `src/config/storeConfig.ts` fully filled (no `[...]` left) — name, contacts, legal.
-- [ ] All migrations applied in order (through `014_role_management.sql`); RLS enabled on every table.
+- [ ] All migrations applied in order (through `021_product_sizes.sql`); RLS enabled on every table.
+- [ ] `SELECT jobname FROM cron.job;` lists `expire-pending-orders` (scheduled by migration 020).
 - [ ] All four Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`, tax
       (`TAX_RATE`/`STRIPE_TAX_ENABLED`), and email branding (`STORE_NAME`/`RESEND_FROM_EMAIL`).
 - [ ] Sent a test order email (shipping/refund/delivery) and confirmed it shows your brand.

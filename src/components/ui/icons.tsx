@@ -87,6 +87,11 @@ export const IconChevronDown = (p: IconProps) => (
     <path d="M5.5 9.5 12 16l6.5-6.5" />
   </svg>
 );
+export const IconChevronUp = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <path d="M5.5 14.5 12 8l6.5 6.5" />
+  </svg>
+);
 
 /* ── Actions ─────────────────────────────────────────────────────────── */
 export const IconPlus = (p: IconProps) => (

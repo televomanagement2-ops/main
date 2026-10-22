@@ -53,6 +53,7 @@
   <li>Remove the demo (mock) products</li>
   <li>Set up your categories</li>
   <li>Add real products (three methods)</li>
+  <li>Products sold by size or measurement</li>
   <li>Add product images</li>
   <li>Verify on the storefront</li>
 </ol>
@@ -64,7 +65,7 @@ immediately. Before going live, replace it with your own.</p></blockquote>
 
 <h2>1. Understand the data model</h2>
 
-<p>Products live in three database tables in Supabase:</p>
+<p>Products live in four database tables in Supabase:</p>
 
 <table>
   <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
@@ -72,6 +73,7 @@ immediately. Before going live, replace it with your own.</p></blockquote>
     <tr><td><code>categories</code></td><td>Product categories (e.g. Ready-to-Wear, Accessories).</td></tr>
     <tr><td><code>products</code></td><td>The products themselves.</td></tr>
     <tr><td><code>product_images</code></td><td>One or more images per product.</td></tr>
+    <tr><td><code>product_variants</code></td><td>The sizes (or measurements) of a product sold by size, each with its own stock.</td></tr>
   </tbody>
 </table>
 
@@ -125,7 +127,8 @@ Click <strong>"New Product"</strong> (top right). A modal opens with all the fie
     <tr><td>Name</td><td>Required. The slug is generated automatically.</td></tr>
     <tr><td>Category</td><td>Required. You can create a new category on the spot.</td></tr>
     <tr><td>Price</td><td>Required.</td></tr>
-    <tr><td>Stock Quantity</td><td>Defaults to 0.</td></tr>
+    <tr><td>Stock Quantity</td><td>Defaults to 0. For a product sold by size you set the stock of each size instead — see section 5.</td></tr>
+    <tr><td>Sold by size</td><td>Optional switch (Inventory) — sizes or measurements, each with its own stock.</td></tr>
     <tr><td>SKU</td><td>Optional — unique identifier.</td></tr>
     <tr><td>Description</td><td>Optional.</td></tr>
     <tr><td>Active / Featured</td><td>Checkboxes. "Featured" shows the product on the home page.</td></tr>
@@ -159,7 +162,60 @@ Method A is faster.</p></blockquote>
 
 <hr>
 
-<h2>5. Add product images</h2>
+<h2>5. Products sold by size or measurement</h2>
+
+<p>Clothing, shoes, rings — or any object sold in several measurements — are <strong>sold by size</strong>:
+the customer must pick one, and every size has its own stock.</p>
+
+<p><strong>In the admin (recommended).</strong> Open the product (or create it) → <strong>Inventory</strong> → turn on
+<strong>Sold by size</strong>:</p>
+
+<ol>
+  <li>Click a <strong>Quick start</strong> preset — Clothing XS–XL, Clothing XXS–3XL, Numeric 38–54, Shoes EU
+    35–46, Rings 5–9, Waist 26–38, S · M · L — or type your own sizes: <code>S, M, L</code> adds three at
+    once, and any text up to 40 characters works (<code>42</code>, <code>50 cm</code>, <code>120x180</code>).</li>
+  <li>Set the <strong>stock</strong> of each size. The product's total stock becomes the sum of its sizes on
+    sale — it is calculated for you and can't be typed.</li>
+  <li>Optional: a <strong>SKU</strong> per size (<strong>Fill empty SKUs</strong> builds them from the product SKU, e.g.
+    <code>AUR-RW-104-M</code>), the order the sizes appear in (arrows), and <strong>Shown to customers as</strong>
+    (Size, Measurement, Length, Shoe size, Ring size, Waist).</li>
+  <li>Untick <strong>On sale</strong> to hide a size without deleting it.</li>
+</ol>
+
+<p>Day-to-day restocking doesn't need the editor: in <strong>Admin → Catalog</strong> every sized product
+shows its stock per size, and <strong>Restock sizes</strong> opens one field per size.</p>
+
+<blockquote>
+  <p><strong>Good to know —</strong></p>
+  <ul>
+    <li>A size that already has orders can't be deleted: removing it switches it off instead, so
+      past orders and refunds keep working. Add the same size again to switch it back on.</li>
+    <li>Stock moves per size: a paid order takes from the size it bought, a cancellation or
+      refund puts it back. An oversold size goes negative and its order is flagged <strong>Needs
+      review</strong>.</li>
+    <li>If an order comes in while you are editing, saving won't overwrite it: you're told which
+      size changed, with the new figure, and asked to save again.</li>
+    <li>Turning <strong>Sold by size</strong> off switches the product back to a single stock figure.</li>
+  </ul>
+</blockquote>
+
+<p><strong>With SQL.</strong> Mark the product as sized, then insert one row per size:</p>
+
+<pre><code>UPDATE public.products SET has_sizes = TRUE, size_label = 'shoe_size'
+ WHERE slug = 'running-shoes-pro';
+
+INSERT INTO public.product_variants (product_id, size, sku, stock_qty, sort_order)
+SELECT p.id, s.size, 'RSP-001-' || s.size, s.qty, s.ord
+  FROM public.products p,
+       (VALUES ('40', 6, 1), ('41', 8, 2), ('42', 10, 3), ('43', 6, 4)) AS s(size, qty, ord)
+ WHERE p.slug = 'running-shoes-pro';</code></pre>
+
+<p>The product's <code>stock_quantity</code> updates itself (here to 30). <code>size_label</code> is one of <code>size</code>,
+<code>measure</code>, <code>length</code>, <code>shoe_size</code>, <code>ring_size</code>, <code>waist</code>.</p>
+
+<hr>
+
+<h2>6. Add product images</h2>
 
 <blockquote><p><strong>Note —</strong> If you used <strong>Method A</strong> (Admin UI), images were already uploaded via the modal
 and stored in Supabase Storage. Skip this section. The SQL below is for Method B/C bulk imports
@@ -177,13 +233,15 @@ VALUES
 
 <hr>
 
-<h2>6. Verify on the storefront</h2>
+<h2>7. Verify on the storefront</h2>
 
 <ul>
   <li>Home page — featured products (<code>is_featured = TRUE</code>) appear.</li>
   <li>Category page — your products are listed.</li>
   <li>Product page — image, price, and description are correct.</li>
   <li>Add to cart — quantity respects <code>stock_quantity</code>.</li>
+  <li>Product sold by size — the size buttons appear in your order, a sold-out size is crossed out,
+    and the cart only accepts what that size has in stock.</li>
 </ul>
 
 <blockquote><p><strong>Note —</strong> If you changed category slugs, also review the home-page category icons in

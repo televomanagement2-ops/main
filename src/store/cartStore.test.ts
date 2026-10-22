@@ -32,6 +32,8 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
     weight_grams: null,
     is_active: true,
     is_featured: false,
+    has_sizes: false,
+    size_label: 'size',
     metadata: null,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
@@ -55,7 +57,7 @@ describe('cartStore', () => {
   });
 
   it('treats different sizes of the same product as separate lines', () => {
-    const shirt = makeProduct({ id: 'shirt' });
+    const shirt = makeProduct({ id: 'shirt', has_sizes: true });
     useCartStore.getState().addItem(shirt, 1, 'M');
     useCartStore.getState().addItem(shirt, 1, 'L');
     useCartStore.getState().addItem(shirt, 1, 'M');
@@ -76,7 +78,7 @@ describe('cartStore', () => {
   });
 
   it('updates and removes only the matching size line', () => {
-    const shirt = makeProduct({ id: 'shirt' });
+    const shirt = makeProduct({ id: 'shirt', has_sizes: true });
     useCartStore.getState().addItem(shirt, 1, 'M');
     useCartStore.getState().addItem(shirt, 1, 'L');
 
@@ -98,7 +100,7 @@ describe('cartStore', () => {
   });
 
   it('computes itemCount and subtotal across sizes', () => {
-    const a = makeProduct({ id: 'a', price: 10 });
+    const a = makeProduct({ id: 'a', price: 10, has_sizes: true });
     const b = makeProduct({ id: 'b', price: 5.5 });
     useCartStore.getState().addItem(a, 2, 'M');
     useCartStore.getState().addItem(a, 1, 'L');
@@ -165,6 +167,7 @@ describe('cartStore', () => {
     it('clamps a sized line against the VARIANT stock, not the product total', () => {
       const shirt = makeProduct({
         id: 'shirt',
+        has_sizes: true,
         stock_quantity: 300,
         product_variants: [makeVariant('M', 50), makeVariant('XL', 2)],
       });
@@ -174,6 +177,7 @@ describe('cartStore', () => {
       const changed = useCartStore.getState().syncWithCatalog([
         makeProduct({
           id: 'shirt',
+          has_sizes: true,
           stock_quantity: 300,
           product_variants: [makeVariant('M', 50), makeVariant('XL', 1)],
         }),
@@ -186,6 +190,7 @@ describe('cartStore', () => {
     it('drops a line whose size sold out even though the product has stock', () => {
       const shirt = makeProduct({
         id: 'shirt',
+        has_sizes: true,
         stock_quantity: 300,
         product_variants: [makeVariant('XL', 5)],
       });
@@ -194,6 +199,7 @@ describe('cartStore', () => {
       useCartStore.getState().syncWithCatalog([
         makeProduct({
           id: 'shirt',
+          has_sizes: true,
           stock_quantity: 300,
           product_variants: [makeVariant('XL', 0)],
         }),
@@ -225,6 +231,7 @@ describe('cartStore', () => {
     it('caps a sized add at the variant stock, not the product total', () => {
       const shirt = makeProduct({
         id: 'shirt',
+        has_sizes: true,
         stock_quantity: 300,
         product_variants: [makeVariant('M', 50), makeVariant('XL', 2)],
       });
@@ -235,6 +242,7 @@ describe('cartStore', () => {
     it('refuses a size that is sold out even when the product has stock', () => {
       const shirt = makeProduct({
         id: 'shirt',
+        has_sizes: true,
         stock_quantity: 300,
         product_variants: [makeVariant('XL', 0)],
       });
@@ -245,7 +253,7 @@ describe('cartStore', () => {
     it('falls back to product stock when variants were not loaded', () => {
       // fetchProductsByIds used to omit product_variants; a cart line must not
       // silently become unpurchasable because the data simply is not there.
-      const shirt = makeProduct({ id: 'shirt', stock_quantity: 4 });
+      const shirt = makeProduct({ id: 'shirt', has_sizes: true, stock_quantity: 4 });
       useCartStore.getState().addItem(shirt, 10, 'XL');
       expect(useCartStore.getState().items[0].quantity).toBe(4);
     });
@@ -253,6 +261,7 @@ describe('cartStore', () => {
     it('removes the line when updateQuantity clamps to zero', () => {
       const shirt = makeProduct({
         id: 'shirt',
+        has_sizes: true,
         stock_quantity: 300,
         product_variants: [makeVariant('XL', 3)],
       });
@@ -267,6 +276,58 @@ describe('cartStore', () => {
 
       useCartStore.getState().updateQuantity('shirt', 1, 'XL');
       expect(useCartStore.getState().items).toHaveLength(0);
+    });
+  });
+
+  describe('size choice (products.has_sizes — migration 021)', () => {
+    it('refuses a sized product without a size, and a size on an unsized one', () => {
+      useCartStore.getState().addItem(makeProduct({ id: 'shirt', has_sizes: true }), 1);
+      useCartStore.getState().addItem(makeProduct({ id: 'mug', has_sizes: false }), 1, 'M');
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it('drops lines whose product started or stopped being sold by size', () => {
+      useCartStore.getState().addItem(makeProduct({ id: 'became-sized' }), 1);
+      useCartStore.getState().addItem(
+        makeProduct({ id: 'lost-sizes', has_sizes: true, product_variants: [makeVariant('M', 5)] }),
+        1,
+        'M',
+      );
+      useCartStore.getState().addItem(makeProduct({ id: 'unchanged' }), 1);
+
+      const changed = useCartStore.getState().syncWithCatalog([
+        makeProduct({ id: 'became-sized', has_sizes: true, product_variants: [makeVariant('M', 5)] }),
+        makeProduct({ id: 'lost-sizes', has_sizes: false, product_variants: [] }),
+        makeProduct({ id: 'unchanged' }),
+      ]);
+
+      expect(changed).toBe(true);
+      expect(useCartStore.getState().items.map((i) => i.product.id)).toEqual(['unchanged']);
+    });
+
+    it('drops a sized line when the loaded size list no longer offers that size', () => {
+      useCartStore.getState().addItem(
+        makeProduct({ id: 'shirt', has_sizes: true, product_variants: [makeVariant('XL', 5)] }),
+        1,
+        'XL',
+      );
+
+      // Every size switched off: the embed loads, and loads empty.
+      useCartStore.getState().syncWithCatalog([
+        makeProduct({ id: 'shirt', has_sizes: true, stock_quantity: 0, product_variants: [] }),
+      ]);
+
+      expect(useCartStore.getState().items).toHaveLength(0);
+    });
+
+    it('leaves lines alone while has_sizes is unknown (rows cached before 021)', () => {
+      const legacy = { ...makeProduct({ id: 'legacy' }), has_sizes: undefined } as unknown as Product;
+      useCartStore.getState().addItem(legacy, 1, 'M');
+
+      const changed = useCartStore.getState().syncWithCatalog([legacy]);
+
+      expect(changed).toBe(false);
+      expect(useCartStore.getState().items).toHaveLength(1);
     });
   });
 });

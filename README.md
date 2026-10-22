@@ -141,6 +141,7 @@ Before testing checkout in production, verify that required migrations were appl
 
 - `supabase/migrations/001_fixes.sql` (adds `orders.stripe_session_id`)
 - `supabase/migrations/004_variants_reviews_shipping.sql` (adds `order_items.selected_size`, `orders.shipping_method_id`, `orders.shipping_method_name`)
+- `supabase/migrations/021_product_sizes.sql` (adds `products.has_sizes` / `size_label` and `order_items.variant_id` — the checkout function reads and writes them, so apply it **before** deploying the function)
 
 Recommended verification queries:
 
@@ -156,7 +157,14 @@ select column_name
 from information_schema.columns
 where table_schema = 'public'
   and table_name = 'order_items'
-  and column_name in ('selected_size')
+  and column_name in ('selected_size', 'variant_id')
+order by column_name;
+
+select column_name
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'products'
+  and column_name in ('has_sizes', 'size_label')
 order by column_name;
 ```
 

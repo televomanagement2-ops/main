@@ -10,6 +10,7 @@ import { supabase } from '../../../lib/supabaseClient';
 import { createAddress } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
 import { computeOrderTotals } from '../../../lib/pricing';
+import { sizeLabelKey } from '../../../lib/sizes';
 import {
   SHIPPING_COUNTRIES,
   isValidPostalCode,
@@ -693,7 +694,9 @@ export function CheckoutPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p className="t-sm" style={{ color: 'var(--ink)' }}>{item.product.name}</p>
                       {item.selectedSize && (
-                        <p className="t-xs t-faint">{t('cart.size')}: {item.selectedSize}</p>
+                        <p className="t-xs t-faint">
+                          {t(sizeLabelKey(item.product.size_label))}: {item.selectedSize}
+                        </p>
                       )}
                       <p className="t-xs t-faint">
                         {formatCurrency(item.product.price)} {t('cart.each')}

@@ -45,13 +45,22 @@ export interface ProductImage {
   created_at: string;
 }
 
+/**
+ * The word shown above a product's size selector (products.size_label,
+ * migration 021). Mirrored by SIZE_LABELS in src/lib/sizes.ts.
+ */
+export type SizeLabel = 'size' | 'measure' | 'length' | 'shoe_size' | 'ring_size' | 'waist';
+
+/** One size of a sized product, with its own stock counter. */
 export interface ProductVariant {
   id: string;
   product_id: string;
   size: string;
   sku: string | null;
+  /** May be negative: units sold beyond stock (backorder depth, migration 013). */
   stock_qty: number;
   sort_order: number;
+  /** FALSE: not for sale, and hidden from the storefront. */
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -67,11 +76,19 @@ export interface Product {
   compare_at_price: number | null;
   cost_price: number | null;
   sku: string | null;
+  /**
+   * For a sized product this is DERIVED by the database: the sum of the
+   * non-negative stock of its active sizes (migration 021). It cannot be
+   * written directly; change the sizes instead.
+   */
   stock_quantity: number;
   low_stock_threshold: number;
   weight_grams: number | null;
   is_active: boolean;
   is_featured: boolean;
+  /** Sold by size: checkout requires one, and stock is kept per size. */
+  has_sizes: boolean;
+  size_label: SizeLabel;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -140,7 +157,10 @@ export interface OrderItem {
   unit_price: number;
   quantity: number;
   total_price: number;
+  /** Display snapshot of the size the customer chose. */
   selected_size: string | null;
+  /** The size row the line took its stock from (migration 021). */
+  variant_id?: string | null;
   created_at: string;
 }
 

@@ -1,4 +1,4 @@
-// Generated from supabase/schema.sql + migrations/001…013.
+// Generated from supabase/schema.sql + migrations/001…021.
 // Re-generate against a live project with:
 //   npx supabase gen types typescript --linked > src/lib/database.types.ts
 
@@ -103,6 +103,8 @@ export type Database = {
           weight_grams: number | null;
           is_active: boolean;
           is_featured: boolean;
+          has_sizes: boolean;
+          size_label: string;
           metadata: Json | null;
           created_at: string;
           updated_at: string;
@@ -122,6 +124,8 @@ export type Database = {
           weight_grams?: number | null;
           is_active?: boolean;
           is_featured?: boolean;
+          has_sizes?: boolean;
+          size_label?: string;
           metadata?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -141,6 +145,8 @@ export type Database = {
           weight_grams?: number | null;
           is_active?: boolean;
           is_featured?: boolean;
+          has_sizes?: boolean;
+          size_label?: string;
           metadata?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -501,6 +507,7 @@ export type Database = {
           quantity: number;
           total_price: number;
           selected_size: string | null;
+          variant_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -513,6 +520,7 @@ export type Database = {
           quantity: number;
           total_price: number;
           selected_size?: string | null;
+          variant_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -525,6 +533,7 @@ export type Database = {
           quantity?: number;
           total_price?: number;
           selected_size?: string | null;
+          variant_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -540,6 +549,13 @@ export type Database = {
             columns: ['product_id'];
             isOneToOne: false;
             referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'order_items_variant_id_fkey';
+            columns: ['variant_id'];
+            isOneToOne: false;
+            referencedRelation: 'product_variants';
             referencedColumns: ['id'];
           }
         ];
@@ -595,6 +611,21 @@ export type Database = {
       expire_stale_pending_orders: {
         Args: Record<string, never>;
         Returns: number;
+      };
+      admin_set_product_inventory: {
+        Args: {
+          p_product_id: string;
+          p_has_sizes: boolean;
+          p_size_label?: string | null;
+          p_variants?: Json;
+          p_stock_quantity?: number | null;
+          p_expected_stock?: number | null;
+        };
+        Returns: Json;
+      };
+      admin_set_variant_stock: {
+        Args: { p_changes: Json };
+        Returns: Database['public']['Tables']['product_variants']['Row'][];
       };
     };
     Enums: {

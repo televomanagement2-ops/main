@@ -81,7 +81,7 @@ click Run):</p>
   <li><code>supabase/schema.sql</code> — tables &amp; types</li>
   <li><code>supabase/rls.sql</code> — security policies</li>
   <li><strong>Every file in <code>supabase/migrations/</code> in numeric order</strong> — <code>001_fixes.sql</code> through
-    <code>019_reconcile_reverted_fixes.sql</code>. Run each one.</li>
+    <code>021_product_sizes.sql</code>. Run each one.</li>
   <li><code>supabase/seeds/002_mock_products.sql</code> — optional demo catalog (skip if you'll add your
     own products right away)</li>
 </ol>
@@ -90,10 +90,23 @@ click Run):</p>
 leave the checkout schema incomplete. If your database already ran some of them, run every
 file newer than your last one, then <code>NOTIFY pgrst, 'reload schema';</code>. Re-ran <code>schema.sql</code>
 or an older migration on a migrated database? Run <code>019_reconcile_reverted_fixes.sql</code> again
-afterwards — it puts back the fixes those files revert.</p></blockquote>
+afterwards — it puts back the fixes those files revert. (Re-ran <code>005</code>, <code>007</code> or <code>013</code>? Run
+<code>021_product_sizes.sql</code> again too.)</p></blockquote>
 
 <p><code>014_role_management.sql</code> installs <code>set_user_role()</code>, the supported way to make somebody an
 admin (or put them back to customer) — see <em>Make the first admin</em> below.</p>
+
+<p><code>020_stale_order_expiry_cron.sql</code> switches on the stale-order cleanup (<strong>required</strong> —
+otherwise abandoned checkouts stay <code>pending</code> forever): it enables <strong>pg_cron</strong> and schedules
+the job to run every 15 minutes. Check it is scheduled:</p>
+
+<pre><code>SELECT jobname, schedule, active FROM cron.job;</code></pre>
+
+<blockquote><p><strong>Note —</strong> If 020 printed a warning that pg_cron could not be enabled, enable it in
+Dashboard → Database → Extensions → <strong>pg_cron</strong>, then run 020 again.</p></blockquote>
+
+<p><code>021_product_sizes.sql</code> adds stock per size for clothing and anything sold by measurement —
+manage it from the admin (see <em>Products Setup</em>).</p>
 
 <blockquote><p><strong>Tip —</strong> <code>supabase/SETUP_CHECKLIST.md</code> contains verification queries to confirm every
 required column exists.</p></blockquote>

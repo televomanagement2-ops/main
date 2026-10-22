@@ -4,6 +4,7 @@ import { IconMinus, IconPlus } from '../../../components/ui/icons';
 import { useCartStore } from '../../../store/cartStore';
 import { useI18n } from '../../../lib/i18n';
 import { availableStock } from '../../../lib/stock';
+import { sizeLabelKey } from '../../../lib/sizes';
 import type { CartItemLocal } from '../../../types';
 
 export function CartItemRow({ item }: { item: CartItemLocal }) {
@@ -38,7 +39,7 @@ export function CartItemRow({ item }: { item: CartItemLocal }) {
         {item.product.categories && <p className="line-item__meta">{item.product.categories.name}</p>}
         {item.selectedSize && (
           <p className="line-item__meta">
-            {t('cart.size')}: {item.selectedSize}
+            {t(sizeLabelKey(item.product.size_label))}: {item.selectedSize}
           </p>
         )}
 

@@ -14,7 +14,9 @@ import type {
   ProductVariant,
   ProductImage,
   AdminAnalytics,
+  SizeLabel,
 } from '../types';
+import type { VariantPayload } from './sizes';
 
 export type ProductUpdate = Database['public']['Tables']['products']['Update'];
 
@@ -51,6 +53,9 @@ const PRODUCT_COLUMNS = [
   'weight_grams',
   'is_active',
   'is_featured',
+  // Migration 021 grants these two explicitly (the table is column-granted).
+  'has_sizes',
+  'size_label',
   'metadata',
   'created_at',
   'updated_at',
@@ -487,16 +492,25 @@ export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
   };
 }
 
+// Admin product rows carry EVERY size, switched-off ones included: RLS lets an
+// admin read them ("variants: admin all"), and the editor needs them.
+const ADMIN_PRODUCT_SELECT = `${PRODUCT_COLUMNS}, product_images(*), categories(*), product_variants(*)`;
+
 export async function fetchAdminProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
-    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
+    .select(ADMIN_PRODUCT_SELECT)
     .order('created_at', { ascending: false });
 
   if (error) throw error;
   return (data as unknown as Product[]) ?? [];
 }
 
+/**
+ * Product fields other than stock. Stock goes through setProductInventory /
+ * setVariantStock / updateProductStock, which refuse to overwrite a figure that
+ * moved while the editor was open.
+ */
 export async function updateProduct(
   productId: string,
   updates: ProductUpdate
@@ -505,10 +519,133 @@ export async function updateProduct(
     .from('products')
     .update(updates)
     .eq('id', productId)
-    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
+    .select(ADMIN_PRODUCT_SELECT)
     .single();
 
   if (error) throw error;
+  return data as unknown as Product;
+}
+
+// ============================================================
+// ADMIN — STOCK AND SIZES (migration 021)
+// ============================================================
+
+/**
+ * A stock figure changed between the moment the editor loaded it and the
+ * save — usually an order was paid in between. Nothing was written.
+ */
+export class StockConflictError extends Error {
+  /** The size whose stock moved; null for an unsized product. */
+  readonly size: string | null;
+
+  constructor(message: string, size: string | null) {
+    super(message);
+    this.name = 'StockConflictError';
+    this.size = size;
+  }
+}
+
+/** The stock functions flag a moved figure with HINT 'stock_conflict', DETAIL = size. */
+function stockError(error: { message: string; hint?: string | null; details?: string | null }): Error {
+  if (error.hint === 'stock_conflict') {
+    return new StockConflictError(error.message, error.details || null);
+  }
+  return error instanceof Error ? error : new Error(error.message);
+}
+
+export interface InventoryInput {
+  productId: string;
+  hasSizes: boolean;
+  sizeLabel?: SizeLabel;
+  /** Sized: the complete, ordered size list. */
+  variants?: VariantPayload[];
+  /** Unsized: the new stock (omit to leave it). */
+  stockQuantity?: number;
+  /** Unsized: the stock the editor was showing. */
+  expectedStock?: number | null;
+}
+
+export interface InventoryResult {
+  product_id: string;
+  has_sizes: boolean;
+  size_label: SizeLabel;
+  stock_quantity: number;
+  /** Sizes removed from the list and deleted. */
+  deleted: number;
+  /** Sizes removed from the list but kept, switched off, because they have orders. */
+  archived: number;
+  variants: ProductVariant[];
+}
+
+export type ProductInventory = Pick<Product, 'id' | 'stock_quantity' | 'has_sizes'> & {
+  product_variants: ProductVariant[];
+};
+
+/** A product's current stock figures — what an editor rebases on after a conflict. */
+export async function fetchProductInventory(productId: string): Promise<ProductInventory> {
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, stock_quantity, has_sizes, product_variants(*)')
+    .eq('id', productId)
+    .single();
+
+  if (error) throw error;
+  return data as unknown as ProductInventory;
+}
+
+/** Atomically replaces a product's sizes, or switches it to a single stock figure. */
+export async function setProductInventory(input: InventoryInput): Promise<InventoryResult> {
+  const { data, error } = await supabase.rpc('admin_set_product_inventory', {
+    p_product_id: input.productId,
+    p_has_sizes: input.hasSizes,
+    p_size_label: input.sizeLabel ?? null,
+    p_variants: input.variants ?? [],
+    p_stock_quantity: input.stockQuantity ?? null,
+    p_expected_stock: input.expectedStock ?? null,
+  });
+
+  if (error) throw stockError(error);
+  return data as unknown as InventoryResult;
+}
+
+// A `type`, not an interface: only object types without a declared shape are
+// assignable to the Json the RPC argument is typed as.
+export type VariantStockChange = {
+  id: string;
+  stock_qty: number;
+  expected_stock_qty: number;
+};
+
+/** Sets the stock of the given sizes, leaving everything else about them alone. */
+export async function setVariantStock(changes: VariantStockChange[]): Promise<ProductVariant[]> {
+  const { data, error } = await supabase.rpc('admin_set_variant_stock', { p_changes: changes });
+  if (error) throw stockError(error);
+  return (data as unknown as ProductVariant[]) ?? [];
+}
+
+/**
+ * Sets an unsized product's stock, only if it still holds `expected` and is
+ * still unsized — otherwise nothing is written and a StockConflictError is
+ * thrown.
+ */
+export async function updateProductStock(
+  productId: string,
+  stock: number,
+  expected: number
+): Promise<Product> {
+  const { data, error } = await supabase
+    .from('products')
+    .update({ stock_quantity: stock })
+    .eq('id', productId)
+    .eq('has_sizes', false)
+    .eq('stock_quantity', expected)
+    .select(ADMIN_PRODUCT_SELECT)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    throw new StockConflictError('Stock changed while it was being edited.', null);
+  }
   return data as unknown as Product;
 }
 
@@ -559,7 +696,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
       is_active: input.is_active ?? true,
       is_featured: input.is_featured ?? false,
     })
-    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
+    .select(ADMIN_PRODUCT_SELECT)
     .single();
 
   if (error) throw error;

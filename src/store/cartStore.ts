@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItemLocal, Product } from '../types';
-import { availableStock } from '../lib/stock';
+import { availableStock, sizeChoiceFits } from '../lib/stock';
 
 interface CartState {
   items: CartItemLocal[];
@@ -31,6 +31,10 @@ export const useCartStore = create<CartState>()(
 
       addItem: (product, quantity = 1, selectedSize = null) => {
         set((state) => {
+          // A sized product without a size (or a size on an unsized one) would
+          // only be refused at checkout, after the shopper filled everything in.
+          if (!sizeChoiceFits(product, selectedSize)) return state;
+
           // The cap is the SELECTED SIZE's stock when there is one, and it is
           // clamped at 0 — an oversold product reports negative stock, which
           // used to put a negative quantity straight into the cart.
@@ -102,6 +106,13 @@ export const useCartStore = create<CartState>()(
 
           // Product deleted or deactivated since it was added → drop the line.
           if (!fresh || fresh.is_active === false) {
+            changed = true;
+            continue;
+          }
+
+          // The product started or stopped being sold by size since the line
+          // was added: checkout would refuse it either way.
+          if (!sizeChoiceFits(fresh, item.selectedSize)) {
             changed = true;
             continue;
           }

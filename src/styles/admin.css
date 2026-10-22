@@ -395,6 +395,109 @@
 .stock-bar__fill--low { background: var(--caution); }
 .stock-bar__fill--out { background: var(--critical); }
 
+/* ── SIZES — per-size stock (product editor + catalog) ─────────────────
+   A stock figure carries its state in the field itself: caution at or under
+   the low-stock threshold, critical at zero or backordered. The number always
+   stays readable, so the tone is never the only signal. */
+.size-row__stock.is-low { border-color: color-mix(in srgb, var(--caution) 55%, var(--line-2)); color: var(--caution); }
+.size-row__stock.is-out { border-color: color-mix(in srgb, var(--critical) 55%, var(--line-2)); color: var(--critical); }
+.size-row__stock { font-variant-numeric: tabular-nums; }
+
+.size-editor { display: flex; flex-direction: column; gap: var(--s-5); }
+.size-presets { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+.size-table { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.size-row {
+  display: grid;
+  grid-template-columns: 56px minmax(64px, 1fr) minmax(112px, 1.5fr) 80px 56px 30px;
+  grid-template-areas: 'order size sku stock toggle remove';
+  align-items: center;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+.size-row--head {
+  padding-block: var(--s-2) var(--s-1);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.size-row__order { grid-area: order; display: flex; gap: 2px; }
+.size-row__size { grid-area: size; }
+.size-row__sku { grid-area: sku; }
+.size-row__stock { grid-area: stock; }
+.size-row__toggle { grid-area: toggle; justify-content: center; }
+.size-row__remove { grid-area: remove; }
+.size-row--head > span:nth-child(5) { text-align: center; }
+.size-row__error { grid-column: 1 / -1; }
+.size-row.is-off .size-row__size,
+.size-row.is-off .size-row__sku,
+.size-row.is-off .size-row__stock { color: var(--ink-3); background: var(--neutral-soft); }
+.size-row.has-error [aria-invalid='true'] { border-color: var(--critical); }
+.size-row__icon {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--ink-3);
+  transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+.size-row__icon:not(:disabled):hover { color: var(--ink); background: var(--neutral-soft); }
+.size-row__icon:disabled { opacity: 0.3; cursor: not-allowed; }
+.size-row__icon--danger:not(:disabled):hover { color: var(--critical); background: var(--critical-soft); }
+
+.size-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.size-bulk__input { width: 80px; }
+.size-bulk__skus { margin-left: auto; }
+
+.size-summary { display: flex; flex-direction: column; gap: var(--s-1); }
+.size-summary__value { display: flex; align-items: baseline; gap: var(--s-3); }
+.size-summary__value .t-num { font-size: 22px; color: var(--ink); letter-spacing: -0.02em; }
+
+/* Catalog list: one chip per size on sale. */
+.size-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+.size-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  height: 22px;
+  padding-inline: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-xs);
+  line-height: 20px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.size-chip__qty { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.size-chip--low { border-color: color-mix(in srgb, var(--caution) 40%, var(--line)); background: var(--caution-soft); }
+.size-chip--low .size-chip__qty { color: var(--caution); }
+.size-chip--out { border-color: color-mix(in srgb, var(--critical) 40%, var(--line)); background: var(--critical-soft); }
+.size-chip--out .size-chip__qty { color: var(--critical); }
+
+/* Catalog list: the per-size restock row under a sized product. */
+.table tbody tr.table__subrow { background: var(--neutral-soft); }
+.table tbody tr.table__subrow:hover { background: var(--neutral-soft); }
+.size-quick { display: flex; flex-direction: column; gap: var(--s-3); }
+.size-quick__fields { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+.size-quick__field { display: flex; flex-direction: column; gap: 4px; width: 72px; }
+.size-quick__label { font-size: var(--fs-xs); color: var(--ink-2); font-weight: 500; }
+
+@media (max-width: 640px) {
+  /* Two lines per size: order, name, stock and remove on top; the on-sale
+     switch and SKU beneath. */
+  .size-row {
+    grid-template-columns: 52px minmax(0, 1fr) 76px 30px;
+    grid-template-areas:
+      'order size stock remove'
+      'toggle sku sku sku';
+  }
+  .size-row--head { display: none; }
+  .size-row__toggle { justify-content: flex-start; }
+  .size-bulk__skus { margin-left: 0; }
+}
+
 /* ── RESPONSIVE ──────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .dash-hero { grid-template-columns: 1fr; }

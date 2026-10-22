@@ -22,7 +22,8 @@ import {
 } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
 import { availableStock } from '../../../lib/stock';
-import type { Product, ProductImage, ProductVariant } from '../../../types';
+import { sellableSizes, sizeLabelKey } from '../../../lib/sizes';
+import type { Product, ProductImage } from '../../../types';
 
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -56,17 +57,20 @@ function ProductView({ product }: { product: Product }) {
   const addItem = useCartStore((s) => s.addItem);
   const openCart = useUiStore((s) => s.open);
 
+  // Sizes on sale, in the order the shop arranged them. A sized product whose
+  // sizes are all switched off lists none and reads as out of stock (its
+  // derived total is 0).
+  const variants = useMemo(() => sellableSizes(product), [product]);
+  const sizeLabel = t(sizeLabelKey(product.size_label));
+
   const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  // One size on sale and in stock: there is nothing to choose.
+  const [selectedSize, setSelectedSize] = useState<string | null>(() =>
+    variants.length === 1 && variants[0].stock_qty > 0 ? variants[0].size : null
+  );
   const [sizeError, setSizeError] = useState(false);
   const [added, setAdded] = useState(false);
-
-  const variants: ProductVariant[] = useMemo(
-    () => (product.product_variants ? [...product.product_variants].sort((a, b) => a.sort_order - b.sort_order) : []),
-    [product.product_variants]
-  );
-  const hasVariants = variants.length > 0;
 
   const images = product.product_images ?? [];
   const primary = images.find((i) => i.is_primary) ?? images[0];
@@ -88,7 +92,7 @@ function ProductView({ product }: { product: Product }) {
   const related = (relatedPage?.data ?? []).filter((p) => p.id !== product.id).slice(0, 4);
 
   const requireSize = () => {
-    if (hasVariants && !selectedSize) {
+    if (product.has_sizes && !selectedSize) {
       setSizeError(true);
       return false;
     }
@@ -188,15 +192,16 @@ function ProductView({ product }: { product: Product }) {
 
           <div className="pdp__rule" />
 
-          {hasVariants && (
+          {variants.length > 0 && (
             <div className="field">
               <span className="field__label">
-                {t('cart.size')}
+                {sizeLabel}
                 {selectedSize && <span style={{ color: 'var(--ink)' }}> — {selectedSize}</span>}
               </span>
               <div className="size-grid">
                 {variants.map((variant) => {
                   const soldOut = variant.stock_qty <= 0;
+                  const lowStock = !soldOut && variant.stock_qty <= product.low_stock_threshold;
                   return (
                     <button
                       key={variant.id}
@@ -211,7 +216,13 @@ function ProductView({ product }: { product: Product }) {
                       }}
                       disabled={soldOut}
                       aria-pressed={selectedSize === variant.size}
-                      title={soldOut ? t('product.stockOut') : variant.size}
+                      title={
+                        soldOut
+                          ? t('product.stockOut')
+                          : lowStock
+                            ? t('product.stockLow', { count: variant.stock_qty })
+                            : variant.size
+                      }
                     >
                       {variant.size}
                     </button>

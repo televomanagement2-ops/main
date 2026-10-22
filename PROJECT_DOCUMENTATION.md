@@ -177,7 +177,7 @@ The single backend. Four sub-services are used:
 | **Edge Functions (Deno)** | Checkout, webhook, order actions, tracking + emails | `supabase/functions/*`, `supabase/config.toml` |
 
 Extensions used: `uuid-ossp` (PKs), `pg_trgm` (product-name search index), `pg_cron`
-(stale-order expiry — **must be enabled manually**).
+(stale-order expiry — enabled and scheduled by migration `020`).
 
 The frontend talks to Postgres through PostgREST with the **public anon key**; privilege is
 enforced by RLS, never by key secrecy. The `service_role` key exists only inside Edge
@@ -627,13 +627,18 @@ entirely (owner decision recorded in `ROADMAP.md`).
   `stock_quantity`. That module encodes three rules that used to be scattered and disagreeing:
   1. Stock can be **negative** (migration 013 allows oversell depth), so `sellableStock()`
      clamps at 0 — otherwise `Math.min(qty, -5)` would put a negative quantity in the cart.
-  2. For a sized line the binding limit is the **variant's** stock.
-  3. `products.stock_quantity` is still an upper bound for a sized line, because checkout
-     deducts from both counters — so `availableStock()` takes the **min** of the two.
+  2. For a sized line the binding limit is the **variant's** stock. A loaded but empty size
+     list means no size is on sale, so the line gets 0; only an unloaded list (listing
+     queries) falls back to the product total.
+  3. `products.stock_quantity` is still an upper bound for a sized line — `availableStock()`
+     takes the **min** of the two. Since migration 021 it is derived from the sizes on sale,
+     so it only binds when the size itself has been switched off.
+- **Size choice** (`sizeChoiceFits()`): a sized product (`has_sizes`) can only be added with a
+  size, an unsized one only without — both are what checkout would refuse.
 - **`syncWithCatalog(products)`** (driven by `useCartSync` on mount) adopts fresh prices and
-  images, drops products that vanished or were deactivated, clamps quantities, and returns
-  `true` when the shopper should be told. Failure is non-fatal: the server re-validates
-  everything at checkout anyway.
+  images, drops products that vanished or were deactivated, drops lines whose product started
+  or stopped being sold by size, clamps quantities, and returns `true` when the shopper should
+  be told. Failure is non-fatal: the server re-validates everything at checkout anyway.
 
 ### 9.5 Data layer — `src/lib/api.ts`
 
@@ -665,7 +670,11 @@ security reasons and must not be replaced with `*`:
 | `updateOrderTracking` | → `update-tracking` | Client never sends a status |
 | `markOrderDelivered` / `refundOrder` | → `handle-order-action` | |
 | `fetchAdminAnalytics()` | RPC `admin_analytics` | Aggregates computed in the DB, not by downloading every order |
-| `fetchAdminProducts` / `createProduct` / `updateProduct` | `products` | `createProduct` resolves a unique slug with up to 5 attempts |
+| `fetchAdminProducts` / `createProduct` / `updateProduct` | `products` (+ every variant, inactive included) | `createProduct` resolves a unique slug with up to 5 attempts. `updateProduct` is for non-stock fields |
+| `setProductInventory(input)` | RPC `admin_set_product_inventory` | The product editor's single write path for sizes and stock: replaces the ordered size list atomically, or switches the product to one stock figure. Throws `StockConflictError` when a figure moved since the editor loaded it |
+| `setVariantStock(changes)` | RPC `admin_set_variant_stock` | Catalog quick restock of individual sizes, same optimistic check |
+| `updateProductStock(id, stock, expected)` | `products` | Unsized quick restock: `UPDATE … WHERE has_sizes = false AND stock_quantity = expected`; zero rows → `StockConflictError` |
+| `fetchProductInventory(id)` | `products` + variants | Current figures an editor rebases on after a conflict |
 | `uploadProductImage(file)` | Storage `product-images` | Random UUID filename; returns the public URL |
 | `addProductImages` / `deleteProductImage` / `setPrimaryProductImage` | `product_images` | Primary is clear-then-set (a partial unique index enforces one per product) |
 | `fetchAdminCategories` / `createCategory` | `categories` | |
@@ -831,11 +840,21 @@ abort signup with "Database error saving new user" and leave the account profile
 | `compare_at_price` | NUMERIC(10,2) ≥ 0 | Struck-through "before" price |
 | `cost_price` | NUMERIC(10,2) ≥ 0 | 🔒 **Not readable by `anon`/`authenticated`** (016) |
 | `sku` | TEXT UNIQUE | |
-| `stock_quantity` | INTEGER NOT NULL DEFAULT 0 | **No `>= 0` constraint** — negative = backorder depth |
-| `low_stock_threshold` | INTEGER DEFAULT 5 | |
+| `stock_quantity` | INTEGER NOT NULL DEFAULT 0 | **No `>= 0` constraint** — negative = backorder depth. For a sized product it is **derived** (see below) |
+| `low_stock_threshold` | INTEGER DEFAULT 5 | For a sized product it applies to each size |
 | `weight_grams` | INTEGER ≥ 0 | |
 | `is_active`, `is_featured` | BOOLEAN | |
+| `has_sizes` | BOOLEAN NOT NULL DEFAULT FALSE | Sold by size (021): checkout requires a size, stock is kept per size |
+| `size_label` | TEXT NOT NULL DEFAULT `size` | The word above the size selector: `size`, `measure`, `length`, `shoe_size`, `ring_size`, `waist` (CHECK) |
 | `metadata` | JSONB | |
+
+**Derived stock (021).** When `has_sizes` is true, `stock_quantity` is the sum of
+`GREATEST(stock_qty, 0)` over the product's **active** variants — a backordered size counts as 0
+so it cannot hide the sizes still on the shelf, and a switched-off size is not for sale.
+`products_sync_sized_stock` (BEFORE INSERT/UPDATE on `products`) recomputes it on every write,
+whoever makes it, and `product_variants_touch_stock` (AFTER INSERT/UPDATE/DELETE on variants)
+refreshes it whenever a size's stock or availability changes. An unsized product keeps its own
+counter exactly as before.
 
 Indexes: `slug`, `category_id`, `is_active`, `is_featured`, `price`, a **GIN trigram** index on
 `name` (so the storefront's `ILIKE '%term%'` search stops sequentially scanning), and a partial
@@ -844,8 +863,12 @@ Indexes: `slug`, `category_id`, `is_active`, `is_featured`, `price`, a **GIN tri
 **`product_images`** — `product_id` (CASCADE), `url`, `alt_text`, `sort_order`, `is_primary`.
 A **partial unique index** enforces at most one primary image per product.
 
-**`product_variants`** (migration 004) — `product_id` (CASCADE), `size`, `sku`, `stock_qty`
-(may go negative), `sort_order`, `is_active`, UNIQUE `(product_id, size)`.
+**`product_variants`** (migration 004) — one row per size of a sized product: `product_id`
+(CASCADE), `size` (trimmed, 1–40 chars — 021), `sku` (≤ 64 chars, unique when set — 021),
+`stock_qty` (may go negative), `sort_order` (display order), `is_active` (switched off = not
+for sale and hidden from the storefront), UNIQUE `(product_id, size)`. A size referenced by an
+order line cannot be deleted (`order_items.variant_id` is `ON DELETE RESTRICT`); the admin
+functions switch it off instead.
 
 ### 12.4 `addresses`
 
@@ -884,7 +907,10 @@ Indexes: `user_id`, `status`, `created_at DESC`, `(user_id, created_at DESC)`, p
 ### 12.6 `order_items`
 
 `order_id` (CASCADE), `product_id` (RESTRICT), snapshots `product_name` / `product_image`,
-`unit_price`, `quantity` > 0, `total_price`, `selected_size`.
+`unit_price`, `quantity` > 0, `total_price`, `selected_size` (the label the customer saw),
+`variant_id` (021, FK → `product_variants` ON DELETE RESTRICT — the size row the line takes its
+stock from, so a refund finds it even after the size is renamed; historical lines were linked by
+their `selected_size`).
 
 A CHECK enforces `total_price = ROUND(unit_price * quantity, 2)`, so a line can never disagree
 with its own arithmetic.
@@ -954,12 +980,17 @@ touches it. This table is the webhook's idempotency ledger.
 | `validate_order_status_transition()` | BEFORE UPDATE on `orders` | Rejects illegal status jumps — applies to admins and the service role too |
 | `enforce_order_immutability()` | BEFORE UPDATE on `orders` | Blocks changes to financial fields, `shipping_address` and `user_id` once `paid`/`shipped`/`delivered`/`refunded` |
 | `enforce_order_items_immutability()` | BEFORE INS/UPD/DEL on `order_items` | Blocks any line change once the parent order is paid |
-| `manage_stock_on_status_change()` | **BEFORE** UPDATE on `orders`, SECURITY DEFINER | Deducts on first `paid`, restores on `failed`/`cancelled`/`refunded` from `paid`, handles variant stock, and flags `needs_review = true, review_reason = 'oversold'` when a counter goes negative. **Never raises** — the customer has already been charged |
+| `manage_stock_on_status_change()` | **BEFORE** UPDATE on `orders`, SECURITY DEFINER | Deducts on first `paid`, restores on `failed`/`cancelled`/`refunded` from `paid` — line by line, moving the size row (`variant_id`, or the recorded size for older lines) for sized products and the product counter for unsized ones. Locks the products involved in id order first. Flags `needs_review = true, review_reason = 'oversold'` when a counter goes negative. **Never raises** — the customer has already been charged |
+| `sized_product_stock(product_id)` | SQL, STABLE | The derived total of a sized product. Not callable through the API |
+| `sync_sized_product_stock()` | BEFORE INS/UPD on `products`, SECURITY DEFINER | Overwrites a sized product's `stock_quantity` with the derived total |
+| `touch_sized_product_stock()` | AFTER INS/UPD/DEL on `product_variants`, SECURITY DEFINER | Refreshes the product total when a size's stock, availability or product changes |
+| `admin_set_product_inventory(...)` | plpgsql, SECURITY DEFINER, returns JSONB | Admin only. Replaces a product's ordered size list atomically (or switches it to one stock figure): validates names/SKUs, parks renamed rows so swaps cannot collide, deletes dropped sizes — or switches them off when an order line references them — and refuses (HINT `stock_conflict`) a stock figure that moved since the editor read it |
+| `admin_set_variant_stock(changes)` | plpgsql, SECURITY DEFINER, returns `SETOF product_variants` | Admin only. Sets individual sizes' stock with the same optimistic check |
 | `check_pending_order_limit()` | BEFORE INS/UPD on `orders` | Max **10** open (`pending`+`processing`) orders per user |
 | `check_address_limit()` | BEFORE INSERT on `addresses` | Max **20** saved addresses per user |
 | `set_review_author_name()` | BEFORE INS/UPD on `product_reviews`, SECURITY DEFINER | Snapshots the reviewer's display name |
 | `has_purchased(p_product_id)` | SQL, STABLE, SECURITY DEFINER | True when `auth.uid()` has a `paid`/`shipped`/`delivered` order containing the product. Gates review writes |
-| `expire_stale_pending_orders()` | plpgsql, returns INTEGER | Cancels `pending`/`processing` orders older than **2 hours**. Run by pg_cron |
+| `expire_stale_pending_orders()` | plpgsql, SECURITY DEFINER, returns INTEGER | Cancels `pending`/`processing` orders older than **2 hours**. Run by pg_cron; not callable through the API (020) |
 | `admin_analytics()` | plpgsql, STABLE, SECURITY DEFINER, returns JSONB | Dashboard aggregates; raises `Admin access required` unless `is_admin()` |
 | `set_user_role(email, role)` | plpgsql, SECURITY DEFINER, returns JSONB | The supported promote/demote path ([§13.4](#134-role-assignment)) |
 
@@ -969,11 +1000,21 @@ only `paid`, `shipped`, `delivered`.
 
 ### 12.12 The scheduled job (required)
 
-Enable `pg_cron` (Dashboard → Database → Extensions), then:
+Migration `020_stale_order_expiry_cron.sql` enables `pg_cron` and schedules two jobs (re-running
+it is safe — a job name replaces the job of the same name):
+
+| Job | Schedule | Does |
+|---|---|---|
+| `expire-pending-orders` | `*/15 * * * *` | `SELECT public.expire_stale_pending_orders()` |
+| `purge-cron-history` | `30 3 * * 0` | Deletes `cron.job_run_details` rows older than 14 days |
+
+It also runs the expiry once, so orders that were already stale are cancelled immediately. If the
+extension cannot be enabled (a self-hosted Postgres without it), 020 prints a `WARNING` with the
+manual steps instead of failing. Check the schedule and recent runs with:
 
 ```sql
-SELECT cron.schedule('expire-pending-orders', '*/15 * * * *',
-  $$SELECT public.expire_stale_pending_orders()$$);
+SELECT jobname, schedule, active FROM cron.job;
+SELECT status, return_message, start_time FROM cron.job_run_details ORDER BY start_time DESC LIMIT 10;
 ```
 
 **The 1 h / 2 h relationship is load-bearing.** Stripe Checkout sessions are created with
@@ -1000,7 +1041,7 @@ RLS is enabled on every application table. `is_admin()` is `SECURITY DEFINER` wi
 |---|---|---|---|---|
 | `profiles` | owner or admin | *(trigger only)* | owner (role unchangeable, via `get_my_role()`); admin any | — |
 | `categories` | `is_active` or admin | admin | admin | admin |
-| `products` | `is_active` or admin | admin | admin (`price ≥ 0`, `stock_quantity ≥ 0` in WITH CHECK) | admin |
+| `products` | `is_active` or admin | admin | admin (`price ≥ 0` in WITH CHECK; 021 dropped `stock_quantity ≥ 0`, which blocked every edit of an oversold product) | admin |
 | `product_images` | parent product visible | admin | admin | admin |
 | `product_variants` | `is_active` | admin | admin | admin |
 | `shipping_methods` | `is_active` | admin | admin | admin |
@@ -1039,7 +1080,10 @@ GRANT  SELECT ON public.products TO service_role;
 
 The 016 column list is derived from the live table, so a project that added its own columns
 keeps them readable. **Consequence:** `SELECT *` on `products` is refused for API roles — this
-is why `src/lib/api.ts` names columns via `PRODUCT_COLUMNS`.
+is why `src/lib/api.ts` names columns via `PRODUCT_COLUMNS`. It also means a column added
+**after** 016 is invisible to the storefront until granted: 021 runs
+`GRANT SELECT (has_sizes, size_label) ON public.products TO anon, authenticated`, and any future
+column needs the same.
 
 Verify with:
 
@@ -1084,7 +1128,7 @@ connection authenticated as and is unaffected by `SET ROLE`.
 
 ## 14. Migration history
 
-Run `schema.sql` → `rls.sql` → migrations `001`…`019` in numeric order → optionally
+Run `schema.sql` → `rls.sql` → migrations `001`…`021` in numeric order → optionally
 `seeds/002_mock_products.sql`. Already-migrated database? Run whatever is newer than your last
 one, then `NOTIFY pgrst, 'reload schema';`
 
@@ -1109,6 +1153,8 @@ one, then `NOTIFY pgrst, 'reload schema';`
 | 017 | `international_shipping.sql` | `shipping_methods.countries` (NULL = everywhere) + US/international seed; `orders.refund_requested_by` (keeps admin refunds out of the customer's rate limit); `orders.tracking_id` length cap |
 | 018 | `refund_attribution_fk.sql` | `orders.refund_requested_by` gets `ON DELETE SET NULL` (017 left it `NO ACTION`, which blocked deleting any operator who had issued a refund); documents the `profiles` embed ambiguity 017 introduced |
 | 019 | `reconcile_reverted_fixes.sql` | Idempotent repair: drops the insert-time stock triggers an old `schema.sql` re-creates (every paid order deducted stock twice) and restores 010's verified-purchase review policies that re-running `004` reverts. Re-run it after re-running any older file |
+| 020 | `stale_order_expiry_cron.sql` | Enables `pg_cron` and schedules `expire-pending-orders` (every 15 min) + a weekly purge of the job history; `expire_stale_pending_orders()` becomes SECURITY DEFINER and is no longer callable through the API; runs it once |
+| 021 | `product_sizes.sql` | **Sized products.** `products.has_sizes` / `size_label` (granted to the API roles); derived stock for sized products (two triggers); `order_items.variant_id` (+ backfill of historical lines); stock trigger rewritten (per-line restore — the old one restored one line per product — and product locks in id order); `products: admin update` no longer requires `stock_quantity ≥ 0`; admin RPCs `admin_set_product_inventory` / `admin_set_variant_stock`; size/SKU constraints; existing products with sizes switched to per-size stock. Re-run it after re-running 005, 007 or 013 (they redefine the stock trigger) |
 
 > **`orders` references `profiles` twice** (`user_id` and, since 017, `refund_requested_by`), so a
 > bare `profiles(...)` embed is rejected by PostgREST with
@@ -1160,7 +1206,10 @@ fail-closed. **Method:** POST (+ OPTIONS).
    `success_url` / `cancel_url` are built from it and **never** from the request body — otherwise
    a forged request could bounce the buyer to an attacker-controlled site.
 3. Verify the JWT.
-4. Validate `items` (non-empty, ≤ 50 lines).
+4. Validate `items` (non-empty, ≤ 50 lines, UUID product ids, string sizes ≤ 40 chars) and
+   merge duplicates — see step 7. The line logic lives in the pure module
+   [`_shared/checkout-lines.ts`](supabase/functions/_shared/checkout-lines.ts), unit-tested from
+   Vitest.
 5. **Sanitise the address** with `sanitizeAddress()` — type-checked strings, control characters
    stripped, per-field caps, country allowlist, postal pattern re-checked, and a return value
    containing only the eight known keys so unknown ones are dropped. This is not cosmetic: a
@@ -1172,8 +1221,12 @@ fail-closed. **Method:** POST (+ OPTIONS).
    line independently let 50 separate lines of one product each pass the stock cap and oversell
    by 50×.
 8. Load products from the DB (service role) and validate: exists, active, quantity ≤ 100,
-   product-level stock against the **combined** quantity across sizes (product stock is shared
-   across variants), variant exists and has stock.
+   product-level stock against the **combined** quantity across sizes (product stock covers
+   every size), and the size rules — a `has_sizes` product **requires** a size
+   (`400 SIZE_REQUIRED`; the selector lives in the browser and used to be bypassable), an
+   unsized one refuses it (`400 SIZE_NOT_APPLICABLE`), and the size must be **active** and have
+   stock (`409 VARIANT_NOT_FOUND` / `INSUFFICIENT_STOCK`). Each line records the size row it
+   takes stock from in `order_items.variant_id`.
 9. Resolve shipping cost from `shipping_methods` — never from the client — and check the
    method's `countries` against the address. Omitting `shipping_method_id` while a method
    exists for that country is now a `400 SHIPPING_METHOD_REQUIRED`: it used to mean free
@@ -1420,9 +1473,18 @@ Who moves what:
 
 ### 17.2 Stock rules
 
-- **Deducted only on the first transition to `paid`**, from a pre-payment status. Both
-  `products.stock_quantity` and, for sized lines, `product_variants.stock_qty` are decremented.
-- **Restored** on `paid` → `failed` / `cancelled` / `refunded`.
+- **Deducted only on the first transition to `paid`**, from a pre-payment status. A sized line
+  decrements its size row (`product_variants.stock_qty`) and the product total follows
+  automatically (derived, migration 021); an unsized line decrements
+  `products.stock_quantity`.
+- **Restored** on `paid` → `failed` / `cancelled` / `refunded`, line by line (an order with two
+  sizes of the same product gets both back).
+- **One writer at a time per product.** The order trigger and the admin stock functions lock
+  the product rows first, in id order, so concurrent orders and restocks queue instead of
+  deadlocking.
+- **The admin never overwrites a moved figure.** Every stock write from the admin carries the
+  figure it replaces; if a paid order changed it meanwhile, nothing is written and the editor
+  shows the current one (`StockConflictError`).
 - **Negative stock is legal.** The `>= 0` constraints were dropped on purpose: the negative
   number *is* the backorder depth.
 - **Paid orders are always honoured.** The trigger never raises — an exception here used to make
@@ -1481,7 +1543,17 @@ change so the app picks it up). See [§13.4](#134-role-assignment) for promotion
 |---|---|
 | **Dashboard** (`/admin`) | Revenue chart (7/30 days with period-over-period delta), gross revenue, orders in 24 h / 7 d, `needs_review` counter, status breakdown, best seller, recent orders. One `admin_analytics()` RPC call |
 | **Orders** (`/admin/orders`) | Paginated queue (50/page), filter by status and by "needs review", order drawer with items and customer, status changes constrained to legal transitions, tracking entry (→ `update-tracking`), mark delivered |
-| **Catalogue** (`/admin/catalog`) | Active/archive tabs, search, inline stock edit, create/edit product drawer with multi-file image upload to Storage (first upload becomes primary), create category inline, toggle active/featured |
+| **Catalogue** (`/admin/catalog`) | Active/archive tabs, search (also by size SKU), inline stock edit, per-size stock chips with low/sold-out tones and a **Restock sizes** row for sized products, create/edit product drawer with multi-file image upload to Storage (first upload becomes primary), create category inline, toggle active/featured |
+
+**Sizes in the product drawer** (`SizeEditor`): the **Sold by size** switch, the label shown to
+customers, presets (Clothing XS–XL / XXS–3XL, Numeric 38–54, Shoes EU 35–46, Rings 5–9, Waist
+26–38, S·M·L), free-text sizes (`S, M, L` adds three), one row per size with SKU (suggested
+from the product SKU), stock and an on-sale switch, up/down ordering, set-every-size-to and
+fill-empty-SKUs. The editor model is pure and tested ([`src/lib/sizes.ts`](src/lib/sizes.ts)):
+an untouched negative figure stays valid (backorder depth), only changed figures are sent and
+always with the one they replace, and an unchanged size list is not written at all. Removing a
+size that has orders switches it off; turning sizes off switches the product back to one stock
+figure.
 | **Finance** (`/admin/finance`) | Revenue by status, refundable orders (`paid`/`shipped`/`delivered`), refund drawer (→ `handle-order-action`) |
 
 Guarding is two-layer: `AdminRoute` waits for `profileStatus` before deciding (so a hard refresh
@@ -1517,15 +1589,18 @@ CORS fails closed, so an unset value rejects even localhost.
 
 ### 20.3 Test suites
 
-**80 tests across 4 files**, all passing at the time of writing. They cover the money-and-stock
+**148 tests across 7 files**, all passing at the time of writing. They cover the money-and-stock
 logic that is expensive to get wrong:
 
 | File | Covers |
 |---|---|
 | [`src/lib/pricing.test.ts`](src/lib/pricing.test.ts) | Tax base is `subtotal + shipping`; cent rounding; invalid/negative rates and inputs |
-| [`src/store/cartStore.test.ts`](src/store/cartStore.test.ts) | Line identity per size, quantity clamping, catalogue sync (price adoption, dropped/deactivated products, variant-stock clamping, oversold products) |
+| [`src/lib/sizes.test.ts`](src/lib/sizes.test.ts) | The size editor model: presets and de-duplication, stock parsing (untouched negative figures stay valid), validation, derived total, the RPC payload (stock only when changed, with the figure it replaces), change detection, rebasing after a conflict |
+| [`src/store/cartStore.test.ts`](src/store/cartStore.test.ts) | Line identity per size, quantity clamping, catalogue sync (price adoption, dropped/deactivated products, variant-stock clamping, oversold products, products that started or stopped being sold by size) |
+| [`supabase/functions/_shared/checkout-lines.test.ts`](supabase/functions/_shared/checkout-lines.test.ts) | Checkout line resolution: duplicate merging, malformed input, size required / not applicable / not on sale, per-size and combined stock, `variant_id` assignment |
 | [`supabase/functions/_shared/webhook-logic.test.ts`](supabase/functions/_shared/webhook-logic.test.ts) | The full decision matrix: paid transitions, downgrade guards, partial vs full refunds, and every amount-reconciliation case in both tax modes |
 | [`supabase/functions/_shared/address.test.ts`](supabase/functions/_shared/address.test.ts) | 19 cases: the `[object Object]` coercion, country allowlist, boundary lengths, postal patterns |
+| [`supabase/functions/_shared/money.test.ts`](supabase/functions/_shared/money.test.ts) | The single store currency: ISO code, Stripe's lower-case form, locale-dependent punctuation |
 
 There is no Vitest config file — the defaults pick up `**/*.test.ts` outside `node_modules`.
 `tsconfig.app.json` excludes test files from the app build.
@@ -1593,7 +1668,7 @@ Consolidated from `SECURITY-AUDIT.md`, `HANDOVER_GUIDE.md` and `SETUP_CHECKLIST.
       allowlist form, the four length constraints, `has_column_privilege('anon', …,
       'cost_price')` = `false`).
 - [ ] RLS shows **Enabled** on every table.
-- [ ] pg_cron enabled and `expire-pending-orders` scheduled.
+- [ ] `SELECT jobname FROM cron.job` lists `expire-pending-orders` (migration 020).
 - [ ] `curl -X POST …/functions/v1/stripe-webhook` returns **400**, not 401.
 - [ ] `ALLOWED_ORIGINS` set to the real production origins; no `*`; `ALLOW_VERCEL_PREVIEWS=false`
       (or a `VERCEL_PREVIEW_PREFIX` set alongside it).
@@ -1796,8 +1871,9 @@ Carried over from `SECURITY-AUDIT.md` and `ROADMAP.md`, still open at the time o
 
 | Limit | Value | Enforced in |
 |---|---|---|
-| Line items per checkout | 50 | `create-checkout-session` |
-| Quantity per merged line | 100 | `create-checkout-session` |
+| Line items per checkout | 50 | `_shared/checkout-lines.ts` |
+| Quantity per merged line | 100 | `_shared/checkout-lines.ts` |
+| Sizes per product / size name / size SKU | 100 / 40 chars / 64 chars | `admin_set_product_inventory()` + CHECK constraint |
 | Orders per user per hour | 10 | `create-checkout-session` |
 | Open (`pending`+`processing`) orders per user | 10 | `check_pending_order_limit()` trigger |
 | Stripe Checkout session TTL | 1 hour | `create-checkout-session` |
