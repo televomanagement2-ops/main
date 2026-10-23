@@ -52,7 +52,8 @@ export function SearchOverlay() {
       id: p.id,
       title: p.name,
       meta: p.categories?.name ?? '',
-      price: p.price,
+      // The cheapest variant: a search result names no variant.
+      price: p.price_min ?? p.price,
       image: p.product_images?.find((i) => i.is_primary)?.url ?? p.product_images?.[0]?.url ?? null,
       to: `/products/${p.slug}`,
     }));

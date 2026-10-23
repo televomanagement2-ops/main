@@ -7,7 +7,7 @@
 > [§2](#2-map-of-the-existing-documentation)) are task-specific and assume you already know the
 > shape of the system.
 >
-> _Last regenerated: 2026-08-26. Reflects migrations `001` → `016` and the four deployed Edge
+> _Last regenerated: 2026-10-23. Reflects migrations `001` → `026` and the five deployed Edge
 > Functions._
 
 ---
@@ -52,14 +52,20 @@ template. One codebase runs both the customer-facing store and the operator's ad
 **Product surface**
 
 - Public catalogue: home page with featured products, category browsing, filters, search
-  overlay (⌘K / Ctrl-K), product detail pages with size variants and verified-purchase reviews.
+  overlay (⌘K / Ctrl-K), product detail pages with size and colour variants (photos per
+  colour, a price per variant, size guides), "email me when it is back" for sold-out choices,
+  and verified-purchase reviews.
 - Accounts: email/password plus Google OAuth, password reset, profile, saved addresses.
-- Cart: `localStorage` only (there is **no** database cart), reconciled against the live
-  catalogue on load.
-- Checkout: Stripe Checkout, created server-side; success/cancel pages driven by the real
-  order row.
-- Orders: customer order history, order detail, self-service cancel/refund before shipment.
-- Admin: dashboard, order queue, catalogue editor with image upload, finance/refunds.
+- Cart: `localStorage` only (there is **no** database cart), one line per variant,
+  reconciled against the live catalogue on load.
+- Checkout: Stripe Checkout, created server-side, with discount codes; success/cancel pages
+  driven by the real order row.
+- Orders: customer order history, order detail (with discounts and partial refunds),
+  self-service cancel/refund before shipment.
+- Admin: dashboard, order queue (timeline, notes, partial refunds, exchanges, payment checks,
+  packing slips and invoices, CSV export), catalogue editor (variants, compare-at price and
+  cost, duplicate, CSV import/export), inventory (stock history, low stock, restock requests,
+  alerts), discount codes, size guides, finance.
 - Legal: Terms, Privacy, Cookie Policy rendered from a single config file, plus a self-hosted
   granular cookie-consent banner.
 - Four UI languages: English (default), Italian, Spanish, French.
@@ -90,7 +96,7 @@ shipping methods. The store ships to eight countries (see [§12.9](#129-shipping
 | [`tools/README.md`](tools/README.md) | Developer | Supabase CLI install and common commands | First CLI use |
 | [`docs/00_start_here.md`](docs/00_start_here.md) | Buyer | Roadmap, required accounts, 60-second stack overview | Buyer onboarding |
 | [`docs/01_brand_customization.md`](docs/01_brand_customization.md) | Buyer | Name, logo, colours, email branding, languages |  |
-| [`docs/02_products_setup.md`](docs/02_products_setup.md) | Buyer | Data model, removing demo catalogue, three ways to add products |  |
+| [`docs/02_products_setup.md`](docs/02_products_setup.md) | Buyer | Data model, removing demo catalogue, three ways to add products, sizes and colours, size guides, CSV import/export, stock day to day |  |
 | [`docs/03_supabase_setup.md`](docs/03_supabase_setup.md) | Buyer | Project creation, SQL order, keys, Google OAuth, secrets, function deploy, first admin |  |
 | [`docs/04_github_vercel_deploy.md`](docs/04_github_vercel_deploy.md) | Buyer | Build, push, import into Vercel, env vars, auto-redeploy |  |
 | [`docs/05_domain_and_cors.md`](docs/05_domain_and_cors.md) | Buyer | Custom domain, Supabase Auth URLs, Google origins, `ALLOWED_ORIGINS` |  |
@@ -100,9 +106,8 @@ The `docs/*.html` files are exported copies of the matching `.md` sources, meant
 distribution to buyers. Edit the Markdown; regenerate the HTML.
 
 **Precedence.** When a buyer guide and this file disagree, the code wins; check the source
-location cited here. Buyer guides intentionally simplify (e.g. `docs/03` still says "run
-migrations through `014`" — the correct answer is through `016`, and `015`/`016` are security
-migrations, not polish).
+location cited here. Buyer guides intentionally simplify (they list what to run and click, not
+why); `supabase/SETUP_CHECKLIST.md` carries the verification queries.
 
 ---
 
@@ -119,15 +124,20 @@ migrations, not polish).
         ├──────────────────────────────► Supabase Postgres
         │                                 · RLS on every table
         │                                 · triggers: status guard,
-        │                                   stock, immutability
+        │                                   stock, immutability,
+        │                                   stock log, order timeline
         │                                 · RPC: admin_analytics,
-        │                                   has_purchased, set_user_role
-        │
-        │  (2) Bearer JWT + apikey, POST
+        │                                   has_purchased, set_user_role,
+        │                                   admin_save_product_variants,
+        │                                   preview_discount_code, …
+        │                                 · pg_cron → pg_net ─┐
+        │                                                      │ x-worker-secret
+        │  (2) Bearer JWT + apikey, POST                       ▼
         ├──────────────────────────────► Supabase Edge Functions (Deno)
         │                                 · create-checkout-session
         │                                 · handle-order-action
         │                                 · update-tracking
+        │                                 · store-worker ──► Resend
         │                                        │
         │  (3) Supabase Auth (email + Google)    │ service role
         ├──────────────────────────────► GoTrue  │ (bypasses RLS)
@@ -174,10 +184,12 @@ The single backend. Four sub-services are used:
 | **Postgres** | All application data: catalogue, orders, profiles, reviews, addresses | `supabase/schema.sql`, `rls.sql`, `migrations/*.sql` |
 | **Auth (GoTrue)** | Email/password + Google OAuth, password reset, session refresh | Dashboard → Authentication |
 | **Storage** | `product-images` bucket (public read, admin write, 5 MB, raster only) | `migrations/011`, `013` |
-| **Edge Functions (Deno)** | Checkout, webhook, order actions, tracking + emails | `supabase/functions/*`, `supabase/config.toml` |
+| **Edge Functions (Deno)** | Checkout, webhook, order actions, tracking, scheduled store emails | `supabase/functions/*`, `supabase/config.toml` |
 
 Extensions used: `uuid-ossp` (PKs), `pg_trgm` (product-name search index), `pg_cron`
-(stale-order expiry — enabled and scheduled by migration `020`).
+(stale-order expiry and the store's scheduled jobs — enabled by migration `020`), `pg_net`
+(lets those jobs call the `store-worker` function — migration `023`) and **Vault** (holds the
+function's address and shared secret — set by hand, see [§12.12](#1212-the-scheduled-job-required)).
 
 The frontend talks to Postgres through PostgREST with the **public anon key**; privilege is
 enforced by RLS, never by key secrecy. The `service_role` key exists only inside Edge
@@ -185,8 +197,10 @@ Functions, where Supabase injects it automatically.
 
 ### 4.2 Stripe — payments
 
-Stripe Checkout (hosted payment page) in `mode: 'payment'`, card only. Card data never touches
-this codebase. Stripe API version is pinned in every function:
+Stripe Checkout (hosted payment page) in `mode: 'payment'`, with whatever payment methods are
+enabled in the Stripe Dashboard (`payment_method_types` is deliberately not set). Card data
+never touches this codebase. Discount codes reach Stripe as a one-off coupon per session
+([§15.1](#151-create-checkout-session)). Stripe API version is pinned in every function:
 `const STRIPE_API_VERSION = '2025-03-31.basil'`.
 
 Six webhook events are handled — see [§15.2](#152-stripe-webhook). Stripe Tax is optional and
@@ -196,8 +210,9 @@ off by default ([§16.4](#164-sales-tax)).
 
 Optional but recommended. Without `RESEND_API_KEY`, every send is skipped with a console
 warning and the flow continues (see [`_shared/email.ts`](supabase/functions/_shared/email.ts)).
-Sends order confirmation, shipping, refund and delivery emails. Sign-up and password-reset
-emails come from **Supabase Auth**, not from this code.
+Sends order confirmation, shipping, refund and delivery emails, the back-in-stock emails and
+the admins' low-stock digest. Sign-up and password-reset emails come from **Supabase Auth**,
+not from this code.
 
 ### 4.4 Vercel — frontend hosting
 
@@ -224,6 +239,7 @@ as the authorised redirect URI and the live site as an authorised JavaScript ori
 | `stripe-webhook` unreachable (e.g. `verify_jwt = true`) | Cards are charged but orders never reach `paid`; the cron cancels them after 2 h — **worst failure mode in the system** |
 | Stripe | No new payments; existing orders unaffected |
 | Resend | Emails silently skipped; orders unaffected |
+| `store-worker` Vault secrets missing / `STORE_WORKER_SECRET` mismatch | Back-in-stock and low-stock emails are not sent (requests wait, nothing is lost); everything else unaffected |
 | Vercel | Site offline; backend unaffected |
 
 ---
@@ -292,6 +308,10 @@ Router v7, data mode). Three route trees, three shells.
 | `/admin/orders` | `AdminOrdersPage` | idem | `AdminLayout` | **lazy** |
 | `/admin/catalog` | `AdminCatalogPage` | idem | `AdminLayout` | **lazy** |
 | `/admin/finance` | `AdminFinancePage` | idem | `AdminLayout` | **lazy** |
+| `/admin/inventory` | `AdminInventoryPage` | idem | `AdminLayout` | **lazy** |
+| `/admin/discounts` | `AdminDiscountsPage` | idem | `AdminLayout` | **lazy** |
+| `/admin/size-guides` | `AdminSizeGuidesPage` | idem | `AdminLayout` | **lazy** |
+| `/admin/print?doc=packing\|invoice&orders=…` | `OrderPrintPage` | idem | none (printed page) | **lazy** |
 
 **Why the lazy split.** The admin console pulls in `recharts` and the legal pages carry three
 policies in four languages; neither is on any storefront path, so a static import would put
@@ -309,8 +329,10 @@ load rather than 404.
 ### 6.1 CORS on the Edge Functions
 
 Implemented once in [`supabase/functions/_shared/cors.ts`](supabase/functions/_shared/cors.ts)
-and imported by the three browser-facing functions. `stripe-webhook` does not use it — Stripe
-is a server, not a browser, so CORS is irrelevant there.
+and imported by the four browser-facing functions (`store-worker` counts: the admin's "Send
+now" calls it from the app; its scheduled calls come from pg_net, with no `Origin`).
+`stripe-webhook` does not use it — Stripe is a server, not a browser, so CORS is irrelevant
+there.
 
 **Configuration (runtime secrets — no redeploy needed to change them):**
 
@@ -335,7 +357,7 @@ is a server, not a browser, so CORS is irrelevant there.
 - **No `Origin` header → accepted.** That is a server-to-server or CLI caller, still
   authenticated by its bearer token. Only browsers send `Origin`.
 - **Unauthorised origin → hard 403**, not merely a missing header. `create-checkout-session`
-  uses `resolveAllowedOrigin()`; `handle-order-action` and `update-tracking` use
+  uses `resolveAllowedOrigin()`; `handle-order-action`, `update-tracking` and `store-worker` use
   `isForbiddenOrigin()`. Both fail the request outright.
 - `Access-Control-Allow-Credentials` is **never** sent. Sessions live in origin-scoped
   `localStorage`, not cookies, so there is no ambient authority to leak.
@@ -364,6 +386,7 @@ never read them, which silently left every function at the default `verify_jwt =
 | `stripe-webhook` | **`false`** | **Must stay false.** Stripe authenticates with a signature and sends no `Authorization` header; with verification on, the gateway rejects it with 401 *before the function runs* |
 | `handle-order-action` | `false` | Verifies its own JWT, then authorises per action (owner / admin) |
 | `update-tracking` | `true` | Admin-only and always called with a real user token, so the gateway check is a free extra layer |
+| `store-worker` | **`false`** | pg_cron calls it with the shared `x-worker-secret` header, not a JWT. The function accepts that secret (constant-time compare, ≥ 16 chars) or an admin's session, nothing else |
 
 **Verification after deploy** (no auth header on purpose):
 
@@ -441,13 +464,15 @@ Read at runtime — changing a secret needs no redeploy.
 |---|---|---|
 | `STRIPE_SECRET_KEY` | checkout, webhook, order-action | `sk_test_…` / `sk_live_…` |
 | `STRIPE_WEBHOOK_SECRET` | webhook | `whsec_…` — the endpoint's **signing secret**, not an API key |
-| `SUPABASE_ANON_KEY` | checkout, order-action, update-tracking | Used to validate the caller's JWT via `auth.getUser()` |
-| `ALLOWED_ORIGINS` | all browser-facing | **Required.** Fails closed when unset |
+| `SUPABASE_ANON_KEY` | checkout, order-action, update-tracking, store-worker | Used to validate the caller's JWT via `auth.getUser()` |
+| `ALLOWED_ORIGINS` | all browser-facing | **Required.** Fails closed when unset. `store-worker` also takes its first entry as the site address for email links when `SITE_URL` is unset |
 | `ALLOW_VERCEL_PREVIEWS` | all browser-facing | Default `false` |
 | `VERCEL_PREVIEW_PREFIX` | all browser-facing | Required when previews are enabled |
 | `TAX_RATE` | checkout | Flat fraction used when Stripe Tax is off. Default `0` |
 | `STRIPE_TAX_ENABLED` | checkout **and** webhook | **Must be identical in both**, or paid orders get parked for review |
-| `RESEND_API_KEY` | webhook, order-action, update-tracking | Optional; without it emails are skipped |
+| `RESEND_API_KEY` | webhook, order-action, update-tracking, store-worker | Optional; without it emails are skipped |
+| `STORE_WORKER_SECRET` | store-worker | **Required for the store emails.** Same value as the `store_worker_secret` Vault entry; at least 16 characters (32+ recommended) |
+| `SITE_URL` | store-worker | Optional. Storefront address for links in the back-in-stock and low-stock emails |
 | `RESEND_FROM_EMAIL` | email | Full `From` header. Domain must be verified in Resend or mail fails SPF/DKIM |
 | `STORE_NAME` | email | Default `AURUM` |
 | `SUPPORT_EMAIL` | email | Default `support@example.com` — **replace before launch** |
@@ -468,16 +493,17 @@ in the repository.
 
 ### 7.4 Per-function requirement matrix
 
-| | checkout | webhook | order-action | update-tracking |
-|---|---|---|---|---|
-| `STRIPE_SECRET_KEY` | ✅ | ✅ | ✅ (lazy, refund/cancel paths) | — |
-| `STRIPE_WEBHOOK_SECRET` | — | ✅ | — | — |
-| `SUPABASE_URL` *(injected)* | ✅ | ✅ | ✅ | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` *(injected)* | ✅ | ✅ | ✅ | ✅ |
-| `SUPABASE_ANON_KEY` | ✅ | — | ✅ | ✅ |
-| CORS trio | ✅ | — | ✅ | ✅ |
-| `TAX_RATE` / `STRIPE_TAX_ENABLED` | ✅ | `STRIPE_TAX_ENABLED` only | — | — |
-| `RESEND_*` / `STORE_*` | — | ✅ | ✅ | ✅ |
+| | checkout | webhook | order-action | update-tracking | store-worker |
+|---|---|---|---|---|---|
+| `STRIPE_SECRET_KEY` | ✅ | ✅ | ✅ (lazy, refund/cancel/payment-check paths) | — | — |
+| `STRIPE_WEBHOOK_SECRET` | — | ✅ | — | — | — |
+| `SUPABASE_URL` *(injected)* | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` *(injected)* | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `SUPABASE_ANON_KEY` | ✅ | — | ✅ | ✅ | ✅ (admin "Send now") |
+| CORS trio | ✅ | — | ✅ | ✅ | ✅ |
+| `TAX_RATE` / `STRIPE_TAX_ENABLED` | ✅ | `STRIPE_TAX_ENABLED` only | — | — | — |
+| `RESEND_*` / `STORE_*` | — | ✅ | ✅ | ✅ | ✅ |
+| `STORE_WORKER_SECRET` / `SITE_URL` | — | — | — | — | ✅ |
 
 Missing secrets are reported as a `500 CONFIG_MISSING_SECRETS` naming exactly which ones.
 
@@ -506,7 +532,8 @@ CommerceJet/
 │   ├── config/storeConfig.ts      ★ Single place the operator fills in brand + legal identity
 │   ├── features/                  Feature modules (see §9.6)
 │   ├── hooks/                     React Query wrappers + auth listener
-│   ├── lib/                       api, supabaseClient, queryClient, pricing, stock, i18n, types
+│   ├── lib/                       api, supabaseClient, queryClient, pricing, stock, variants,
+│   │                              sizes, csv / productCsv / orderCsv, i18n (+ decks), types
 │   ├── routes/                    Router config + ProtectedRoute / AdminRoute
 │   ├── store/                     Zustand stores
 │   ├── styles/                    tokens → base → primitives → storefront → admin
@@ -515,13 +542,16 @@ CommerceJet/
 ├── supabase/
 │   ├── config.toml                ★ verify_jwt per function — the only file the CLI reads
 │   ├── functions/
-│   │   ├── _shared/               address, cors, email, store, webhook-logic (+ tests)
+│   │   ├── _shared/               address, checkout-lines, cors, discounts, email, money,
+│   │   │                          order-emails, refunds, store, webhook-logic (+ tests)
 │   │   ├── create-checkout-session/index.ts
 │   │   ├── handle-order-action/index.ts
+│   │   ├── store-worker/index.ts
 │   │   ├── stripe-webhook/index.ts
 │   │   └── update-tracking/index.ts
-│   ├── migrations/001…019.sql     Applied in numeric order
-│   ├── seeds/002_mock_products.sql  40 demo products across 5 categories
+│   ├── migrations/001…026.sql     Applied in numeric order
+│   ├── seeds/002_mock_products.sql  40 demo products across 5 categories (sizes, one sold
+│   │                              by colour, a size guide)
 │   ├── schema.sql                 Base tables, enums, triggers
 │   ├── rls.sql                    Base RLS policies + is_admin()
 │   └── SETUP_CHECKLIST.md
@@ -578,7 +608,7 @@ retry.
 | Query key | Hook | Notes |
 |---|---|---|
 | `['products','list',filters]` | `useProducts` | Filters are part of the key |
-| `['products','detail',slug]` | `useProduct` | Also loads active variants |
+| `['products','detail',slug]` | `useProduct` | Also loads active variants and colours |
 | `['products','featured']` | `useFeaturedProducts` | Limit 8 |
 | `['categories']` | `useCategories` | `staleTime` 30 min |
 | `['shipping-methods']` | `useShippingMethods` | `staleTime` 10 min |
@@ -588,12 +618,19 @@ retry.
 | `['addresses', userId]` | `useAddresses` | |
 | `['reviews', productId]` | `useReviews` | |
 | `['has-purchased', productId, userId]` | `useHasPurchased` | RPC-backed review gate |
+| `['size-guides']` / `['size-guides', id]` | `useSizeGuides` / `useSizeGuide` | The product page loads one guide only when its drawer opens |
+| `['store-settings','back-in-stock']` | `useBackInStockEnabled` | Whether the "Notify me" form is offered |
 | `['admin-orders', filters]` | `useAdminOrders` | Page size 50 |
-| `['admin-products']` / `['admin-categories']` | `useAdminProducts` etc. | |
+| `['admin-order', id, 'events' \| 'refunds']` | `useOrderEvents` / `useOrderRefunds` | Timeline and refund list of the open order |
+| `['admin-products']` / `['admin-products','costs']` / `['admin-categories']` | `useAdminProducts`, `useCatalogCosts`, … | Costs come from an admin-only RPC |
+| `['admin-inventory', 'low-stock' \| 'movements' \| 'requests', …]` | `useInventory` hooks | |
+| `['admin-settings']` | `useStoreSettings` | Alert and back-in-stock switches |
+| `['admin-discounts']` / `['admin-discounts','usage']` | `useDiscounts` hooks | |
 | `['admin-analytics']` | `useAdminAnalytics` | Single RPC call |
 
 Mutations invalidate `['admin-orders']` and `['admin-analytics']` together, so the dashboard
-never disagrees with the order queue.
+never disagrees with the order queue; anything that moves stock also invalidates
+`['admin-products']`, `['admin-inventory']` and the storefront's `['products']`.
 
 **Client state — Zustand.** Persisted stores use `localStorage` with explicit `partialize`, so
 only the intended slice survives a reload.
@@ -621,24 +658,30 @@ Two details worth carrying in your head:
 `localStorage` is the only cart — migration `013` dropped the `carts`/`cart_items` tables
 entirely (owner decision recorded in `ROADMAP.md`).
 
-- **Line identity** is `productId::selectedSize`, so two sizes of one product are separate
-  lines.
+- **Line identity** is `cartLineKey()`: `productId::variantId`, so two sizes or colours of one
+  product are separate lines. A line saved before variant ids existed (`productId::size:M`) is
+  migrated to its variant id by the next catalogue sync, and duplicates are merged.
+- **Line display** (`selectedColor` / `selectedSize`, price, photo) comes from the variant:
+  `unitPrice()` uses the variant's own price when it has one, and `cartLineImage()` the chosen
+  colour's photo.
 - **Quantity caps** come from [`src/lib/stock.ts`](src/lib/stock.ts), never from raw
   `stock_quantity`. That module encodes three rules that used to be scattered and disagreeing:
   1. Stock can be **negative** (migration 013 allows oversell depth), so `sellableStock()`
      clamps at 0 — otherwise `Math.min(qty, -5)` would put a negative quantity in the cart.
-  2. For a sized line the binding limit is the **variant's** stock. A loaded but empty size
-     list means no size is on sale, so the line gets 0; only an unloaded list (listing
-     queries) falls back to the product total.
-  3. `products.stock_quantity` is still an upper bound for a sized line — `availableStock()`
-     takes the **min** of the two. Since migration 021 it is derived from the sizes on sale,
-     so it only binds when the size itself has been switched off.
-- **Size choice** (`sizeChoiceFits()`): a sized product (`has_sizes`) can only be added with a
-  size, an unsized one only without — both are what checkout would refuse.
+  2. For a line with a variant (size and/or colour) the binding limit is the **variant's**
+     stock. A loaded list without that variant (or with it switched off) means it is not on
+     sale, so the line gets 0; only an unloaded list (listing queries) falls back to the
+     product total.
+  3. `products.stock_quantity` is still an upper bound — `availableStock()` takes the **min**
+     of the two. Since migrations 021/022 it is derived from the variants on sale, so it only
+     binds when the variant itself has been switched off.
+- **Variant choice** (`variantChoiceFits()`): a product with sizes or colours can only be added
+  with a variant, one without only without — both are what checkout would refuse.
 - **`syncWithCatalog(products)`** (driven by `useCartSync` on mount) adopts fresh prices and
-  images, drops products that vanished or were deactivated, drops lines whose product started
-  or stopped being sold by size, clamps quantities, and returns `true` when the shopper should
-  be told. Failure is non-fatal: the server re-validates everything at checkout anyway.
+  images, drops products that vanished or were deactivated, drops lines whose variant no longer
+  fits the product (sizes or colours switched on or off), clamps quantities, and returns `true`
+  when the shopper should be told. Failure is non-fatal: the server re-validates everything at
+  checkout anyway.
 
 ### 9.5 Data layer — `src/lib/api.ts`
 
@@ -653,10 +696,13 @@ security reasons and must not be replaced with `*`:
 | Function | Reads/writes | Notes |
 |---|---|---|
 | `fetchProducts(filters)` | `products` | Paginated (default 12). `count: 'estimated'` so filters and search keystrokes don't pay for a full `COUNT(*)`. Category filter uses `categories!inner` — a left join would only null the embed, not exclude rows |
-| `fetchProductBySlug(slug)` | `products` + `product_variants` | Active variants loaded separately, ordered by `sort_order` |
+| `fetchProductBySlug(slug)` | `products` + `product_variants` + `product_colors` | Active variants and colours, ordered by `sort_order`; images carry their `color_id` |
 | `fetchFeaturedProducts()` | `products` | `is_featured`, limit 8 |
 | `fetchProductsByIds(ids)` | `products` + variants | Cart sync; variants included so per-size limits survive |
 | `fetchCategories()` | `categories` | Active only, by `sort_order` |
+| `fetchSizeGuide(id)` / `fetchSizeGuides()` / `saveSizeGuide` / `deleteSizeGuide` / `setSizeGuideCategories` | `size_guides`, `categories.size_guide_id` | Public read; writes admin-only by RLS |
+| `fetchBackInStockEnabled()` / `requestStockNotification(…)` | `store_settings` / RPC `request_stock_notification` | The "Notify me" form; HINT codes become `AppError.code` (`invalid_email`, `rate_limited`, …) |
+| `previewDiscountCode(code)` | RPC `preview_discount_code` | What a code would do, before paying; the real discount is computed again by the checkout function |
 | `fetchProfile(userId)` | `profiles` | |
 | `fetchAddresses` / `createAddress` | `addresses` | |
 | `fetchShippingMethods()` | `shipping_methods` | Active only |
@@ -665,19 +711,27 @@ security reasons and must not be replaced with `*`:
 | `submitReview(...)` | `product_reviews` upsert | Rating clamped 1–5, body trimmed to `REVIEW_BODY_MAX_LENGTH` (2000) |
 | `fetchOrders` / `fetchOrderById` | `orders` + `order_items` | RLS scopes to owner |
 | `cancelOrder(orderId)` | → `handle-order-action` | Never a direct table write |
-| `fetchAdminOrders(filters)` | `orders` + items + profile | Page size 50, `status` and `needsReviewOnly` filters, exact count |
-| `updateOrderStatus` | `orders` | Direct write; DB transition guard still applies |
+| `fetchAdminOrders(filters)` | `orders` + items + profile | Page size 50, `status`, `needsReviewOnly` and date filters, exact count |
+| `fetchAllAdminOrders(filters \| { ids })` | idem | Every matching order (pages of 500, up to 5,000) for CSV export and printing |
+| `updateOrderStatus` | `orders` | Direct write; DB transition guard still applies (and 024 refuses settling a `processing` / `requires_action` order this way) |
 | `updateOrderTracking` | → `update-tracking` | Client never sends a status |
-| `markOrderDelivered` / `refundOrder` | → `handle-order-action` | |
+| `markOrderDelivered` / `refundOrder` / `refundOrderLines(…)` | → `handle-order-action` | `refundOrderLines` sends a client request id (the refund's idempotency key), the lines, quantities, restock flags and shipping |
+| `adminCancelOrder` / `syncOrderPayment` / `confirmOrderPayment` | → `handle-order-action` | Pre-payment orders: close the Stripe session and cancel, apply what Stripe says, or confirm a held payment |
+| `exchangeOrderItem(…)` / `resolveOrderReview(…)` / `issueInvoices(ids)` | RPCs `admin_exchange_order_item`, `admin_resolve_review`, `admin_issue_invoices` | |
+| `fetchOrderEvents` / `addOrderNote` / `deleteOrderNote` / `fetchOrderRefunds` | `order_events`, `order_refunds` | The order timeline. Admins can only insert `note` rows, signed as themselves, and delete `note` rows; every other event is written by triggers and functions |
 | `fetchAdminAnalytics()` | RPC `admin_analytics` | Aggregates computed in the DB, not by downloading every order |
-| `fetchAdminProducts` / `createProduct` / `updateProduct` | `products` (+ every variant, inactive included) | `createProduct` resolves a unique slug with up to 5 attempts. `updateProduct` is for non-stock fields |
-| `setProductInventory(input)` | RPC `admin_set_product_inventory` | The product editor's single write path for sizes and stock: replaces the ordered size list atomically, or switches the product to one stock figure. Throws `StockConflictError` when a figure moved since the editor loaded it |
-| `setVariantStock(changes)` | RPC `admin_set_variant_stock` | Catalog quick restock of individual sizes, same optimistic check |
-| `updateProductStock(id, stock, expected)` | `products` | Unsized quick restock: `UPDATE … WHERE has_sizes = false AND stock_quantity = expected`; zero rows → `StockConflictError` |
+| `fetchAdminProducts` / `createProduct` / `updateProduct` | `products` (+ every variant and colour, inactive included) | `createProduct` resolves a unique slug with up to 5 attempts. `updateProduct` is for non-stock fields |
+| `fetchCatalogCosts()` | RPC `admin_catalog_costs` | Product and variant costs (hidden from the public API) |
+| `saveProductVariants(id, config)` | RPC `admin_save_product_variants` | The product editor's single write path for sizes, colours, variant prices/costs and stock. Throws `StockConflictError` (with the variant id) when a figure moved since the editor loaded it, `AppError('sku_taken')` for a duplicate SKU |
+| `setVariantStock(changes, note)` / `setProductStock(id, stock, expected, note)` | RPCs `admin_set_variant_stock` / `admin_set_product_stock` | Quick restock from the catalogue or the inventory page, same optimistic check; the note goes to the stock history |
 | `fetchProductInventory(id)` | `products` + variants | Current figures an editor rebases on after a conflict |
+| `duplicateProduct(id, name)` / `importProducts(rows, options)` | RPCs `admin_duplicate_product` / `admin_import_products` | An import failure is `AppError('import_row')` with the row index |
 | `uploadProductImage(file)` | Storage `product-images` | Random UUID filename; returns the public URL |
-| `addProductImages` / `deleteProductImage` / `setPrimaryProductImage` | `product_images` | Primary is clear-then-set (a partial unique index enforces one per product) |
+| `addProductImages` / `deleteProductImage` / `setPrimaryProductImage` / `setImageColor` | `product_images` | Primary is clear-then-set (a partial unique index enforces one per product) |
 | `fetchAdminCategories` / `createCategory` | `categories` | |
+| `fetchInventoryMovements(filters)` / `fetchAllInventoryMovements` / `fetchLowStock` / `fetchStockRequests` | `inventory_movements`, RPCs `admin_low_stock`, `admin_stock_requests` | |
+| `fetchStoreSettings` / `updateStoreSettings` / `runStoreWorker(task)` | RPCs `admin_get_store_settings` / `admin_update_store_settings`, → `store-worker` | |
+| `fetchDiscountCodes` / `fetchDiscountUsage` / `saveDiscountCode` / `deleteDiscountCode` | `discount_codes`, RPC `admin_discount_usage` | A used code cannot be deleted (`AppError('code_used')`); a duplicate code is `AppError('code_taken')` |
 
 `invokeOrderFunction()` is the shared Edge Function caller: it pulls a fresh access token from
 `supabase.auth.getSession()`, sends `Authorization: Bearer …` plus `apikey`, and surfaces the
@@ -689,16 +743,16 @@ Each module owns its pages, and where useful its own components and constants.
 
 | Module | Pages | Notable behaviour |
 |---|---|---|
-| `features/products` | `HomePage`, `ProductListPage`, `ProductDetailPage` | Home falls back to newest products when nothing is flagged featured; detail page handles variants, reviews and related products. `HomePage` carries a slug→icon map — update it if you rename category slugs |
-| `features/cart` | `CartPage` (+ `CartItemRow`) | Mirrors the drawer with a wider view |
-| `features/checkout` | `CheckoutPage`, `CheckoutSuccessPage`, `CheckoutCancelPage` | Address form imports the country list, postal patterns and length caps **from the Edge Function's shared module** so client and server cannot drift. Success page polls for the webhook-created order before clearing the cart |
+| `features/products` | `HomePage`, `ProductListPage`, `ProductDetailPage` | Home falls back to newest products when nothing is flagged featured; detail page handles colours (`?color=` in the URL, gallery per colour), sizes, the variant's own price, the size guide drawer, "Notify me" for a sold-out choice, reviews and related products. `HomePage` carries a slug→icon map — update it if you rename category slugs |
+| `features/cart` | `CartPage` (+ `CartItemRow`, `CartLineOptions`) | Mirrors the drawer with a wider view; each line shows its colour and size |
+| `features/checkout` | `CheckoutPage`, `CheckoutSuccessPage`, `CheckoutCancelPage` | Address form imports the country list, postal patterns and length caps **from the Edge Function's shared module** so client and server cannot drift. The discount field previews a code with `preview_discount_code` and `computeDiscount()` (the same module the checkout function uses). Success page polls for the webhook-created order before clearing the cart |
 | `features/orders` | `OrdersPage`, `OrderDetailPage` | Only `paid` orders are cancellable from the UI; error codes are mapped to human messages |
 | `features/auth` | `LoginPage`, `AuthCallbackPage`, `ResetPasswordPage` | Email/password + Google; sign-up collects `full_name` into user metadata |
 | `features/profile` | `ProfilePage` | Open orders, "buy again", sign-out, admin entry when applicable |
 | `features/settings` | `SettingsPage` | Theme, language, cookie preferences, location/analytics toggles, app version |
 | `features/help` | `HelpPage` | Contact details read from `storeConfig` |
 | `features/legal` | `PrivacyPage`, `PrivacyPolicyPage`, `TermsPage`, `CookiePolicyPage` | Text lives in `constants/{privacy,terms,cookie}Data.ts`; `LegalDocument` renders all three identically and runs `fillPlaceholders()` from `storeConfig` |
-| `features/admin` | `AdminDashboardPage`, `AdminOrdersPage`, `AdminCatalogPage`, `AdminFinancePage` | See [§19](#19-admin-console) |
+| `features/admin` | `AdminDashboardPage`, `AdminOrdersPage`, `AdminCatalogPage`, `AdminFinancePage`, `AdminInventoryPage`, `AdminDiscountsPage`, `AdminSizeGuidesPage`, `OrderPrintPage` | See [§19](#19-admin-console) |
 
 ### 9.7 Shared components
 
@@ -713,14 +767,20 @@ Each module owns its pages, and where useful its own components and constants.
 | `CookieConsentBanner` | Granular consent; "Reject all" has equal prominence |
 | `Media` | Image with fixed aspect ratios and optional slow hover zoom |
 | `StatusIndicator` | One status vocabulary for the whole product — a dot carries tone, the word carries meaning, so state is never colour-only |
+| `SizeGuideTable` | A size guide as the shopper sees it; also the admin's live preview |
 | `Drawer`, `Badge`, `Spinner`, `Skeletons`, `SkeletonCard`, `ErrorMessage`, `Toaster`, `Reveal`, `BackButton`, `Wordmark`, `icons` | Primitives |
 
 ### 9.8 Business-logic modules
 
 | Module | Responsibility |
 |---|---|
-| [`lib/pricing.ts`](src/lib/pricing.ts) | `computeOrderTotals(subtotal, shipping, taxRate)` — tax applies to **subtotal + shipping**, matching the server. Everything rounded to the cent; invalid or negative inputs collapse to 0. Display estimate only |
-| [`lib/stock.ts`](src/lib/stock.ts) | `sellableStock`, `availableStock`, `isSoldOut` — see [§9.4](#94-the-cart) |
+| [`lib/pricing.ts`](src/lib/pricing.ts) | `computeOrderTotals(subtotal, shipping, taxRate, discount)` — tax applies to **subtotal + shipping after the discount**, matching the server. `unitPrice` / `lineTotal` / `cartSubtotal` use the variant's own price when it has one. Everything rounded to the cent; invalid or negative inputs collapse to 0. Display estimate only |
+| [`lib/stock.ts`](src/lib/stock.ts) | `sellableStock`, `lineVariant`, `availableStock`, `variantChoiceFits`, `variantFitsShape`, `isSoldOut` — see [§9.4](#94-the-cart) |
+| [`lib/variants.ts`](src/lib/variants.ts) | Storefront helpers (sellable colours and variants, labels, price range, images per colour) and the product editor's draft model: build from a product, edit cells, validate, and turn into the `admin_save_product_variants` payload |
+| [`lib/sizes.ts`](src/lib/sizes.ts) | Size labels, presets, name/SKU limits, stock-input parsing |
+| [`lib/csv.ts`](src/lib/csv.ts), [`lib/productCsv.ts`](src/lib/productCsv.ts), [`lib/orderCsv.ts`](src/lib/orderCsv.ts) | CSV writing/reading (BOM, `,` or `;` by language, formula-injection guard, separator detection), the catalogue import plan and the order exports |
+| [`supabase/functions/_shared/discounts.ts`](supabase/functions/_shared/discounts.ts) | **Shared with the backend.** `computeDiscount()` in integer cents (largest-remainder allocation per line), code normalisation and pattern |
+| [`supabase/functions/_shared/refunds.ts`](supabase/functions/_shared/refunds.ts) | **Shared with the backend.** What is left to refund and the suggested amount for chosen lines (with their share of discount and tax) |
 | [`config/storeConfig.ts`](src/config/storeConfig.ts) | Brand, contact and legal identity; `fillPlaceholders()` injects values into legal text; `hasUnfilledPlaceholders()` reports unfilled tokens (currently defined but not called anywhere) |
 | [`supabase/functions/_shared/address.ts`](supabase/functions/_shared/address.ts) | **Shared with the backend.** Shipping countries, postal patterns, field caps, `sanitizeAddress()` |
 | [`lib/supabaseClient.ts`](src/lib/supabaseClient.ts) | Typed client; `persistSession`, `autoRefreshToken`, `detectSessionInUrl` all on. Throws a helpful error if env vars are missing |
@@ -773,6 +833,8 @@ Four languages: `en` (default), `it`, `es`, `fr`.
 |---|---|
 | [`src/lib/i18n.ts`](src/lib/i18n.ts) | Base dictionary (~2,900 lines) and the `useI18n()` hook |
 | [`src/lib/i18nCopy.ts`](src/lib/i18nCopy.ts) | "Editorial copy deck" — newer surfaces (home sections, search, cart drawer, admin) kept together so the brand voice reads as one piece. **Deep-merged over** the base dictionary: a key present in both wins from here |
+| [`src/lib/i18nCommerce.ts`](src/lib/i18nCommerce.ts) | "Commerce copy deck" — variants, size guides, back-in-stock, inventory, discounts, refunds and exchanges, exports and printed documents. Merged after the editorial deck |
+| [`src/lib/i18n.test.ts`](src/lib/i18n.test.ts) | Fails when the code uses a key English lacks, a template key (`` `admin.inventory.reason.${r}` ``) has no section behind it, or Italian, Spanish or French differ from English in keys or `{{placeholders}}` |
 | [`src/store/preferencesStore.ts`](src/store/preferencesStore.ts) | Current language + `LANGUAGE_OPTIONS` (label, flag, country) |
 
 `useI18n()` returns:
@@ -791,13 +853,15 @@ non-English dictionaries avoid accented characters for consistency. Currency sta
 regardless of language — only formatting changes.
 
 Emails and legal placeholders are **not** part of this system: emails are English and configured
-via Edge Function secrets; legal text is translated inside `features/legal/constants/*`.
+via Edge Function secrets (the back-in-stock emails carry their own en/it/es/fr copy inside
+`store-worker`, picked by the language the customer browsed in); legal text is translated inside
+`features/legal/constants/*`.
 
 ---
 
 ## 12. Database
 
-Everything lives in the `public` schema. What follows is the **final state after migration 016**,
+Everything lives in the `public` schema. What follows is the **final state after migration 026**,
 not the state of `schema.sql` alone.
 
 ### 12.1 Enums
@@ -826,7 +890,8 @@ abort signup with "Database error saving new user" and leave the account profile
 ### 12.3 Catalogue
 
 **`categories`** — `id`, `name`, `slug` (UNIQUE), `description`, `image_url`, `parent_id`
-(self-FK, ON DELETE SET NULL), `sort_order`, `is_active`, timestamps. Indexes on `slug`,
+(self-FK, ON DELETE SET NULL), `sort_order`, `is_active`, `size_guide_id` (022, FK →
+`size_guides` ON DELETE SET NULL — the guide its products show), timestamps. Indexes on `slug`,
 `parent_id`.
 
 **`products`**
@@ -838,37 +903,59 @@ abort signup with "Database error saving new user" and leave the account profile
 | `name`, `slug` (UNIQUE), `description` | TEXT | `slug` is the product URL |
 | `price` | NUMERIC(10,2) ≥ 0 | |
 | `compare_at_price` | NUMERIC(10,2) ≥ 0 | Struck-through "before" price |
-| `cost_price` | NUMERIC(10,2) ≥ 0 | 🔒 **Not readable by `anon`/`authenticated`** (016) |
+| `cost_price` | NUMERIC(10,2) ≥ 0 | 🔒 **Not readable by `anon`/`authenticated`** (016); admins read it through `admin_catalog_costs()` |
 | `sku` | TEXT UNIQUE | |
-| `stock_quantity` | INTEGER NOT NULL DEFAULT 0 | **No `>= 0` constraint** — negative = backorder depth. For a sized product it is **derived** (see below) |
-| `low_stock_threshold` | INTEGER DEFAULT 5 | For a sized product it applies to each size |
+| `stock_quantity` | INTEGER NOT NULL DEFAULT 0 | **No `>= 0` constraint** — negative = backorder depth. For a product with variants it is **derived** (see below) |
+| `low_stock_threshold` | INTEGER DEFAULT 5 | For a product with variants it applies to each variant |
 | `weight_grams` | INTEGER ≥ 0 | |
 | `is_active`, `is_featured` | BOOLEAN | |
 | `has_sizes` | BOOLEAN NOT NULL DEFAULT FALSE | Sold by size (021): checkout requires a size, stock is kept per size |
 | `size_label` | TEXT NOT NULL DEFAULT `size` | The word above the size selector: `size`, `measure`, `length`, `shoe_size`, `ring_size`, `waist` (CHECK) |
+| `has_colors` | BOOLEAN NOT NULL DEFAULT FALSE | Sold by colour (022). With `has_sizes` too, stock is kept per colour × size |
+| `color_label` | TEXT NOT NULL DEFAULT `color` | `color`, `material`, `finish`, `pattern`, `style`, `scent`, `variant` (CHECK) |
+| `price_min` / `price_max` | NUMERIC(10,2) | **Derived** (022): lowest / highest price among the variants on sale (or `price`), for "From …" and the price filter |
+| `size_guide_id` | UUID | FK → `size_guides` ON DELETE SET NULL; NULL = the category's guide |
 | `metadata` | JSONB | |
 
-**Derived stock (021).** When `has_sizes` is true, `stock_quantity` is the sum of
-`GREATEST(stock_qty, 0)` over the product's **active** variants — a backordered size counts as 0
-so it cannot hide the sizes still on the shelf, and a switched-off size is not for sale.
-`products_sync_sized_stock` (BEFORE INSERT/UPDATE on `products`) recomputes it on every write,
-whoever makes it, and `product_variants_touch_stock` (AFTER INSERT/UPDATE/DELETE on variants)
-refreshes it whenever a size's stock or availability changes. An unsized product keeps its own
-counter exactly as before.
+**Derived figures (021, 022).** When `has_sizes` or `has_colors` is true, `stock_quantity` is
+the sum of `GREATEST(stock_qty, 0)` over the product's **active** variants — a backordered
+variant counts as 0 so it cannot hide the ones still on the shelf, and a switched-off variant is
+not for sale. `price_min` / `price_max` follow the variants' own prices (an empty price is the
+product price). `products_sync_rollups` (BEFORE INSERT/UPDATE on `products`) recomputes them on
+every write, whoever makes it, and `product_variants_touch_rollups` (AFTER INSERT/UPDATE/DELETE
+on variants) refreshes them — and each colour's derived `is_active` — whenever a variant changes.
+A product without variants keeps its own counter exactly as before. (Bulk writers set the
+transaction-local `app.defer_rollups` flag and refresh once at the end.)
 
 Indexes: `slug`, `category_id`, `is_active`, `is_featured`, `price`, a **GIN trigram** index on
 `name` (so the storefront's `ILIKE '%term%'` search stops sequentially scanning), and a partial
 `created_at DESC WHERE is_active` index for listing pages.
 
-**`product_images`** — `product_id` (CASCADE), `url`, `alt_text`, `sort_order`, `is_primary`.
-A **partial unique index** enforces at most one primary image per product.
+**`product_images`** — `product_id` (CASCADE), `url`, `alt_text`, `sort_order`, `is_primary`,
+`color_id` (022, FK → `product_colors` ON DELETE SET NULL — NULL = a photo of the product as a
+whole, shown for every colour). A **partial unique index** enforces at most one primary image
+per product.
 
-**`product_variants`** (migration 004) — one row per size of a sized product: `product_id`
-(CASCADE), `size` (trimmed, 1–40 chars — 021), `sku` (≤ 64 chars, unique when set — 021),
-`stock_qty` (may go negative), `sort_order` (display order), `is_active` (switched off = not
-for sale and hidden from the storefront), UNIQUE `(product_id, size)`. A size referenced by an
-order line cannot be deleted (`order_items.variant_id` is `ON DELETE RESTRICT`); the admin
-functions switch it off instead.
+**`product_colors`** (022) — `product_id` (CASCADE), `name` (trimmed, 1–40 chars, unique per
+product case-insensitively), `swatch` (`#RRGGBB` or NULL = shown by name), `sort_order`,
+`is_active` (**derived**: true while the colour has a variant on sale), timestamps. The public
+can read only active colours of active products.
+
+**`product_variants`** (migration 004) — one row per size, per colour, or per colour × size:
+`product_id` (CASCADE), `size` (trimmed, 1–40 chars, NULL when sold by colour only), `color_id`
+(022, FK → `product_colors`, NULL when sold by size only; a CHECK requires one of the two, and a
+trigger requires the colour to belong to the same product), `price` (022, NULL = product price),
+`sku` (≤ 64 chars, unique when set), `stock_qty` (may go negative), `sort_order`, `is_active`
+(switched off = not for sale and hidden from the storefront), UNIQUE NULLS NOT DISTINCT
+`(product_id, color_id, size)`. A variant referenced by an order line cannot be deleted
+(`order_items.variant_id` is `ON DELETE RESTRICT`); the admin functions switch it off instead.
+
+**`product_variant_costs`** (022) — `variant_id` PK (CASCADE), `cost_price`. Admin-only table:
+variant costs stay out of the public API like `products.cost_price`.
+
+**`size_guides`** (022) — `name`, `columns` (JSONB array of headings, 1–12), `rows` (JSONB array
+of string arrays, ≤ 60), `notes`, timestamps. Public read, admin write. Attached through
+`products.size_guide_id` or `categories.size_guide_id`.
 
 ### 12.4 `addresses`
 
@@ -893,7 +980,9 @@ server-side creates addresses on a user's behalf.
 | `stripe_session_id` | TEXT UNIQUE | |
 | `stripe_payment_intent_id` | TEXT UNIQUE | |
 | `tracking_id`, `tracking_updated_at` | TEXT / TIMESTAMPTZ | |
-| `refund_id` (UNIQUE), `refund_amount`, `refunded_at` | TEXT / NUMERIC / TIMESTAMPTZ | `refund_id` is the per-order refund lock |
+| `refund_id` (UNIQUE), `refund_amount`, `refunded_at` | TEXT / NUMERIC / TIMESTAMPTZ | Since 024: the latest Stripe refund id, the **total** refunded so far and when; every refund is a row of `order_refunds` |
+| `discount_code`, `discount_id`, `shipping_discount` | TEXT / UUID FK / NUMERIC | 024/025: the code used (snapshot), its row, and the part of `discount_amount` taken off shipping |
+| `invoice_number`, `invoice_issued_at` | TEXT UNIQUE / TIMESTAMPTZ | 024: `YYYY-00001`, issued on first print |
 | `delivered_at` | TIMESTAMPTZ | |
 | `needs_review` | BOOLEAN DEFAULT FALSE | Operator attention flag |
 | `review_reason` | TEXT | e.g. `oversold`, or a webhook business-rule rejection |
@@ -908,12 +997,40 @@ Indexes: `user_id`, `status`, `created_at DESC`, `(user_id, created_at DESC)`, p
 
 `order_id` (CASCADE), `product_id` (RESTRICT), snapshots `product_name` / `product_image`,
 `unit_price`, `quantity` > 0, `total_price`, `selected_size` (the label the customer saw),
-`variant_id` (021, FK → `product_variants` ON DELETE RESTRICT — the size row the line takes its
-stock from, so a refund finds it even after the size is renamed; historical lines were linked by
-their `selected_size`).
+`variant_id` (021, FK → `product_variants` ON DELETE RESTRICT — the variant row the line takes
+its stock from, so a refund finds it even after the size or colour is renamed; historical lines
+were linked by their `selected_size`), `selected_color` and `sku` (022, snapshots),
+`discount_amount` (024, the line's share of the discount code), `refunded_quantity` and
+`restocked_quantity` (024, units refunded / put back in stock so far).
 
 A CHECK enforces `total_price = ROUND(unit_price * quantity, 2)`, so a line can never disagree
-with its own arithmetic.
+with its own arithmetic. Lines are immutable once the order is paid, except the refund and
+exchange counters, which only the refund and exchange functions may move (they open a
+transaction-local allowlist, `app.order_items_write`).
+
+**`order_item_costs`** (022) — `order_item_id` PK (CASCADE), `unit_cost`: what one unit cost
+the store when it was sold (written by the checkout function, admin-only), for the margin.
+
+### 12.6b Order operations, inventory and discounts (022–025)
+
+| Table | Holds | Access |
+|---|---|---|
+| `order_events` (024) | The order timeline: `kind` (`note`, `status`, `tracking`, `refund`, `exchange`, `review`, `payment`, `invoice`, `email`), `message`, `data` JSONB, `actor_id` | Admin read; admins insert/delete only `note` rows; the rest is written by triggers and functions |
+| `order_refunds` (024) | Every refund: amount, `status` (Stripe's), `source` (`admin`, `customer`, `stripe`), reason, `lines` (order line, quantity, restock), `shipping_amount`, `stripe_refund_id`, `applied_at` | Admin read; written only by the refund functions |
+| `invoice_counters` (024) | `year` → `last_number`, for gapless invoice numbers | Functions only |
+| `inventory_movements` (023) | One row per stock change: product, variant (+ label snapshot), `delta`, `stock_after`, `reason` (`sale`, `cancel`, `refund`, `return`, `exchange`, `manual`, `import`, `initial`, `other`), `detail`, order, actor, note | Admin read; written only by triggers |
+| `store_settings` (023) | One row: `back_in_stock_enabled`, `low_stock_alerts`, `alert_emails` | `anon` reads only `back_in_stock_enabled`; admins through `admin_get/update_store_settings()` |
+| `stock_notifications` (023) | "Email me when it is back": product, variant, email (lower-cased), user, locale, `notified_at` | Admin read/delete; shoppers add requests only through `request_stock_notification()`, the worker claims them through service-role functions |
+| `stock_notification_attempts` (023) | SHA-256 of the requester (IP), for the rate limit (20 an hour) | Functions only |
+| `low_stock_alert_state` (023) | Items already reported in a digest, until restocked | Functions only |
+| `discount_codes` (025) | `code` (unique, `[A-Z0-9][A-Z0-9_-]{2,39}`), `kind` (`percent`, `fixed`, `free_shipping`), `value`, `min_subtotal`, `starts_at` / `ends_at`, `usage_limit`, `per_customer_limit`, `applies_to` (`all`, `categories`, `products`) + id arrays, `exclude_sale_items`, `is_active` | Admin only; shoppers use `preview_discount_code()` |
+| `discount_redemptions` (025) | One row per order that used a code (`order_id` UNIQUE, amount); a code with redemptions cannot be deleted | Functions only (admins read) |
+| `discount_attempts` (025) | Failed previews, for the throttle | Functions only |
+
+**Stock history context.** Writers describe a change before making it with the
+transaction-local settings `app.stock_reason`, `app.stock_order` and `app.stock_note`
+(`set_stock_context()`); the logging triggers read them, so every movement has a reason no
+matter which code path moved the stock.
 
 ### 12.7 `product_reviews`
 
@@ -979,13 +1096,23 @@ touches it. This table is the webhook's idempotency ledger.
 | `get_my_role()` | SQL, STABLE, SECURITY DEFINER | Reads the committed role; used by the profile-update policy |
 | `validate_order_status_transition()` | BEFORE UPDATE on `orders` | Rejects illegal status jumps — applies to admins and the service role too |
 | `enforce_order_immutability()` | BEFORE UPDATE on `orders` | Blocks changes to financial fields, `shipping_address` and `user_id` once `paid`/`shipped`/`delivered`/`refunded` |
-| `enforce_order_items_immutability()` | BEFORE INS/UPD/DEL on `order_items` | Blocks any line change once the parent order is paid |
-| `manage_stock_on_status_change()` | **BEFORE** UPDATE on `orders`, SECURITY DEFINER | Deducts on first `paid`, restores on `failed`/`cancelled`/`refunded` from `paid` — line by line, moving the size row (`variant_id`, or the recorded size for older lines) for sized products and the product counter for unsized ones. Locks the products involved in id order first. Flags `needs_review = true, review_reason = 'oversold'` when a counter goes negative. **Never raises** — the customer has already been charged |
-| `sized_product_stock(product_id)` | SQL, STABLE | The derived total of a sized product. Not callable through the API |
-| `sync_sized_product_stock()` | BEFORE INS/UPD on `products`, SECURITY DEFINER | Overwrites a sized product's `stock_quantity` with the derived total |
-| `touch_sized_product_stock()` | AFTER INS/UPD/DEL on `product_variants`, SECURITY DEFINER | Refreshes the product total when a size's stock, availability or product changes |
-| `admin_set_product_inventory(...)` | plpgsql, SECURITY DEFINER, returns JSONB | Admin only. Replaces a product's ordered size list atomically (or switches it to one stock figure): validates names/SKUs, parks renamed rows so swaps cannot collide, deletes dropped sizes — or switches them off when an order line references them — and refuses (HINT `stock_conflict`) a stock figure that moved since the editor read it |
-| `admin_set_variant_stock(changes)` | plpgsql, SECURITY DEFINER, returns `SETOF product_variants` | Admin only. Sets individual sizes' stock with the same optimistic check |
+| `enforce_order_items_immutability()` | BEFORE INS/UPD/DEL on `order_items` | Blocks any line change once the parent order is paid — except the refund/exchange counters, which only the functions below may move |
+| `manage_stock_on_status_change()` | **BEFORE** UPDATE on `orders`, SECURITY DEFINER | Deducts on first `paid`, restores on `failed`/`cancelled`/`refunded` from `paid` — line by line, moving the variant row (`variant_id`, or the recorded size for older lines) or the product counter, and only the units not already put back by a partial refund (`restocked_quantity`). Locks the products involved in id order first. Flags `needs_review = true, review_reason = 'oversold'` when a counter goes negative. **Never raises** — the customer has already been charged |
+| `guard_order_status_actions()` / `log_order_changes()` | BEFORE UPDATE OF status / AFTER UPDATE on `orders` (024) | A signed-in session cannot move `processing` / `requires_action` to `paid`, `failed` or `cancelled` (HINT `use_order_action`); status, tracking and review changes are written to `order_events` |
+| `sized_product_stock(product_id)` | SQL, STABLE | The derived total of a product with variants (sum of active variants, negatives as 0). Not callable through the API |
+| `sync_product_rollups()` / `touch_variant_rollups()` | BEFORE INS/UPD on `products` / AFTER INS/UPD/DEL on `product_variants`, SECURITY DEFINER (022) | Keep `stock_quantity`, `price_min`, `price_max` and colour availability derived ([§12.3](#123-catalogue)) |
+| `log_variant_stock()` / `log_product_stock()` | AFTER INSERT/UPDATE (and variant DELETE) triggers (023) | Write every stock change to `inventory_movements` with the reason set by the writer (`set_stock_context()`); a new product or variant logs its opening stock |
+| `admin_save_product_variants(product_id, config)` | plpgsql, SECURITY DEFINER, returns JSONB (022) | Admin only. **The** write path for sizes, colours, variant prices/costs and stock: validates names, swatches and SKUs, renames without collisions, removes unlisted variants — or switches them off when an order line references them — and refuses (HINT `stock_conflict`, DETAIL = variant id) a figure that moved since the editor read it, or a taken SKU (HINT `sku_taken`) |
+| `admin_set_product_inventory(...)` | plpgsql, SECURITY DEFINER (021 → wrapper since 022) | Kept so an admin app built for 021 keeps working on products without colours |
+| `admin_set_variant_stock(changes, note)` / `admin_set_product_stock(id, stock, expected, note)` | plpgsql, SECURITY DEFINER | Admin only. Quick restock with the same optimistic check; the note goes to the stock history |
+| `admin_catalog_costs()` / `admin_duplicate_product()` / `admin_import_products()` | plpgsql, SECURITY DEFINER (022, 026) | Costs for the editor; a hidden, SKU-less, zero-stock copy; the all-or-nothing CSV import (HINT `import_row`, DETAIL = row index) |
+| `request_stock_notification(…)` | plpgsql, SECURITY DEFINER, `anon` + `authenticated` (023) | A back-in-stock request, refused with a HINT (`disabled`, `invalid_email`, `not_found`, `in_stock`, `rate_limited`) |
+| `admin_low_stock()` / `admin_stock_requests()` / `admin_get_store_settings()` / `admin_update_store_settings()` | Admin only (023) | The inventory page |
+| `claim_stock_notifications()` / `release_stock_notifications()` / `low_stock_digest_candidates()` / `mark_low_stock_alerted()` / `invoke_store_worker()` / `purge_stock_requests()` | Service role / pg_cron only (023) | The scheduled emails |
+| `begin_order_refund()` / `complete_order_refund()` / `abandon_order_refund()` / `sync_order_refunds()` | Service role only (024) | Refund bookkeeping, idempotent on a request id; [§16.3](#163-idempotency-and-money-safety) |
+| `admin_exchange_order_item()` / `admin_resolve_review()` / `admin_issue_invoices()` | Admin only (024) | Exchanges (stock moves both ways), closing a review flag with a note, invoice numbers |
+| `preview_discount_code(code)` | `authenticated`, throttled (025) | What a code would do: `ok` plus the rule, or a reason (`not_found`, `expired`, …) |
+| `reserve_discount(…)` / `discount_uses()` / `discount_unavailable_reason()` / `admin_discount_usage()` | Service role / admin (025) | Atomic "take one use" for the checkout function; usage figures for the admin |
 | `check_pending_order_limit()` | BEFORE INS/UPD on `orders` | Max **10** open (`pending`+`processing`) orders per user |
 | `check_address_limit()` | BEFORE INSERT on `addresses` | Max **20** saved addresses per user |
 | `set_review_author_name()` | BEFORE INS/UPD on `product_reviews`, SECURITY DEFINER | Snapshots the reviewer's display name |
@@ -994,9 +1121,11 @@ touches it. This table is the webhook's idempotency ledger.
 | `admin_analytics()` | plpgsql, STABLE, SECURITY DEFINER, returns JSONB | Dashboard aggregates; raises `Admin access required` unless `is_admin()` |
 | `set_user_role(email, role)` | plpgsql, SECURITY DEFINER, returns JSONB | The supported promote/demote path ([§13.4](#134-role-assignment)) |
 
-**`admin_analytics()` returns:** `grossRevenue`, `orders24h`, `orders7d`, `needsReview`,
-`statusCounts`, `bestSeller`, `revenueByDay` (last 30 days), `revenueByStatus`. Revenue counts
-only `paid`, `shipped`, `delivered`.
+**`admin_analytics()` returns:** `grossRevenue`, `partialRefunds`, `refundedTotal`, `orders24h`,
+`orders7d`, `needsReview`, `statusCounts`, `bestSeller`, `revenueByDay` (last 30 days),
+`revenueByStatus`, `discounts30d`, `margin30d` (revenue net of discount shares and refunded
+units, cost, and how many of the units sold had a known cost), `lowStock`, `outOfStock`,
+`stockRequests`. Revenue counts only `paid`, `shipped`, `delivered`.
 
 ### 12.12 The scheduled job (required)
 
@@ -1022,6 +1151,21 @@ SELECT status, return_message, start_time FROM cron.job_run_details ORDER BY sta
 the cron can never cancel an order whose session is still payable — the race that used to
 produce paid-but-cancelled orders.
 
+**The store's jobs (023, 025).** Four more jobs are scheduled the same way:
+
+| Job | Schedule | Does |
+|---|---|---|
+| `store-worker-back-in-stock` | `*/10 * * * *` | `invoke_store_worker('back_in_stock')` — emails everyone waiting for an item that has stock again |
+| `store-worker-low-stock` | `7 * * * *` | `invoke_store_worker('low_stock')` — one digest of the items that just reached their threshold |
+| `purge-stock-requests` | `50 3 * * *` | Deletes requests notified more than 90 days ago (or never, after 180) and day-old rate-limit rows |
+| `purge-discount-attempts` | `55 3 * * *` | Deletes day-old failed discount previews |
+
+`invoke_store_worker()` posts to the `store-worker` function through **pg_net**, reading its
+address and shared secret from **Vault** (`store_worker_url`, `store_worker_secret`); until both
+exist it returns NULL and does nothing. The function needs the same secret as
+`STORE_WORKER_SECRET` ([§15.5](#155-store-worker)). Check a call with
+`SELECT status_code, content FROM net._http_response ORDER BY created DESC LIMIT 5;`.
+
 ### 12.13 Storage
 
 Bucket `product-images`: public read, admin-only write, **5 MB** limit, MIME allowlist
@@ -1044,12 +1188,24 @@ RLS is enabled on every application table. `is_admin()` is `SECURITY DEFINER` wi
 | `products` | `is_active` or admin | admin | admin (`price ≥ 0` in WITH CHECK; 021 dropped `stock_quantity ≥ 0`, which blocked every edit of an oversold product) | admin |
 | `product_images` | parent product visible | admin | admin | admin |
 | `product_variants` | `is_active` | admin | admin | admin |
+| `product_colors` (022) | active colour of an active product, or admin | admin | admin | admin |
+| `product_variant_costs` (022) | admin | admin | admin | admin |
+| `order_item_costs` (022) | nobody through the API (written by the checkout function, read by `admin_analytics()`) | — | — | — |
+| `size_guides` (022) | everyone | admin | admin | admin |
 | `shipping_methods` | `is_active` | admin | admin | admin |
 | `addresses` | owner or admin | owner | owner | owner |
-| `orders` | owner or admin | **nobody** (service role only) | owner: `pending` → `cancelled` only, financial + Stripe fields must be unchanged; admin: any | — |
+| `orders` | owner or admin | **nobody** (service role only) | owner: `pending` → `cancelled` only, financial + Stripe fields must be unchanged; admin: any (but see the 024 action guard) | — |
 | `order_items` | parent order visible | **nobody** (service role only) | — | — |
+| `order_events` (024) | admin | admin, `note` rows signed as themselves | — | admin, `note` rows |
+| `order_refunds` (024) | admin | — (functions) | — | — |
+| `inventory_movements` (023) | admin | — (triggers) | — | — |
+| `store_settings` (023) | everyone, but only `id` and `back_in_stock_enabled` are granted | — | — (admin through `admin_update_store_settings()`) | — |
+| `stock_notifications` (023) | admin | — (`request_stock_notification()`) | — | admin |
+| `discount_codes` (025) | admin | admin | admin | admin (a used code is protected by its redemptions' `RESTRICT`) |
+| `discount_redemptions` (025) | admin | — (`reserve_discount()`) | — | — |
 | `product_reviews` | **everyone** (`USING (TRUE)`) | owner **and** `has_purchased()` | owner **and** `has_purchased()` | owner |
 | `processed_stripe_events` | `USING (false)` — nobody | — | — | — |
+| `invoice_counters`, `stock_notification_attempts`, `low_stock_alert_state`, `discount_attempts` | nobody (functions only) | — | — | — |
 | `storage.objects` (`product-images`) | everyone | admin | admin | admin |
 
 Three of these deserve their reasoning:
@@ -1082,8 +1238,10 @@ The 016 column list is derived from the live table, so a project that added its 
 keeps them readable. **Consequence:** `SELECT *` on `products` is refused for API roles — this
 is why `src/lib/api.ts` names columns via `PRODUCT_COLUMNS`. It also means a column added
 **after** 016 is invisible to the storefront until granted: 021 runs
-`GRANT SELECT (has_sizes, size_label) ON public.products TO anon, authenticated`, and any future
-column needs the same.
+`GRANT SELECT (has_sizes, size_label) ON public.products TO anon, authenticated`, 022 does the
+same for `has_colors, color_label, price_min, price_max, size_guide_id`, and any future column
+needs the same. `store_settings` (023) uses the same technique: the API roles may read only
+`id` and `back_in_stock_enabled`, never the alert recipients.
 
 Verify with:
 
@@ -1095,8 +1253,9 @@ select has_column_privilege('anon','public.products','cost_price','SELECT');  --
 
 - The **anon key** — it is in the client bundle by design.
 - The **Supabase project ref** — it is inside `VITE_SUPABASE_URL`.
-- Active products, their images and variants, active categories, active shipping methods, and
-  **all product reviews** (minus `user_id`).
+- Active products, their images, variants and colours, size guides, active categories, active
+  shipping methods, whether back-in-stock requests are on, and **all product reviews** (minus
+  `user_id`). Variant prices are public; costs are not.
 
 Everything else requires a session, and ownership is re-checked server-side.
 
@@ -1128,9 +1287,14 @@ connection authenticated as and is unaffected by `SET ROLE`.
 
 ## 14. Migration history
 
-Run `schema.sql` → `rls.sql` → migrations `001`…`021` in numeric order → optionally
+Run `schema.sql` → `rls.sql` → migrations `001`…`026` in numeric order → optionally
 `seeds/002_mock_products.sql`. Already-migrated database? Run whatever is newer than your last
 one, then `NOTIFY pgrst, 'reload schema';`
+
+**Re-running older files** is not supported, but the repair rules are: after any older file, run
+019; after `005`, `007`, `013` or `021`, run `021` → `022` → `024` → `026`; after `003`, run
+`024`. `004` and `013` stop with an error once 022 is in (their sizes target the uniqueness rule
+022 replaced) and never need to be re-run.
 
 | # | File | What it does |
 |---|---|---|
@@ -1155,6 +1319,11 @@ one, then `NOTIFY pgrst, 'reload schema';`
 | 019 | `reconcile_reverted_fixes.sql` | Idempotent repair: drops the insert-time stock triggers an old `schema.sql` re-creates (every paid order deducted stock twice) and restores 010's verified-purchase review policies that re-running `004` reverts. Re-run it after re-running any older file |
 | 020 | `stale_order_expiry_cron.sql` | Enables `pg_cron` and schedules `expire-pending-orders` (every 15 min) + a weekly purge of the job history; `expire_stale_pending_orders()` becomes SECURITY DEFINER and is no longer callable through the API; runs it once |
 | 021 | `product_sizes.sql` | **Sized products.** `products.has_sizes` / `size_label` (granted to the API roles); derived stock for sized products (two triggers); `order_items.variant_id` (+ backfill of historical lines); stock trigger rewritten (per-line restore — the old one restored one line per product — and product locks in id order); `products: admin update` no longer requires `stock_quantity ≥ 0`; admin RPCs `admin_set_product_inventory` / `admin_set_variant_stock`; size/SKU constraints; existing products with sizes switched to per-size stock. Re-run it after re-running 005, 007 or 013 (they redefine the stock trigger) |
+| 022 | `catalog_variants.sql` | **Colours and variant prices.** `product_colors`; `products.has_colors` / `color_label` / `price_min` / `price_max` / `size_guide_id`; `product_variants.color_id` / `price`, nullable `size`, uniqueness per product × colour × size; `product_images.color_id`; `size_guides` (+ `categories.size_guide_id`); private `product_variant_costs` and `order_item_costs`; `order_items.selected_color` / `sku`; derived rollups (stock, price range, colour availability); `admin_save_product_variants()` (021's RPC becomes a wrapper), `admin_set_product_stock()`, `admin_catalog_costs()`, `admin_duplicate_product()`, `admin_import_products()` |
+| 023 | `inventory_and_alerts.sql` | `inventory_movements` + logging triggers; `store_settings`; low-stock list and digest state; back-in-stock requests (`request_stock_notification()`, rate-limited) and the worker's claim/release functions; `pg_net` + `invoke_store_worker()` (Vault) and three cron jobs |
+| 024 | `order_operations.sql` | `order_events` (timeline, notes) + triggers; `order_refunds` and the refund functions (partial, line by line, idempotent; Stripe-side refunds mirrored); `order_items.refunded_quantity` / `restocked_quantity` / `discount_amount`; final stock trigger; exchanges; invoice numbers; the status action guard; `admin_analytics()` v2; backfill of historical refunds. Re-run it after 003, 005, 007, 013 or 021 |
+| 025 | `discount_codes.sql` | `discount_codes`, `discount_redemptions`, `discount_attempts`, `orders.discount_id`; `preview_discount_code()` (throttled), `reserve_discount()` (atomic), usage figures; a daily purge job |
+| 026 | `import_keeps_variants.sql` | `admin_import_products()` leaves a product's variants alone when the file has no size or colour column |
 
 > **`orders` references `profiles` twice** (`user_id` and, since 017, `refund_requested_by`), so a
 > bare `profiles(...)` embed is rejected by PostgREST with
@@ -1189,13 +1358,17 @@ fail-closed. **Method:** POST (+ OPTIONS).
 
 ```jsonc
 {
-  "items": [{ "product_id": "uuid", "quantity": 2, "selected_size": "M" }],
+  "items": [{ "product_id": "uuid", "quantity": 2, "variant_id": "uuid" }],
   "shipping_address": { "full_name": "", "line1": "", "line2": null,
                         "city": "", "state": "", "postal_code": "",
                         "country": "US", "phone": null },
-  "shipping_method_id": "uuid"
+  "shipping_method_id": "uuid",
+  "discount_code": "SPRING10"          // optional
 }
 ```
+
+(A line may still carry the pre-022 `"selected_size": "M"` instead of `variant_id`; it is
+resolved to the size row without a colour.)
 
 **Response:** `{ "url": "https://checkout.stripe.com/…" }` — the client redirects there.
 
@@ -1206,8 +1379,8 @@ fail-closed. **Method:** POST (+ OPTIONS).
    `success_url` / `cancel_url` are built from it and **never** from the request body — otherwise
    a forged request could bounce the buyer to an attacker-controlled site.
 3. Verify the JWT.
-4. Validate `items` (non-empty, ≤ 50 lines, UUID product ids, string sizes ≤ 40 chars) and
-   merge duplicates — see step 7. The line logic lives in the pure module
+4. Validate `items` (non-empty, ≤ 50 lines, UUID product and variant ids, string sizes ≤ 40
+   chars) and merge duplicates — see step 7. The line logic lives in the pure module
    [`_shared/checkout-lines.ts`](supabase/functions/_shared/checkout-lines.ts), unit-tested from
    Vitest.
 5. **Sanitise the address** with `sanitizeAddress()` — type-checked strings, control characters
@@ -1217,29 +1390,43 @@ fail-closed. **Method:** POST (+ OPTIONS).
    through for countries the store does not ship to.
 6. **Rate limit:** ≤ 10 orders per user per rolling hour (the DB pending-order trigger is the
    backstop and surfaces as `P0001` → `429 RATE_LIMITED`).
-7. **Merge duplicate lines** by `(product_id, selected_size)` **before** validating. Checking each
-   line independently let 50 separate lines of one product each pass the stock cap and oversell
-   by 50×.
-8. Load products from the DB (service role) and validate: exists, active, quantity ≤ 100,
-   product-level stock against the **combined** quantity across sizes (product stock covers
-   every size), and the size rules — a `has_sizes` product **requires** a size
-   (`400 SIZE_REQUIRED`; the selector lives in the browser and used to be bypassable), an
-   unsized one refuses it (`400 SIZE_NOT_APPLICABLE`), and the size must be **active** and have
-   stock (`409 VARIANT_NOT_FOUND` / `INSUFFICIENT_STOCK`). Each line records the size row it
-   takes stock from in `order_items.variant_id`.
+7. **Merge duplicate lines** by `(product_id, variant_id)` (or the legacy size) **before**
+   validating. Checking each line independently let 50 separate lines of one product each pass
+   the stock cap and oversell by 50×.
+8. Load products, their active variants and colours, and costs from the DB (service role) and
+   validate: exists, active, quantity ≤ 100, product-level stock against the **combined**
+   quantity across variants, and the variant rules — a product with sizes or colours
+   **requires** a variant (`400 VARIANT_REQUIRED` / `SIZE_REQUIRED`; the selector lives in the
+   browser and used to be bypassable), one without refuses it (`400 SIZE_NOT_APPLICABLE`), and
+   the variant must be **active** and have stock (`409 VARIANT_NOT_FOUND` /
+   `INSUFFICIENT_STOCK`). Each line takes its **unit price from the variant** (or the product),
+   records the variant in `order_items.variant_id` and snapshots its colour, size and SKU.
 9. Resolve shipping cost from `shipping_methods` — never from the client — and check the
    method's `countries` against the address. Omitting `shipping_method_id` while a method
    exists for that country is now a `400 SHIPPING_METHOD_REQUIRED`: it used to mean free
    shipping to anywhere, which only a hand-written request ever took advantage of.
-10. Compute `subtotal`, `tax`, `total` server-side.
-11. Insert the `orders` row (`pending`), then `order_items`. If the lines fail, the order is
-    deleted (best-effort rollback) so no orphan order remains.
-12. Build Stripe line items from DB-resolved data; append shipping, and — in flat-rate mode —
-    an explicit **"Estimated sales tax"** line so the charge equals the recorded total.
-13. Create the session (`expires_at = now + 1 h`, `client_reference_id` and metadata carrying
+10. **Discount code** (optional): load the code, check it is usable (window, limits, minimum,
+    scope) and compute the discount with
+    [`_shared/discounts.ts`](supabase/functions/_shared/discounts.ts) — the module the checkout
+    page previews with — allocating it across the lines (and shipping, for free shipping) in
+    integer cents. A refusal is `400`/`409 DISCOUNT_<REASON>` (`DISCOUNT_EXPIRED`,
+    `DISCOUNT_MIN_SUBTOTAL`, …). A discounted order must still be at least 0.50 to charge
+    (`400 CHECKOUT_TOTAL_TOO_LOW`).
+11. Compute `subtotal`, `discount`, `tax` (on the discounted base) and `total` server-side.
+12. Insert the `orders` row (`pending`, with `discount_code` / `discount_id` /
+    `shipping_discount`), then `order_items` (with each line's discount share) and
+    `order_item_costs`. If the lines fail, the order is deleted (best-effort rollback) so no
+    orphan order remains. Then `reserve_discount()` takes one use of the code atomically; if
+    the code ran out meanwhile, the order is deleted and the request refused.
+13. Build Stripe line items from DB-resolved data (the colour and size in the name); append
+    shipping, and — in flat-rate mode — an explicit **"Estimated sales tax"** line so the charge
+    equals the recorded total. A discount becomes a **one-off Stripe coupon** for exactly the
+    computed amount (`max_redemptions: 1`, `redeem_by` = session expiry + 10 min), attached to
+    the session, so the hosted page shows it and the charge equals the order.
+14. Create the session (`expires_at = now + 1 h`, `client_reference_id` and metadata carrying
     `order_id`/`user_id` on both the session and the payment intent). If Stripe fails, the order
-    is marked `failed`.
-14. Write `stripe_session_id` and move the order to `processing`; return the URL.
+    is marked `failed` (which gives the discount use back).
+15. Write `stripe_session_id` and move the order to `processing`; return the URL.
 
 With Stripe Tax on, the function first creates a Stripe customer carrying the shipping address
 (so the buyer does not retype it) and sets `customer_update: { address: 'auto' }`.
@@ -1270,9 +1457,13 @@ Unhandled types are recorded and ACKed.
    `{ received: true, duplicate: true }`.
 3. Map the event to a plain summary and load the current order state.
 4. Ask [`_shared/webhook-logic.ts`](supabase/functions/_shared/webhook-logic.ts) for a decision:
-   `skip`, `invalid`, or `update`.
+   `skip`, `invalid`, `update`, or — for `charge.refunded` / `refund.updated` — `sync_refunds`.
 5. Apply the update; optionally fire the confirmation email (fire-and-forget — a Resend hiccup
-   must not fail the webhook).
+   must not fail the webhook). **`sync_refunds`** retrieves the PaymentIntent and lists all its
+   refunds, then hands them to `sync_order_refunds()`: every refund — including ones issued in
+   the Stripe Dashboard — becomes a row of `order_refunds` (`source = 'stripe'` when the app did
+   not start it), `refund_amount` becomes the total, a full refund moves the order to `refunded`,
+   and a failed refund flags the order for review.
 6. Record the affected `order_id` on the processed-event row for debugging.
 
 **Failure handling — the distinction that matters**
@@ -1287,8 +1478,8 @@ or Supabase imports — so the whole transition matrix is unit-testable from Vit
 
 - A paid order is **never** downgraded by a late failure or expiry event
   (`FINAL_STATUSES = paid, shipped, delivered, refunded`).
-- Partial refunds record `refund_amount` but keep the order `paid`; only a refund covering the
-  total moves it to `refunded`.
+- Partial refunds keep the order `paid`; only refunds covering the total move it to
+  `refunded` (decided in the database by `sync_order_refunds()`, from Stripe's own total).
 - **Amount reconciliation before adoption.** Both paid-marking events compare what Stripe charged
   against the total recorded at session creation, in **integer cents** with a 1-cent tolerance
   (doing it in dollars makes the tolerance itself unreliable — `100.01 - 100` is
@@ -1301,28 +1492,36 @@ or Supabase imports — so the whole transition matrix is unit-testable from Vit
 
 ### 15.3 `handle-order-action`
 
-**Purpose:** customer cancel, admin refund, admin mark-delivered.
+**Purpose:** cancellations, refunds (all or part), payment checks and delivery.
 **Auth:** own JWT verification, then per-action authorisation. **CORS:** fail-closed.
 
-**Request:** `{ "action": "cancel" | "refund" | "deliver", "order_id": "uuid", "amount"?: number }`
-**Response:** `{ "order": { …with order_items and profile… } }`
+**Request:** `{ "action": "cancel" | "refund" | "deliver" | "sync_payment" | "confirm_payment",
+"order_id": "uuid", … }` — a refund may add `request_id` (UUID), `amount`, `lines`
+(`[{ order_item_id, quantity, restock }]`), `shipping_amount` and `reason`.
+**Response:** `{ "order": { …with order_items and profile… } }` (`sync_payment` adds
+`stripe_status`).
 
-**Authorisation order is deliberate.** The admin check for `refund`/`deliver` needs no order at
-all, so it runs **before** the lookup — a non-admin is turned away without learning whether the
-id exists. Ownership for `cancel` is checked immediately after the fetch and answers a uniform
-`404`, not `403`. `refund_id` is only checked once the caller is entitled to the row. (Previously
-the responses distinguished `404`, `409 ALREADY_REFUNDED` and `403 NOT_OWNER` for any order id.)
+**Authorisation order is deliberate.** The admin check for every action except `cancel` needs
+no order at all, so it runs **before** the lookup — a non-admin is turned away without learning
+whether the id exists. Ownership for `cancel` (the buyer, or an admin) is checked immediately
+after the fetch and answers a uniform `404`, not `403`.
 
 | Action | Who | Behaviour |
 |---|---|---|
-| `cancel` (pre-payment: `pending`/`processing`/`requires_action`) | order owner | Retrieves the Stripe session; **refuses** with `409 ORDER_ALREADY_PAID` if payment completed; expires an open session; then updates with the pre-payment status re-asserted in the `WHERE` so it cannot race the webhook |
-| `cancel` (`paid`) | order owner | Full Stripe refund with idempotency key `refund_${orderId}`, order → `refunded`, refund email. Rate limited to **3 self-refunds per rolling 24 h**, counted via `refund_requested_by` — the limit used to filter on `user_id`, so three partial refunds the *shop* issued as goodwill locked the customer out of cancelling for a day. `refunded` (not `cancelled`) keeps the later `charge.refunded` webhook idempotent |
-| `refund` | admin | Optional partial `amount`, capped at the order total. **Only a full refund** (`refundValue ≥ total − 0.005`) moves the order to `refunded` — that status restores every line's stock and drops the order from revenue, so a $10 refund on a $500 order used to do both. Partial refunds record the amount and leave the order fulfillable |
+| `cancel` (pre-payment: `pending`/`processing`/`requires_action`) | order owner or admin | Retrieves the Stripe session; **refuses** with `409 ORDER_ALREADY_PAID` if payment completed; expires an open session; then updates with the pre-payment status re-asserted in the `WHERE` so it cannot race the webhook |
+| `cancel` (`paid`) | order owner or admin | Refunds everything that is left (goods back on the shelf), order → `refunded`, refund email. A buyer is rate limited to **3 self-refunds per rolling 24 h**, counted via `refund_requested_by`. The request id is derived from the order id, so a double click is one refund |
+| `refund` | admin | Lines and quantities (each with or without restock), shipping, an amount and a reason — or, with none of those, everything left. Repeatable until nothing is left; the database caps every refund at the remainder (`400 AMOUNT_TOO_HIGH`, …). **Only refunds covering the total** move the order to `refunded`; a partial refund leaves it fulfillable and puts back in stock exactly the units marked restock |
 | `deliver` | admin | `shipped` → `delivered`, sets `delivered_at`, sends the delivery email |
+| `sync_payment` | admin | For an order still waiting for payment: retrieves its Checkout session and applies what Stripe says exactly as the webhook would have (paid / expired), logging a `payment` event. `stripe_status` is `open`, `complete`, `expired`, or `settled` when the order was no longer waiting |
+| `confirm_payment` | admin | For a `requires_action` order held after an amount mismatch: if Stripe says the PaymentIntent **succeeded**, the order becomes `paid` with the amount actually charged as its total, the review flag is cleared and the confirmation email is sent |
 
-The Stripe idempotency key means two concurrent requests create exactly **one** refund object;
-`refund_id` is the per-order lock. A second, differently-sized refund must be issued from the
-Stripe dashboard.
+**How a refund is made (idempotent end to end).** `begin_order_refund()` records the request
+under its `request_id` (or returns the existing one — a retry never refunds twice) after the
+database has checked status, amounts and lines; the function then creates the Stripe refund
+with idempotency key `refund_<request_id>` and metadata `refund_request_id`;
+`complete_order_refund()` applies it (refunded/restocked counters, stock, status, timeline). If
+Stripe refuses, `abandon_order_refund()` drops the record. The webhook's `sync_order_refunds()`
+later sees the same refund and recognises it by that metadata.
 
 ### 15.4 `update-tracking`
 
@@ -1350,10 +1549,32 @@ The update asserts `status IN ('paid','shipped')` in the `WHERE` clause rather t
 row first, so it cannot race the webhook. No matching row is disambiguated on the error path
 only: `404 ORDER_NOT_FOUND` if the id does not exist, `409 ORDER_NOT_SHIPPABLE` if it does.
 
-### 15.5 Shared modules
+### 15.5 `store-worker`
+
+**Purpose:** the store's scheduled emails. **Auth:** the shared `x-worker-secret` header
+(pg_cron through pg_net; constant-time compare with `STORE_WORKER_SECRET`, which must be at least
+16 characters) **or** an admin's session (the "Send now" / "Check and send now" buttons).
+`verify_jwt = false`. **CORS:** fail-closed for browser callers.
+
+**Request:** `{ "task": "back_in_stock" | "low_stock" | "all" }` (no body = `all`).
+**Response:** `{ task, backInStock?: { sent, failed }, lowStock?: { items, sent, skipped? } }`.
+
+| Task | Does |
+|---|---|
+| `back_in_stock` | Claims waiting requests whose item has stock again (`claim_stock_notifications()`, batches of 50, `FOR UPDATE SKIP LOCKED`), emails each customer in the language they browsed in (en/it/es/fr) with a link to the product, and releases the ones whose email failed so the next run retries them |
+| `low_stock` | Reads `low_stock_digest_candidates()` — off when disabled, recipients = Admin → Inventory → Alerts or every admin — and sends one digest of the items that just reached their threshold; `mark_low_stock_alerted()` runs only once someone actually got it, so a failed send is retried. `skipped` is `disabled` or `no_recipients` |
+
+Runs stay under a 40-second budget; whatever is left waits for the next run. Links use
+`SITE_URL`, else the first `ALLOWED_ORIGINS` entry.
+
+### 15.6 Shared modules
 
 | Module | Exports | Notes |
 |---|---|---|
+| [`_shared/checkout-lines.ts`](supabase/functions/_shared/checkout-lines.ts) | `mergeItems`, `productIdsNeedingVariants`, `resolveLines` | Pure: cart lines → priced, stock-checked order lines (variant, colour, SKU, unit cost). Unit-tested |
+| [`_shared/discounts.ts`](supabase/functions/_shared/discounts.ts) | `computeDiscount`, `normalizeDiscountCode`, `DISCOUNT_CODE_PATTERN` | **Imported by the storefront too.** Integer-cent arithmetic; the checkout page's preview and the charge cannot disagree. Unit-tested |
+| [`_shared/refunds.ts`](supabase/functions/_shared/refunds.ts) | `refundRemaining`, `refundableUnits`, `shippingPaid`, `suggestRefund` | **Imported by the admin too.** Unit-tested |
+| [`_shared/order-emails.ts`](supabase/functions/_shared/order-emails.ts) | `sendOrderConfirmationEmail`, `sendRefundEmail` | Shared by the webhook and the order actions (colour/size per line, discount, partial refunds) |
 | [`_shared/cors.ts`](supabase/functions/_shared/cors.ts) | `resolveAllowedOrigin`, `isForbiddenOrigin`, `getCorsHeaders` | See [§6.1](#61-cors-on-the-edge-functions) |
 | [`_shared/address.ts`](supabase/functions/_shared/address.ts) | `SHIPPING_COUNTRIES`, `POSTAL_PATTERNS`, `isValidPostalCode`, `STATE_REQUIRED_COUNTRIES`, `isStateRequired`, `ADDRESS_MAX_LENGTHS`, `sanitizeAddress` | **Imported by the React checkout form too** — kept free of Deno and browser APIs so both runtimes can load it. The caps mirror migration 016's CHECK constraints; change one, change the other |
 | [`_shared/money.ts`](supabase/functions/_shared/money.ts) | `STORE_CURRENCY`, `STRIPE_CURRENCY`, `formatMoneyIn` | **Imported by the storefront too.** The one definition of what the store charges in — a literal, not a secret, precisely so Stripe, the UI and the emails cannot disagree |
@@ -1376,9 +1597,10 @@ Customer                Frontend              Edge Function            Stripe   
    │                       │                        │ validate origin,   │                   │
    │                       │                        │ JWT, address,      │                   │
    │                       │                        │ merge lines,       │                   │
-   │                       │                        │ resolve prices ───────────────────────►│
-   │                       │                        │ insert order(pending) + items ────────►│
-   │                       │                        │ create session ───►│                   │
+   │                       │                        │ resolve prices, discount ─────────────►│
+   │                       │                        │ insert order(pending) + items,         │
+   │                       │                        │ reserve discount use ─────────────────►│
+   │                       │                        │ (coupon +) session►│                   │
    │                       │                        │ order → processing ───────────────────►│
    │                       │◄── { url } ────────────│                    │                   │
    │◄─ redirect ───────────│                        │                    │                   │
@@ -1405,8 +1627,10 @@ uncertain, and the page shows "Payment received" rather than a false confirmatio
 | Risk | Control |
 |---|---|
 | Duplicate webhook delivery | `processed_stripe_events` claim-first insert |
-| Concurrent refund requests | Stripe idempotency key `refund_${orderId}` + `refund_id` UNIQUE lock |
-| Client-supplied prices | Everything re-read from the DB server-side |
+| Concurrent or repeated refund requests | One `order_refunds` row per client request id (`begin_order_refund()` returns the existing one), Stripe idempotency key `refund_<request_id>`, and every refund capped by the database at what is left |
+| Refunds made in the Stripe Dashboard | `sync_order_refunds()` mirrors every refund of the PaymentIntent from Stripe's own list, matching the app's by metadata |
+| Client-supplied prices and discounts | Everything re-read from the DB server-side; the discount is recomputed from the code's row and charged as a single-use coupon for exactly that amount |
+| A limited code used too often | `reserve_discount()` locks the code row while it counts uses |
 | Underpayment / drift | Cent-exact reconciliation before adopting Stripe's figure |
 | Order edited after payment | Immutability triggers on `orders` and `order_items` |
 | Illegal status jumps | `validate_order_status_transition()` — applies to admins and service role |
@@ -1466,19 +1690,33 @@ Who moves what:
 | → `paid` / `requires_action` / `failed` / `cancelled` (expiry) | `stripe-webhook` |
 | `pending` → `cancelled` | customer, via RLS **or** `handle-order-action` |
 | `processing`/`requires_action` → `cancelled` | `handle-order-action` only (it expires the session first) |
-| `paid` → `refunded` | customer self-cancel, admin refund, or refund webhooks |
+| `processing`/`requires_action` → `paid` / `failed` | `stripe-webhook`, or `handle-order-action` (`sync_payment`, `confirm_payment`) |
+| `paid`/`shipped`/`delivered` → `refunded` | customer self-cancel, admin refunds covering the total, or refund webhooks |
 | `paid` → `shipped` | `update-tracking` |
 | `shipped` → `delivered` | `handle-order-action` (`deliver`) |
-| Any legal jump | admin, via the Orders page — the guard still applies |
+| Any other legal jump | admin, via the Orders page — the guard still applies |
+
+Since 024 a signed-in session (any user, admins included) can no longer move a `processing` or
+`requires_action` order to `paid`, `failed` or `cancelled` by writing the row: Stripe has to be
+asked first, which only the order actions do (`orders_action_guard`, HINT `use_order_action`).
+The service role and pg_cron are unaffected.
 
 ### 17.2 Stock rules
 
-- **Deducted only on the first transition to `paid`**, from a pre-payment status. A sized line
-  decrements its size row (`product_variants.stock_qty`) and the product total follows
-  automatically (derived, migration 021); an unsized line decrements
+- **Deducted only on the first transition to `paid`**, from a pre-payment status. A line with a
+  variant decrements its variant row (`product_variants.stock_qty`) and the product total
+  follows automatically (derived, migrations 021/022); a line without one decrements
   `products.stock_quantity`.
 - **Restored** on `paid` → `failed` / `cancelled` / `refunded`, line by line (an order with two
-  sizes of the same product gets both back).
+  sizes of the same product gets both back) — minus whatever a partial refund already put back
+  (`restocked_quantity`). A full refund of a shipped or delivered order puts nothing back: the
+  goods are with the customer.
+- **Partial refunds and returns** put back exactly the units the admin marked "restock";
+  **exchanges** (`admin_exchange_order_item()`) take the new variant and, optionally, put the
+  returned one back, in one transaction. Each line can never be refunded or restocked beyond
+  its quantity.
+- **Every change is logged** in `inventory_movements` with its reason, order, actor and note
+  ([§12.6b](#126b-order-operations-inventory-and-discounts-022025)).
 - **One writer at a time per product.** The order trigger and the admin stock functions lock
   the product rows first, in id order, so concurrent orders and restocks queue instead of
   deadlocking.
@@ -1493,7 +1731,8 @@ Who moves what:
   get a red **Needs review** badge in Admin → Orders (with a dedicated filter) and a counter on
   the dashboard.
 
-Clearing a flag after handling it:
+Clearing a flag after handling it: **Mark as resolved** in the order (with an optional note —
+`admin_resolve_review()`, logged in the timeline), or in SQL:
 
 ```sql
 UPDATE public.orders SET needs_review = false, review_reason = null WHERE id = '<order-id>';
@@ -1506,6 +1745,7 @@ UPDATE public.orders SET needs_review = false, review_reason = null WHERE id = '
 | `oversold` | stock trigger | A counter went negative — restock or contact the customer |
 | `amount mismatch: …` | webhook reconciliation | Stripe charged something other than the recorded total. Order held in `requires_action`, no confirmation email. Investigate and refund if needed |
 | `<event>: <db error>` | webhook business-rule park | A Stripe event was rejected by a DB rule (e.g. paid event arriving after cancellation) |
+| `refund failed: <ids>` | `sync_order_refunds()` | Stripe reports a refund as failed or cancelled — the money did not go back; issue it again or contact the customer |
 
 ---
 
@@ -1513,14 +1753,17 @@ UPDATE public.orders SET needs_review = false, review_reason = null WHERE id = '
 
 | Email | Sent by | Trigger |
 |---|---|---|
-| Order confirmation | `stripe-webhook` | Order reaches `paid` (suppressed when held for review) |
+| Order confirmation | `stripe-webhook` (or `handle-order-action` when a payment is recovered or confirmed) | Order reaches `paid` (suppressed when held for review); lists colour/size and the discount |
 | Shipping + tracking | `update-tracking` | Admin adds a tracking number |
-| Refund confirmation | `handle-order-action` | Customer self-cancel of a paid order, or admin refund |
+| Refund confirmation | `handle-order-action` | Customer self-cancel of a paid order, or admin refund (says "partial" for a partial one) |
 | Delivery confirmation | `handle-order-action` | Admin marks an order delivered |
+| Back in stock | `store-worker` | An item someone asked about has stock again (in the customer's language) |
+| Low-stock digest | `store-worker` | Items just reached their threshold (to the alert recipients, in `STORE_LOCALE`'s language) |
 | Sign-up / password reset / magic link | **Supabase Auth** | Customised in Supabase → Authentication → Email Templates |
 
-All four code-sent emails go through `sendEmail()` → Resend, are **English**, and are wrapped by
-`renderEmail()` (coloured header with the store name, body, footer). Every user-supplied value
+All code-sent emails go through `sendEmail()` → Resend, are **English** (except the two
+`store-worker` emails, which carry en/it/es/fr copy), and are wrapped by `renderEmail()`
+(coloured header with the store name, body, footer). Every user-supplied value
 passes through `escapeHtml()` before being embedded. Money is formatted with `STORE_CURRENCY` +
 `STORE_LOCALE`.
 
@@ -1541,20 +1784,27 @@ change so the app picks it up). See [§13.4](#134-role-assignment) for promotion
 
 | Page | Capabilities |
 |---|---|
-| **Dashboard** (`/admin`) | Revenue chart (7/30 days with period-over-period delta), gross revenue, orders in 24 h / 7 d, `needs_review` counter, status breakdown, best seller, recent orders. One `admin_analytics()` RPC call |
-| **Orders** (`/admin/orders`) | Paginated queue (50/page), filter by status and by "needs review", order drawer with items and customer, status changes constrained to legal transitions, tracking entry (→ `update-tracking`), mark delivered |
-| **Catalogue** (`/admin/catalog`) | Active/archive tabs, search (also by size SKU), inline stock edit, per-size stock chips with low/sold-out tones and a **Restock sizes** row for sized products, create/edit product drawer with multi-file image upload to Storage (first upload becomes primary), create category inline, toggle active/featured |
+| **Dashboard** (`/admin`) | Revenue chart (7/30 days with period-over-period delta), gross revenue, orders in 24 h / 7 d, `needs_review` counter, status breakdown, best seller, recent orders, and a stock & promotions strip (out of stock, running low, restock requests, discounts given). One `admin_analytics()` RPC call |
+| **Orders** (`/admin/orders`) | Paginated queue (50/page), filter by status, "needs review" and dates; select orders to print packing slips or invoices (`/admin/print`) or export orders / order lines as CSV. The order panel: items with colour/size, SKU, discount share and refunded units; status changes constrained to legal transitions; tracking (→ `update-tracking`); mark delivered; for a waiting payment **Check with Stripe**, **Confirm payment**, **Cancel order**; **Refund** line by line (with restock and shipping, repeatable); **Exchange** a line to another variant; resolve a review flag with a note; the timeline with internal notes |
+| **Catalogue** (`/admin/catalog`) | Active/archive tabs, search (also by variant SKU), inline stock edit, per-variant stock chips (grouped by colour) with low/sold-out tones and a **Restock** row, price range and compare-at price, **Duplicate**, **Import CSV** / **Export CSV**, create/edit product drawer, create category inline, toggle active/featured |
+| **Inventory** (`/admin/inventory`) | Running low (with a restock panel and waiting counts), stock movements (filters, CSV export), restock requests ("Send now"), alerts (low-stock emails and recipients, back-in-stock requests on/off, "Check and send now") |
+| **Discounts** (`/admin/discounts`) | Codes with value, conditions, uses, amount discounted and state (active, scheduled, expired, used up, off); create/edit drawer; switch off; delete (only while unused); copy code |
+| **Size guides** (`/admin/size-guides`) | Guides with their categories and product count; editor with templates (tops, shoes, trousers, rings), a cell grid (≤ 12 × 60), notes, categories and a live preview |
+| **Finance** (`/admin/finance`) | Revenue by status, net revenue (after partial refunds), refunds, discounts and product margin (from the costs recorded at sale), the refund queue (orders with something left to refund) and refund drawer (→ `handle-order-action`) |
 
-**Sizes in the product drawer** (`SizeEditor`): the **Sold by size** switch, the label shown to
-customers, presets (Clothing XS–XL / XXS–3XL, Numeric 38–54, Shoes EU 35–46, Rings 5–9, Waist
-26–38, S·M·L), free-text sizes (`S, M, L` adds three), one row per size with SKU (suggested
-from the product SKU), stock and an on-sale switch, up/down ordering, set-every-size-to and
-fill-empty-SKUs. The editor model is pure and tested ([`src/lib/sizes.ts`](src/lib/sizes.ts)):
-an untouched negative figure stays valid (backorder depth), only changed figures are sent and
-always with the one they replace, and an unchanged size list is not written at all. Removing a
-size that has orders switches it off; turning sizes off switches the product back to one stock
-figure.
-| **Finance** (`/admin/finance`) | Revenue by status, refundable orders (`paid`/`shipped`/`delivered`), refund drawer (→ `handle-order-action`) |
+**Variants in the product drawer** (`VariantEditor`): the **Sold by size** and **Sold by colour**
+switches with the words shown to customers; size presets (Clothing XS–XL / XXS–3XL, Numeric
+38–54, Shoes EU 35–46, Rings 5–9, Waist 26–38, S·M·L) and free-text sizes (`S, M, L` adds
+three); colour presets and custom colours with a swatch (or name only); one row per size,
+colour or colour × size with SKU (suggested from the product SKU), stock, on-sale switch and —
+with **Price and cost per variant** — its own price and cost; set-all helpers and fill-empty-SKUs.
+Photos can be tagged with a colour. The editor model is pure and tested
+([`src/lib/variants.ts`](src/lib/variants.ts)): an untouched negative figure stays valid
+(backorder depth), only changed figures are sent and always with the one they replace, and an
+unchanged configuration is not written at all. Removing a variant that has orders switches it
+off; turning both switches off returns the product to one stock figure. The drawer also edits
+the compare-at price, the cost (with the margin), the size guide, and shows the product's stock
+history.
 
 Guarding is two-layer: `AdminRoute` waits for `profileStatus` before deciding (so a hard refresh
 does not bounce an admin home), and every privileged operation is re-authorised server-side —
@@ -1589,17 +1839,22 @@ CORS fails closed, so an unset value rejects even localhost.
 
 ### 20.3 Test suites
 
-**148 tests across 7 files**, all passing at the time of writing. They cover the money-and-stock
+**199 tests across 14 files**, all passing at the time of writing. They cover the money-and-stock
 logic that is expensive to get wrong:
 
 | File | Covers |
 |---|---|
-| [`src/lib/pricing.test.ts`](src/lib/pricing.test.ts) | Tax base is `subtotal + shipping`; cent rounding; invalid/negative rates and inputs |
-| [`src/lib/sizes.test.ts`](src/lib/sizes.test.ts) | The size editor model: presets and de-duplication, stock parsing (untouched negative figures stay valid), validation, derived total, the RPC payload (stock only when changed, with the figure it replaces), change detection, rebasing after a conflict |
-| [`src/store/cartStore.test.ts`](src/store/cartStore.test.ts) | Line identity per size, quantity clamping, catalogue sync (price adoption, dropped/deactivated products, variant-stock clamping, oversold products, products that started or stopped being sold by size) |
-| [`supabase/functions/_shared/checkout-lines.test.ts`](supabase/functions/_shared/checkout-lines.test.ts) | Checkout line resolution: duplicate merging, malformed input, size required / not applicable / not on sale, per-size and combined stock, `variant_id` assignment |
-| [`supabase/functions/_shared/webhook-logic.test.ts`](supabase/functions/_shared/webhook-logic.test.ts) | The full decision matrix: paid transitions, downgrade guards, partial vs full refunds, and every amount-reconciliation case in both tax modes |
-| [`supabase/functions/_shared/address.test.ts`](supabase/functions/_shared/address.test.ts) | 19 cases: the `[object Object]` coercion, country allowlist, boundary lengths, postal patterns |
+| [`src/lib/pricing.test.ts`](src/lib/pricing.test.ts) | Tax base is `subtotal + shipping` after the discount; variant prices; cent rounding; invalid/negative rates and inputs |
+| [`src/lib/sizes.test.ts`](src/lib/sizes.test.ts) | Size labels, presets, name normalisation, stock parsing |
+| [`src/lib/variants.test.ts`](src/lib/variants.test.ts) | The variant editor model: building from a product (only variants of the product's shape), adding/removing colours and sizes, switching dimensions on and off, validation, derived total, the RPC payload (stock only when changed, with the figure it replaces), change detection, rebasing after a conflict; storefront helpers (price range, images per colour) |
+| [`src/store/cartStore.test.ts`](src/store/cartStore.test.ts) | Line identity per variant, legacy size lines migrated and merged, quantity clamping, catalogue sync (price adoption, dropped/deactivated products, variant-stock clamping, oversold products, products whose sizes or colours were switched on or off) |
+| [`src/lib/csv.test.ts`](src/lib/csv.test.ts), [`productCsv.test.ts`](src/lib/productCsv.test.ts), [`orderCsv.test.ts`](src/lib/orderCsv.test.ts) | Both CSV dialects, quoting and the formula-injection guard, separator detection; catalogue export → import round trip, missing columns left alone (variants included), the problems that stop an import; order and line exports |
+| [`src/lib/i18n.test.ts`](src/lib/i18n.test.ts) | Every key the code uses exists; Italian, Spanish and French have the same keys and placeholders as English |
+| [`supabase/functions/_shared/checkout-lines.test.ts`](supabase/functions/_shared/checkout-lines.test.ts) | Checkout line resolution: duplicate merging, malformed input, variant required / not applicable / not on sale, per-variant and combined stock, variant prices, colour/SKU/cost snapshots, `variant_id` assignment |
+| [`supabase/functions/_shared/discounts.test.ts`](supabase/functions/_shared/discounts.test.ts) | Percentage, fixed and free-shipping codes; minimum, scope (categories with their subcategories, products), sale exclusion; cent-exact allocation across lines |
+| [`supabase/functions/_shared/refunds.test.ts`](supabase/functions/_shared/refunds.test.ts) | What is left to refund, refundable units, the suggested amount with discount and tax shares |
+| [`supabase/functions/_shared/webhook-logic.test.ts`](supabase/functions/_shared/webhook-logic.test.ts) | The full decision matrix: paid transitions, downgrade guards, refund events handed to the refund sync, and every amount-reconciliation case in both tax modes |
+| [`supabase/functions/_shared/address.test.ts`](supabase/functions/_shared/address.test.ts) | The `[object Object]` coercion, country allowlist, boundary lengths, postal patterns |
 | [`supabase/functions/_shared/money.test.ts`](supabase/functions/_shared/money.test.ts) | The single store currency: ISO code, Stripe's lower-case form, locale-dependent punctuation |
 
 There is no Vitest config file — the defaults pick up `**/*.test.ts` outside `node_modules`.
@@ -1644,9 +1899,13 @@ npx supabase functions deploy create-checkout-session
 npx supabase functions deploy stripe-webhook
 npx supabase functions deploy update-tracking
 npx supabase functions deploy handle-order-action
+npx supabase functions deploy store-worker
 ```
 
-Deploy **all four**. `supabase/config.toml` carries the `verify_jwt` settings and is the only
+Deploy **all five**, after the migrations they depend on (022–025 for checkout, the webhook
+and the order actions). Then store the `store-worker` address and secret in Vault
+([§12.12](#1212-the-scheduled-job-required)). `supabase/config.toml` carries the `verify_jwt`
+settings and is the only
 file the CLI reads them from — leave it alone unless you know why you are changing it
 ([§6.2](#62-jwt-verification-at-the-gateway)). Its `project_id` is a placeholder on purpose:
 `supabase link` fills it in, and deploys target the linked project regardless.
@@ -1664,11 +1923,16 @@ into `STRIPE_WEBHOOK_SECRET`.
 
 Consolidated from `SECURITY-AUDIT.md`, `HANDOVER_GUIDE.md` and `SETUP_CHECKLIST.md`:
 
-- [ ] All migrations applied through **016**; verification queries pass (`set_user_role`
+- [ ] All migrations applied through **026**; verification queries pass (`set_user_role`
       allowlist form, the four length constraints, `has_column_privilege('anon', …,
       'cost_price')` = `false`).
 - [ ] RLS shows **Enabled** on every table.
-- [ ] `SELECT jobname FROM cron.job` lists `expire-pending-orders` (migration 020).
+- [ ] `SELECT jobname FROM cron.job` lists `expire-pending-orders` (migration 020) and the
+      `store-worker-*` and `purge-*` jobs (023, 025); the Vault entries `store_worker_url` /
+      `store_worker_secret` exist and `SELECT public.invoke_store_worker('low_stock')` answers 200
+      in `net._http_response`.
+- [ ] Invoice details (`taxId`, `invoiceNotes` in `storeConfig.ts`) filled and the invoice layout
+      checked against local requirements.
 - [ ] `curl -X POST …/functions/v1/stripe-webhook` returns **400**, not 401.
 - [ ] `ALLOWED_ORIGINS` set to the real production origins; no `*`; `ALLOW_VERCEL_PREVIEWS=false`
       (or a `VERCEL_PREVIEW_PREFIX` set alongside it).
@@ -1732,8 +1996,21 @@ after sign-in.
 ### 22.5 Handle a `needs_review` order
 
 Admin → Orders → filter "Needs review". Read `review_reason`, act (restock, contact the
-customer, refund, or investigate the amount mismatch in Stripe), then clear the flag with the
-`UPDATE` in [§17.2](#172-stock-rules).
+customer, refund, or investigate the amount mismatch in Stripe — **Confirm payment** if Stripe
+shows it paid), then **Mark as resolved** with a note (or the `UPDATE` in
+[§17.2](#172-stock-rules)).
+
+### 22.5b Store emails are not arriving
+
+1. `SELECT public.invoke_store_worker('low_stock');` — `NULL` means a Vault entry is missing (or
+   pg_net is off).
+2. `SELECT status_code, content FROM net._http_response ORDER BY created DESC LIMIT 5;` — `401`
+   means `STORE_WORKER_SECRET` and the `store_worker_secret` Vault entry differ (or the secret
+   is shorter than 16 characters); `404` means `store-worker` is not deployed or the URL is wrong.
+3. Admin → Inventory → Alerts: low-stock emails on, a recipient (or an admin account) present;
+   "email me when it is back" on. Restock requests wait until the item has stock **and** is on
+   sale.
+4. `RESEND_API_KEY` / `RESEND_FROM_EMAIL` as for every other email.
 
 ### 22.6 Rotate keys
 
@@ -1774,7 +2051,13 @@ Run this after every schema change — `src/lib/api.ts` relies on those types. A
 - Orders and their lines are immutable after payment; status transitions are validated in the
   database for every caller including admins and the service role.
 - Webhook authenticity by signature; replay protection by an event ledger.
-- Refunds are idempotent (Stripe key + a `UNIQUE` lock) and amount-capped.
+- Refunds are idempotent (a client request id that is also the Stripe idempotency key) and
+  capped by the database at what is left; refunds made in Stripe are mirrored, never trusted
+  from the client.
+- Discounts are recomputed server-side from the code's row and charged as a single-use coupon
+  for exactly that amount; a code's uses are counted under a row lock.
+- Costs (product, variant and per order line) and alert recipients are never readable by the
+  public API.
 - CORS fails closed; redirect URLs are built only from a verified origin.
 - Queries go through the parameterised Supabase SDK. No `dangerouslySetInnerHTML`, `innerHTML`
   or `eval` anywhere. Email HTML escapes every user-supplied value.
@@ -1785,7 +2068,8 @@ Run this after every schema change — `src/lib/api.ts` relies on those types. A
 without `user_id`.
 
 **The operator's responsibility:** filling the legal placeholders, setting `ALLOWED_ORIGINS`,
-keeping `STRIPE_TAX_ENABLED` in sync, applying migrations 015/016, and rotating keys.
+keeping `STRIPE_TAX_ENABLED` in sync, applying migrations 015/016, keeping
+`STORE_WORKER_SECRET` long and secret, and rotating keys.
 
 Full finding-by-finding detail, each with its code location and test coverage, is in
 [`SECURITY-AUDIT.md`](SECURITY-AUDIT.md). That file carries a rule worth repeating: **if you
@@ -1804,7 +2088,8 @@ Carried over from `SECURITY-AUDIT.md` and `ROADMAP.md`, still open at the time o
 | `hasUnfilledPlaceholders()` exists but is never called | No automated warning about the above | Developer |
 | `supabase/.temp` present in eight historical commits | Correctly gitignored now; the project ref is public anyway, so nothing to fix — but scrub history before handing the repo to a licensee | Developer |
 | `ROADMAP.md` truncated mid–Phase 1a | The described work has landed (migration 013), but the file no longer reflects reality | Developer |
-| `docs/03_supabase_setup.md` says "migrations through 014" | Should say **016**; 015 and 016 are security migrations | Developer |
+| Invoices are a template | `OrderPrintPage` prints numbered invoices from the order data; VAT breakdown, legal wording and e-invoicing (e.g. Italy's SdI) depend on the seller's country and are not implemented | Operator / developer |
+| Checkout error messages from the server are English | The checkout page translates its own validation and the discount preview, but a refusal returned by `create-checkout-session` (e.g. a code that ran out between preview and payment) is shown as the function's English message | Developer |
 | `package.json` `name` is `"project"`, `version` `0.0.0` | Cosmetic | Developer |
 | Frontend `formatCurrency` is hardcoded to USD | Fine for the US-first template; a multi-currency store would need work in `i18n.ts`, `pricing.ts` and the checkout function | Developer |
 | No end-to-end / browser tests | The payment path is covered by unit tests on pure logic only; the full flow is verified manually | Developer |
@@ -1839,9 +2124,12 @@ Carried over from `SECURITY-AUDIT.md` and `ROADMAP.md`, still open at the time o
 | `src/lib/supabaseClient.ts` | Typed Supabase client |
 | `src/lib/api.ts` | Every database and function call |
 | `src/lib/queryClient.ts` | React Query defaults |
-| `src/lib/pricing.ts` | Order totals (display estimate) |
+| `src/lib/pricing.ts` | Order totals (display estimate), variant-aware line prices |
 | `src/lib/stock.ts` | Stock arithmetic |
-| `src/lib/i18n.ts` / `i18nCopy.ts` | Dictionaries and the `useI18n()` hook |
+| `src/lib/variants.ts` / `sizes.ts` | Variant helpers and the product editor's draft model |
+| `src/lib/csv.ts` / `productCsv.ts` / `orderCsv.ts` | CSV dialects, catalogue import/export, order exports |
+| `src/lib/cartLines.ts` / `printDocuments.ts` | Cart line photo and link; opening the printable documents |
+| `src/lib/i18n.ts` / `i18nCopy.ts` / `i18nCommerce.ts` | Dictionaries and the `useI18n()` hook |
 | `src/lib/database.types.ts` | Generated Supabase types |
 | `src/types/index.ts` | Application types |
 | `src/config/storeConfig.ts` | Brand + legal identity, placeholder filling |
@@ -1857,13 +2145,14 @@ Carried over from `SECURITY-AUDIT.md` and `ROADMAP.md`, still open at the time o
 |---|---|
 | `supabase/schema.sql` | Base tables, enums, triggers, initial seed |
 | `supabase/rls.sql` | Base policies + `is_admin()` |
-| `supabase/migrations/001…019.sql` | Schema evolution ([§14](#14-migration-history)) |
-| `supabase/seeds/002_mock_products.sql` | 40 demo products across 5 categories (luxury ready-to-wear and accessories), 70 units each; images served from the demo project's `product-images/catalog/` |
+| `supabase/migrations/001…026.sql` | Schema evolution ([§14](#14-migration-history)) |
+| `supabase/seeds/002_mock_products.sql` | 40 demo products across 5 categories (luxury ready-to-wear and accessories), 70 units each — split across XS–XL for ready-to-wear, across two colours for the braided belt — plus a Ready-to-Wear size guide; images served from the demo project's `product-images/catalog/` |
 | `supabase/functions/create-checkout-session/index.ts` | Cart → order → Stripe session |
 | `supabase/functions/stripe-webhook/index.ts` | Authoritative order-state updater |
-| `supabase/functions/handle-order-action/index.ts` | Cancel / refund / deliver |
+| `supabase/functions/handle-order-action/index.ts` | Cancel / refund (all or part) / deliver / payment check / payment confirmation |
 | `supabase/functions/update-tracking/index.ts` | Tracking + shipping email |
-| `supabase/functions/_shared/*.ts` | CORS, address, store branding, email, webhook logic (+ 2 test files) |
+| `supabase/functions/store-worker/index.ts` | Back-in-stock emails and the low-stock digest |
+| `supabase/functions/_shared/*.ts` | CORS, address, money, store branding, email, order emails, checkout lines, discounts, refunds, webhook logic (+ 6 test files) |
 
 ---
 
@@ -1873,7 +2162,17 @@ Carried over from `SECURITY-AUDIT.md` and `ROADMAP.md`, still open at the time o
 |---|---|---|
 | Line items per checkout | 50 | `_shared/checkout-lines.ts` |
 | Quantity per merged line | 100 | `_shared/checkout-lines.ts` |
-| Sizes per product / size name / size SKU | 100 / 40 chars / 64 chars | `admin_set_product_inventory()` + CHECK constraint |
+| Sizes per product / size name / size SKU | 100 / 40 chars / 64 chars | `admin_save_product_variants()` + CHECK constraint |
+| Colour name / swatch | 40 chars / `#RRGGBB` | CHECK constraints |
+| Size guide | 12 columns × 60 rows, 2000-char notes | CHECK constraints |
+| CSV import | 1000 products per file, 10 MB, 20 image URLs per product | `ImportProductsDrawer`, `planImport()`, `admin_import_products()` |
+| Discount code | 3–40 chars `[A-Z0-9][A-Z0-9_-]*` | `DISCOUNT_CODE_PATTERN` + CHECK constraint |
+| Minimum discounted charge | 0.50 | `create-checkout-session` |
+| Back-in-stock requests | 20 per requester per hour | `request_stock_notification()` |
+| Low-stock alert recipients | 10 | `admin_update_store_settings()` |
+| `store-worker` run | 40 s budget, batches of 50 | `store-worker` |
+| `STORE_WORKER_SECRET` | ≥ 16 chars (32+ recommended) | `store-worker` |
+| Order export / print | 5,000 orders per export, 200 per print run | `fetchAllAdminOrders()`, `OrderPrintPage` |
 | Orders per user per hour | 10 | `create-checkout-session` |
 | Open (`pending`+`processing`) orders per user | 10 | `check_pending_order_limit()` trigger |
 | Stripe Checkout session TTL | 1 hour | `create-checkout-session` |
@@ -1907,12 +2206,16 @@ messages.
 | `CONFIG_MISSING_SECRETS` | 500 | Named secrets are unset |
 | `ORIGIN_NOT_ALLOWED` | 403 | Origin not in `ALLOWED_ORIGINS` |
 | `AUTH_MISSING_HEADER` / `AUTH_INVALID_SESSION` | 401 | No or invalid bearer token |
-| `VALIDATION_NO_ITEMS` / `VALIDATION_TOO_MANY_ITEMS` / `VALIDATION_MISSING_PRODUCT_ID` / `INVALID_QUANTITY` | 400 | Malformed cart |
+| `VALIDATION_NO_ITEMS` / `VALIDATION_TOO_MANY_ITEMS` / `VALIDATION_MISSING_PRODUCT_ID` / `VALIDATION_INVALID_PRODUCT_ID` / `VALIDATION_INVALID_VARIANT` / `VALIDATION_INVALID_SIZE` / `INVALID_QUANTITY` | 400 | Malformed cart |
 | `VALIDATION_INVALID_SHIPPING_ADDRESS` / `…_MISSING_SHIPPING_ADDRESS_FIELDS` / `…_TOO_LONG` / `VALIDATION_COUNTRY_NOT_SUPPORTED` / `VALIDATION_INVALID_POSTAL_CODE` | 400 | Address rejected by `sanitizeAddress()` |
 | `RATE_LIMITED` | 429 | Hourly order cap or DB pending-order limit |
 | `PRODUCT_NOT_FOUND` | 400 | Unknown product id |
+| `VARIANT_REQUIRED` / `SIZE_REQUIRED` / `SIZE_NOT_APPLICABLE` | 400 | A product with variants bought without one, or the reverse |
 | `PRODUCT_INACTIVE` / `INSUFFICIENT_STOCK` / `VARIANT_NOT_FOUND` | 409 | Not purchasable right now |
-| `SHIPPING_METHOD_UNAVAILABLE` | 400 | Method missing or inactive |
+| `SHIPPING_METHOD_UNAVAILABLE` / `SHIPPING_METHOD_NOT_AVAILABLE_FOR_COUNTRY` / `SHIPPING_METHOD_REQUIRED` | 400 | Method missing, inactive, not for that country, or omitted |
+| `DISCOUNT_NOT_FOUND` / `…_NOT_STARTED` / `…_EXPIRED` / `…_MIN_SUBTOTAL` / `…_NO_ELIGIBLE_ITEMS` / `…_NO_EFFECT` | 400 | The code cannot be used on this order |
+| `DISCOUNT_EXHAUSTED` / `DISCOUNT_ALREADY_USED` | 409 | No uses left, or this customer's are used |
+| `CHECKOUT_TOTAL_TOO_LOW` | 400 | The discounted total is under the minimum card charge |
 | `DB_*_ERROR` | 500 | Database failure at the named phase |
 | `STRIPE_SESSION_ERROR` / `STRIPE_SESSION_MISSING_URL` | 502 | Stripe API failure |
 | `UNHANDLED_ERROR` | 500 | Anything else |
@@ -1923,15 +2226,18 @@ messages.
 |---|---|---|
 | `VALIDATION_MISSING_FIELDS` / `VALIDATION_UNKNOWN_ACTION` | 400 | Bad request |
 | `AUTH_MISSING_HEADER` / `AUTH_INVALID_SESSION` | 401 | Auth |
-| `AUTH_NOT_ADMIN` | 403 | Non-admin asked for `refund`/`deliver` |
+| `AUTH_NOT_ADMIN` | 403 | Non-admin asked for an admin action |
 | `ORDER_NOT_FOUND` | 404 | Unknown order — **also** returned when the caller does not own it |
-| `ORDER_ALREADY_REFUNDED` | 409 | `refund_id` already set |
 | `ORDER_ALREADY_PAID` | 409 | Cancel attempted after the Stripe session completed |
-| `ORDER_NOT_CANCELABLE` / `ORDER_NOT_REFUNDABLE` / `ORDER_NOT_DELIVERABLE` | 409 | Wrong status for the action |
-| `ORDER_MISSING_PAYMENT_INTENT` | 400 | Nothing to refund against |
-| `INVALID_REFUND_AMOUNT` / `REFUND_AMOUNT_TOO_HIGH` | 400 | Bad partial-refund amount |
+| `ORDER_NOT_CANCELABLE` / `NOT_REFUNDABLE` / `ORDER_NOT_DELIVERABLE` / `ORDER_NOT_HELD` | 409 | Wrong status for the action |
+| `NO_PAYMENT` / `NO_CHECKOUT_SESSION` | 409 | Nothing in Stripe to refund, confirm or check |
+| `PAYMENT_NOT_SUCCEEDED` | 409 | `confirm_payment`: Stripe does not report the payment as succeeded |
+| `INVALID_AMOUNT` / `AMOUNT_TOO_HIGH` / `SHIPPING_TOO_HIGH` / `INVALID_LINE` | 400 | Refund refused by the database (more than is left, bad lines) |
 | `RATE_LIMITED` | 429 | More than 3 self-refunds in 24 h |
-| `STRIPE_REFUND_ERROR` | 502 | Stripe API failure |
+| `STRIPE_ERROR` | 502 | Stripe API failure (the refund record is abandoned, nothing is half-applied) |
+
+**`store-worker`** answers `401 AUTH_MISSING` / `AUTH_INVALID_SESSION` (no secret and no session),
+`403 ORIGIN_NOT_ALLOWED` / `AUTH_NOT_ADMIN`, or `200` with the task's figures.
 
 **`stripe-webhook`** returns `{ received: true }` (200), `{ received: true, duplicate: true }`
 (200, already processed), `400` (missing or invalid signature), or `500` (transient — Stripe

@@ -1,17 +1,30 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItemLocal, Product } from '../types';
-import { availableStock, sizeChoiceFits } from '../lib/stock';
+import { availableStock, lineVariant, variantChoiceFits, variantFitsShape } from '../lib/stock';
+import { cartSubtotal, unitPrice } from '../lib/pricing';
+import { colorName } from '../lib/variants';
+
+/**
+ * The identity of a cart line: the product and the variant it is for. A line
+ * saved before variant ids existed is identified by the size it recorded
+ * until the next catalogue sync gives it its variant id.
+ */
+export function cartLineKey(item: Pick<CartItemLocal, 'product' | 'variantId' | 'selectedSize'>): string {
+  if (item.variantId) return `${item.product.id}::${item.variantId}`;
+  return item.selectedSize ? `${item.product.id}::size:${item.selectedSize}` : item.product.id;
+}
 
 interface CartState {
   items: CartItemLocal[];
-  addItem: (product: Product, quantity?: number, selectedSize?: string | null) => void;
-  removeItem: (productId: string, selectedSize?: string | null) => void;
-  updateQuantity: (productId: string, quantity: number, selectedSize?: string | null) => void;
+  /** `variantId`: the size/colour combination, for a product that has them. */
+  addItem: (product: Product, quantity?: number, variantId?: string | null) => void;
+  removeItem: (lineKey: string) => void;
+  updateQuantity: (lineKey: string, quantity: number) => void;
   clearCart: () => void;
   /**
    * Reconcile the persisted cart with fresh catalog rows: adopt current
-   * price/stock/images, drop items whose product is gone or inactive, and
+   * price/stock/images, drop items whose product or variant is gone, and
    * clamp quantities to current stock. Returns true when anything changed
    * in a way the shopper should be told about (price change or removal).
    */
@@ -20,8 +33,13 @@ interface CartState {
   subtotal: () => number;
 }
 
-function itemKey(productId: string, selectedSize?: string | null) {
-  return selectedSize ? `${productId}::${selectedSize}` : productId;
+/** The labels a line shows, from its variant. */
+function labelsFor(product: Product, variantId: string | null) {
+  const variant = variantId ? product.product_variants?.find((v) => v.id === variantId) : null;
+  return {
+    selectedSize: variant?.size ?? null,
+    selectedColor: colorName(product, variant?.color_id),
+  };
 }
 
 export const useCartStore = create<CartState>()(
@@ -29,68 +47,54 @@ export const useCartStore = create<CartState>()(
     (set, get) => ({
       items: [],
 
-      addItem: (product, quantity = 1, selectedSize = null) => {
+      addItem: (product, quantity = 1, variantId = null) => {
         set((state) => {
-          // A sized product without a size (or a size on an unsized one) would
-          // only be refused at checkout, after the shopper filled everything in.
-          if (!sizeChoiceFits(product, selectedSize)) return state;
+          // A product with options but no option chosen (or an option on a
+          // product without any) would only be refused at checkout, after the
+          // shopper filled everything in.
+          if (!variantChoiceFits(product, variantId)) return state;
 
-          // The cap is the SELECTED SIZE's stock when there is one, and it is
+          // The cap is the chosen VARIANT's stock when there is one, and it is
           // clamped at 0 — an oversold product reports negative stock, which
           // used to put a negative quantity straight into the cart.
-          const max = availableStock(product, selectedSize);
+          const max = availableStock(product, variantId);
           if (max === 0) return state; // sold out: nothing to add
 
-          const existing = state.items.find(
-            (i) => i.product.id === product.id && (i.selectedSize ?? null) === (selectedSize ?? null)
-          );
+          const line: CartItemLocal = {
+            product,
+            quantity: Math.min(Math.max(1, quantity), max),
+            variantId: variantId ?? null,
+            ...labelsFor(product, variantId ?? null),
+          };
+          const key = cartLineKey(line);
+          const existing = state.items.find((i) => cartLineKey(i) === key);
           if (existing) {
             const newQty = Math.min(existing.quantity + quantity, max);
             return {
-              items: state.items.map((i) =>
-                itemKey(i.product.id, i.selectedSize) === itemKey(product.id, selectedSize)
-                  ? { ...i, quantity: newQty }
-                  : i
-              ),
+              items: state.items.map((i) => (cartLineKey(i) === key ? { ...i, product, quantity: newQty } : i)),
             };
           }
-          return {
-            items: [
-              ...state.items,
-              {
-                product,
-                quantity: Math.min(Math.max(1, quantity), max),
-                selectedSize: selectedSize ?? null,
-              },
-            ],
-          };
+          return { items: [...state.items, line] };
         });
       },
 
-      removeItem: (productId, selectedSize = null) => {
-        set((state) => ({
-          items: state.items.filter(
-            (i) => !(i.product.id === productId && (i.selectedSize ?? null) === (selectedSize ?? null))
-          ),
-        }));
+      removeItem: (lineKey) => {
+        set((state) => ({ items: state.items.filter((i) => cartLineKey(i) !== lineKey) }));
       },
 
-      updateQuantity: (productId, quantity, selectedSize = null) => {
-        const key = itemKey(productId, selectedSize);
-        const target = get().items.find((i) => itemKey(i.product.id, i.selectedSize) === key);
-        // Clamping can land on 0 (the size sold out while the cart sat open);
-        // a 0-quantity line would render as "× 0", so drop it instead.
+      updateQuantity: (lineKey, quantity) => {
+        const target = get().items.find((i) => cartLineKey(i) === lineKey);
+        // Clamping can land on 0 (the variant sold out while the cart sat
+        // open); a 0-quantity line would render as "× 0", so drop it instead.
         const clamped = target
-          ? Math.min(quantity, availableStock(target.product, target.selectedSize))
+          ? Math.min(quantity, availableStock(target.product, target.variantId, target.selectedSize))
           : quantity;
         if (clamped <= 0) {
-          get().removeItem(productId, selectedSize);
+          get().removeItem(lineKey);
           return;
         }
         set((state) => ({
-          items: state.items.map((i) =>
-            itemKey(i.product.id, i.selectedSize) === key ? { ...i, quantity: clamped } : i
-          ),
+          items: state.items.map((i) => (cartLineKey(i) === lineKey ? { ...i, quantity: clamped } : i)),
         }));
       },
 
@@ -100,7 +104,7 @@ export const useCartStore = create<CartState>()(
         const freshById = new Map(products.map((p) => [p.id, p]));
         let changed = false;
 
-        const nextItems: CartItemLocal[] = [];
+        const next = new Map<string, CartItemLocal>();
         for (const item of get().items) {
           const fresh = freshById.get(item.product.id);
 
@@ -110,35 +114,63 @@ export const useCartStore = create<CartState>()(
             continue;
           }
 
-          // The product started or stopped being sold by size since the line
-          // was added: checkout would refuse it either way.
-          if (!sizeChoiceFits(fresh, item.selectedSize)) {
+          // A line saved before variant ids existed: find its variant by the
+          // size it recorded (only a size without a colour can be meant).
+          let variantId = item.variantId ?? null;
+          if (!variantId && item.selectedSize) {
+            const legacy = lineVariant(fresh, null, item.selectedSize);
+            if (legacy) variantId = legacy.id;
+          }
+
+          // The product started or stopped having options since the line was
+          // added: checkout would refuse it either way.
+          if (!variantChoiceFits(fresh, variantId, variantId ? null : item.selectedSize)) {
+            changed = true;
+            continue;
+          }
+          const variant = variantId ? fresh.product_variants?.find((v) => v.id === variantId) : null;
+          if (variantId && fresh.product_variants && (!variant || !variant.is_active || !variantFitsShape(fresh, variant))) {
             changed = true;
             continue;
           }
 
-          if (fresh.price !== item.product.price) changed = true;
+          if (unitPrice(fresh, variantId) !== unitPrice(item.product, item.variantId, item.selectedSize)) {
+            changed = true;
+          }
 
-          // Against the SELECTED SIZE's stock — a product with 300 units but 2
-          // left in XL must clamp an XL line to 2, not 300.
-          const quantity = Math.min(item.quantity, availableStock(fresh, item.selectedSize));
+          // Against the chosen VARIANT's stock — a product with 300 units but
+          // 2 left in XL must clamp an XL line to 2, not 300.
+          const max = availableStock(fresh, variantId, variantId ? null : item.selectedSize);
+          const line: CartItemLocal = {
+            product: fresh,
+            quantity: item.quantity,
+            variantId,
+            ...(variantId ? labelsFor(fresh, variantId) : { selectedSize: item.selectedSize ?? null, selectedColor: null }),
+          };
+          const key = cartLineKey(line);
+          // Two lines that turn out to be the same variant become one.
+          const merged = next.get(key);
+          if (merged) {
+            changed = true;
+            line.quantity += merged.quantity;
+          }
+          const quantity = Math.min(line.quantity, max);
           if (quantity === 0) {
             changed = true;
+            next.delete(key);
             continue;
           }
-          if (quantity !== item.quantity) changed = true;
-
-          nextItems.push({ ...item, product: fresh, quantity });
+          if (quantity !== line.quantity) changed = true;
+          next.set(key, { ...line, quantity });
         }
 
-        set({ items: nextItems });
+        set({ items: [...next.values()] });
         return changed;
       },
 
       itemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
 
-      subtotal: () =>
-        get().items.reduce((sum, i) => sum + i.product.price * i.quantity, 0),
+      subtotal: () => cartSubtotal(get().items),
     }),
     {
       name: 'aurum-cart',

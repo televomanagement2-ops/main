@@ -233,24 +233,16 @@ describe('downgrade guards (M2)', () => {
 });
 
 describe('refunds (M3)', () => {
-  it('full charge.refunded moves the order to refunded', () => {
-    const d = decide(
-      { type: 'charge.refunded', paymentIntentId: 'pi_1', amountRefunded: 10000, amountCharged: 10000 },
-      order('paid'),
-    );
-    if (d.action !== 'update') throw new Error('expected update');
-    expect(d.updates.status).toBe('refunded');
-    expect(d.updates.refund_amount).toBe(100);
-  });
-
-  it('PARTIAL charge.refunded records the amount but keeps the order paid', () => {
-    const d = decide(
-      { type: 'charge.refunded', paymentIntentId: 'pi_1', amountRefunded: 2500, amountCharged: 10000 },
-      order('paid'),
-    );
-    if (d.action !== 'update') throw new Error('expected update');
-    expect(d.updates.status).toBeUndefined();
-    expect(d.updates.refund_amount).toBe(25);
+  // The full/partial decision itself is made by sync_order_refunds (migration
+  // 024) from every refund Stripe holds for the payment — see the rehearsal
+  // scenarios there. Here: each refund event asks for that sync, whatever it
+  // carries, because an order can now have several refunds.
+  it.each([
+    [10000, 10000],
+    [2500, 10000],
+  ])('charge.refunded (%i of %i) asks to mirror the payment\'s refunds', (amountRefunded, amountCharged) => {
+    const d = decide({ type: 'charge.refunded', paymentIntentId: 'pi_1', amountRefunded, amountCharged }, order('paid'));
+    expect(d).toEqual({ action: 'sync_refunds', paymentIntentId: 'pi_1' });
   });
 
   it('charge.refunded without a payment_intent is invalid', () => {
@@ -261,32 +253,19 @@ describe('refunds (M3)', () => {
     expect(d.action).toBe('invalid');
   });
 
-  it('refund.updated ignores non-succeeded refunds', () => {
+  it.each(['pending', 'succeeded', 'failed', 'canceled'])('refund.updated (%s) asks to mirror the refunds', (status) => {
     const d = decide(
-      { type: 'refund.updated', paymentIntentId: 'pi_1', refundId: 're_1', refundStatus: 'pending', amount: 10000, createdAt: null },
+      { type: 'refund.updated', paymentIntentId: 'pi_1', refundId: 're_1', refundStatus: status, amount: 4000, createdAt: null },
+      order('paid', 100),
+    );
+    expect(d).toEqual({ action: 'sync_refunds', paymentIntentId: 'pi_1' });
+  });
+
+  it('refund.updated without a payment_intent is invalid', () => {
+    const d = decide(
+      { type: 'refund.updated', paymentIntentId: null, refundId: 're_1', refundStatus: 'succeeded', amount: 1, createdAt: null },
       order('paid'),
     );
-    expect(d.action).toBe('skip');
-  });
-
-  it('refund.updated covering the full total marks refunded', () => {
-    const d = decide(
-      { type: 'refund.updated', paymentIntentId: 'pi_1', refundId: 're_1', refundStatus: 'succeeded', amount: 10000, createdAt: '2026-01-01T00:00:00Z' },
-      order('paid', 100),
-    );
-    if (d.action !== 'update') throw new Error('expected update');
-    expect(d.updates.status).toBe('refunded');
-    expect(d.updates.refund_id).toBe('re_1');
-    expect(d.updates.refunded_at).toBe('2026-01-01T00:00:00Z');
-  });
-
-  it('partial refund.updated keeps the order status untouched', () => {
-    const d = decide(
-      { type: 'refund.updated', paymentIntentId: 'pi_1', refundId: 're_1', refundStatus: 'succeeded', amount: 4000, createdAt: null },
-      order('paid', 100),
-    );
-    if (d.action !== 'update') throw new Error('expected update');
-    expect(d.updates.status).toBeUndefined();
-    expect(d.updates.refund_amount).toBe(40);
+    expect(d.action).toBe('invalid');
   });
 });

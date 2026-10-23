@@ -44,8 +44,9 @@ the full source code plus step-by-step guides that take you from zero to a live,
 | Payments | Stripe | Processes card payments securely. |
 | Emails | Resend (optional) | Sends shipping/refund/delivery emails. |
 
-This store ships with **four** Edge Functions: `create-checkout-session`, `stripe-webhook`,
-`update-tracking`, and `handle-order-action`.
+This store ships with **five** Edge Functions: `create-checkout-session`, `stripe-webhook`,
+`update-tracking`, `handle-order-action`, and `store-worker` (the scheduled low-stock and
+back-in-stock emails).
 
 > **Important —** Never commit your `.env` file or share your secret keys. Use the provided
 > `.env.example` as a template and keep your real keys private. If you distribute the project

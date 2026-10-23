@@ -25,6 +25,19 @@ export const storeConfig = {
   sellerEntityType: '[SELLER_ENTITY_TYPE]',
   /** Full registered business address. */
   businessAddress: '[BUSINESS_ADDRESS]',
+  /**
+   * Tax / VAT number printed on invoices (e.g. "VAT IT01234567890", "EIN
+   * 12-3456789"). Leave empty to print none.
+   */
+  taxId: '',
+  /**
+   * A line printed at the foot of every invoice — payment terms, a legal
+   * mention your country requires, or a thank-you. Leave empty for none.
+   * Note: in some countries (Italy, for one) the invoice with legal value is
+   * the electronic one sent through the national system; the printed document
+   * is then a courtesy copy, and this is the place to say so.
+   */
+  invoiceNotes: '',
 
   // Customer-facing contact. Generic placeholders (example.com / 555) — replace
   // before launch. They render cleanly on the demo while signaling "fill me".

@@ -45,9 +45,11 @@
 <body>
 
 <h1>CommerceJet — Stripe Setup</h1>
+
 <p class="subtitle">Accept payments, confirm orders &amp; charge sales tax.</p>
 
 <h2>Contents</h2>
+
 <ol>
   <li>Create your Stripe account</li>
   <li>Add the secret key to Supabase</li>
@@ -98,8 +100,8 @@ frontend or in GitHub.</p></blockquote>
     <tr><td><code>checkout.session.expired</code></td><td>Checkout abandoned → cancel order.</td></tr>
     <tr><td><code>payment_intent.succeeded</code></td><td>Payment confirmed.</td></tr>
     <tr><td><code>payment_intent.payment_failed</code></td><td>Payment failed → mark failed.</td></tr>
-    <tr><td><code>charge.refunded</code></td><td>Refund issued → update order.</td></tr>
-    <tr><td><code>refund.updated</code></td><td>Refund status changed.</td></tr>
+    <tr><td><code>charge.refunded</code></td><td>Refund issued (from the admin or the Stripe dashboard) → record it on the order.</td></tr>
+    <tr><td><code>refund.updated</code></td><td>Refund status changed (e.g. failed) → update the record and flag the order.</td></tr>
   </tbody>
 </table>
 
@@ -159,8 +161,33 @@ use mode A.</p></blockquote>
 </table>
 
 <p>After paying you should land on the success page, the order should show as <strong>paid</strong> in the
-<code>orders</code> table, and stock should decrease. (In Stripe → Developers → Webhooks you can inspect
-and resend each delivery — useful if an order stays pending.)</p>
+<code>orders</code> table, stock should decrease, and the customer receives an order-confirmation email
+(when <code>RESEND_API_KEY</code> is configured). (In Stripe → Developers → Webhooks you can inspect
+and resend each delivery — useful if an order stays pending. Resending a processed event is
+safe: the webhook answers <code>duplicate: true</code> and changes nothing.)</p>
+
+<p>Good to know about the payment flow:</p>
+
+<ul>
+  <li><strong>Checkout sessions expire after 1 hour</strong>; the pg_cron job (guide 03) cancels the
+    matching order after 2 hours, so it can never cancel a still-payable session.</li>
+  <li><strong>Paid orders are always honored.</strong> If stock runs out between two concurrent checkouts,
+    both orders are marked paid, stock goes negative, and the later order is flagged
+    <strong>needs_review</strong> in Admin → Orders (badge + filter). See <code>supabase/SETUP_CHECKLIST.md</code>.</li>
+  <li><strong>Refunds.</strong> Refund from Admin → Orders → the order → <strong>Refunds</strong>: choose the lines and
+    quantities (and whether each goes back in stock) and the shipping; the amount is suggested
+    and can be changed, and you can refund again later until nothing is left. Refunds made in
+    the Stripe dashboard are recorded too, one by one. A partial refund keeps the order <code>paid</code>;
+    only a full one moves it to <code>refunded</code> — and, if it had not shipped yet, puts its goods back
+    in stock. A refund that fails flags the order <strong>needs_review</strong>.</li>
+  <li><strong>Waiting payments.</strong> An order still waiting for payment has <strong>Check with Stripe</strong> (applies
+    what Stripe says, if the webhook was missed) and <strong>Cancel order</strong>, which closes the Stripe
+    checkout first so it can no longer be paid. An order held for review after an amount
+    mismatch has <strong>Confirm payment</strong>, once Stripe shows it as paid.</li>
+  <li><strong>Discount codes</strong> (Admin → Discounts) need nothing in Stripe: each checkout gets a one-off
+    coupon for exactly the discount the store computed, so the Stripe receipt shows it and the
+    amount charged matches the order.</li>
+</ul>
 
 <hr>
 

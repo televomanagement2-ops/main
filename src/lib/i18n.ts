@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { usePreferencesStore } from '../store/preferencesStore';
 import type { AppLanguageCode } from '../store/preferencesStore';
 import { editorialCopy } from './i18nCopy';
+import { commerceCopy } from './i18nCommerce';
 import { STORE_CURRENCY } from '../../supabase/functions/_shared/money.ts';
 
 const LOCALE_MAP: Record<AppLanguageCode, string> = {
@@ -2825,9 +2826,10 @@ const translations: Translations = {
 };
 
 /**
- * Merge the editorial copy deck (src/lib/i18nCopy.ts) over the base dictionary
- * for each language. Nested sections merge key by key, so the deck can add new
- * strings and re-voice individual existing ones without restating a section.
+ * Merge the copy decks (src/lib/i18nCopy.ts, then src/lib/i18nCommerce.ts)
+ * over the base dictionary for each language. Nested sections merge key by
+ * key, so a deck can add new strings and re-voice individual existing ones
+ * without restating a section.
  */
 function deepMerge(base: Dictionary, override: Dictionary): Dictionary {
   const result: Dictionary = { ...base };
@@ -2847,6 +2849,20 @@ function deepMerge(base: Dictionary, override: Dictionary): Dictionary {
 
 for (const code of Object.keys(translations) as AppLanguageCode[]) {
   translations[code] = deepMerge(translations[code], editorialCopy[code] as Dictionary);
+  translations[code] = deepMerge(translations[code], commerceCopy[code] as Dictionary);
+}
+
+/** A language's merged dictionary as dotted key → text (the key-coverage test reads it). */
+export function flatDictionary(language: AppLanguageCode): Record<string, string> {
+  const flat: Record<string, string> = {};
+  const walk = (node: Dictionary, prefix: string) => {
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === 'string') flat[prefix + key] = value;
+      else walk(value, `${prefix}${key}.`);
+    }
+  };
+  walk(translations[language], '');
+  return flat;
 }
 
 function resolveKey(dictionary: Dictionary, path: string): string | null {

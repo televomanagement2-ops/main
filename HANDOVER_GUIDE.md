@@ -56,10 +56,12 @@ Follow [`supabase/SETUP_CHECKLIST.md`](supabase/SETUP_CHECKLIST.md):
 4. Set the Edge Function **secrets** (Supabase → Settings → Edge Functions → Secrets):
    `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SUPABASE_ANON_KEY`, `RESEND_API_KEY`,
    **`ALLOWED_ORIGINS`** (see Step 3), the tax settings **`TAX_RATE`** / **`STRIPE_TAX_ENABLED`**
-   (see Stripe guide), and the email-branding values **`STORE_NAME`** / **`SUPPORT_EMAIL`** /
-   **`RESEND_FROM_EMAIL`**.
-5. Deploy **all four** Edge Functions: `create-checkout-session`, `stripe-webhook`,
-   `update-tracking`, `handle-order-action`.
+   (see Stripe guide), the email-branding values **`STORE_NAME`** / **`SUPPORT_EMAIL`** /
+   **`RESEND_FROM_EMAIL`**, and **`STORE_WORKER_SECRET`** (a long random value).
+5. Deploy **all five** Edge Functions: `create-checkout-session`, `stripe-webhook`,
+   `update-tracking`, `handle-order-action`, `store-worker`.
+6. Store the `store-worker` address and the same `STORE_WORKER_SECRET` value in Vault, so the
+   scheduled low-stock and back-in-stock emails can run ("Store emails" in the checklist).
 
 ---
 
@@ -170,10 +172,15 @@ after the role change so the app picks it up.
 ## Step 6 — Go-live checklist
 
 - [ ] `src/config/storeConfig.ts` fully filled (no `[...]` left) — name, contacts, legal.
-- [ ] All migrations applied in order (through `021_product_sizes.sql`); RLS enabled on every table.
-- [ ] `SELECT jobname FROM cron.job;` lists `expire-pending-orders` (scheduled by migration 020).
-- [ ] All four Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`, tax
-      (`TAX_RATE`/`STRIPE_TAX_ENABLED`), and email branding (`STORE_NAME`/`RESEND_FROM_EMAIL`).
+- [ ] All migrations applied in order (through `026_import_keeps_variants.sql`); RLS enabled on every table.
+- [ ] `SELECT jobname FROM cron.job;` lists `expire-pending-orders` (migration 020) and
+      `store-worker-back-in-stock`, `store-worker-low-stock` (migration 023).
+- [ ] All five Edge Functions deployed; secrets set, including `ALLOWED_ORIGINS`, tax
+      (`TAX_RATE`/`STRIPE_TAX_ENABLED`), email branding (`STORE_NAME`/`RESEND_FROM_EMAIL`) and
+      `STORE_WORKER_SECRET`, with the matching `store_worker_url` / `store_worker_secret` in Vault
+      (Admin → Inventory → Alerts → **Check and send now** succeeds).
+- [ ] Invoices: `taxId` and `invoiceNotes` filled in `src/config/storeConfig.ts`, and the invoice
+      layout checked against your country's requirements.
 - [ ] Sent a test order email (shipping/refund/delivery) and confirmed it shows your brand.
 - [ ] Supabase Auth **Site URL** + **Redirect URLs** point at your current domain (Step 3b).
 - [ ] Stripe in **live** mode; webhook endpoint + events configured; test purchase verified.

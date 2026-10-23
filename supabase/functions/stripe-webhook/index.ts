@@ -1,8 +1,7 @@
 import Stripe from 'npm:stripe@18';
-import { createClient } from 'npm:@supabase/supabase-js@2';
-import { formatMoney, renderEmail, escapeHtml, STORE_NAME } from '../_shared/store.ts';
-import { sendEmail } from '../_shared/email.ts';
-import { decide, type OrderState, type WebhookEventInfo } from '../_shared/webhook-logic.ts';
+import { createClient, type SupabaseClient as Client } from 'npm:@supabase/supabase-js@2';
+import { sendOrderConfirmationEmail } from '../_shared/order-emails.ts';
+import { decide, dollars, type OrderState, type WebhookEventInfo } from '../_shared/webhook-logic.ts';
 
 const STRIPE_API_VERSION = '2025-03-31.basil';
 
@@ -18,10 +17,15 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const stripeTaxEnabled =
   (Deno.env.get('STRIPE_TAX_ENABLED') ?? 'false').toLowerCase() === 'true';
 
-let stripe: Stripe | null = null;
-let supabase: ReturnType<typeof createClient> | null = null;
+// The generated database types are not available to the functions, so the
+// client is untyped.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// deno-lint-ignore no-explicit-any
+type SupabaseClient = Client<any, any, any>;
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
-type SupabaseClient = ReturnType<typeof createClient>;
+let stripe: Stripe | null = null;
+let supabase: SupabaseClient | null = null;
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -181,84 +185,38 @@ function mapEvent(event: Stripe.Event): WebhookEventInfo | null {
   }
 }
 
-/** Order confirmation email — fire-and-forget from the webhook. */
-async function sendOrderConfirmationEmail(client: SupabaseClient, orderId: string) {
-  const { data: order, error } = await client
-    .from('orders')
-    .select(
-      // The `!orders_user_id_fkey` hint is required, not decorative: orders
-      // references profiles twice (user_id and refund_requested_by, migration
-      // 017) and PostgREST rejects an ambiguous embed — which silently killed
-      // every order confirmation email.
-      'id, total, shipping_cost, shipping_method_name, order_items(product_name, quantity, unit_price, selected_size), profiles!orders_user_id_fkey(email, full_name)',
-    )
-    .eq('id', orderId)
-    .single();
+/**
+ * Mirror every refund of a payment from Stripe into order_refunds and update
+ * the order (sync_order_refunds, migration 024). Reading Stripe instead of the
+ * event payload is what makes several partial refunds — including ones made
+ * in the Stripe Dashboard — add up correctly. Returns the order id, or null
+ * when no order uses this payment.
+ */
+async function syncRefunds(client: SupabaseClient, paymentIntentId: string): Promise<string | null> {
+  const stripeClient = getStripeClient();
+  const intent = await stripeClient.paymentIntents.retrieve(paymentIntentId, { expand: ['latest_charge'] });
+  const charge = (typeof intent.latest_charge === 'object' ? intent.latest_charge : null) as Stripe.Charge | null;
+  const refunds = await stripeClient.refunds.list({ payment_intent: paymentIntentId, limit: 100 });
 
-  if (error || !order) {
-    throw new Error(`Confirmation email lookup failed: ${error?.message ?? 'order not found'}`);
-  }
-
-  const profile = order.profiles as { email?: string; full_name?: string } | null;
-  const customerEmail = profile?.email;
-  if (!customerEmail) {
-    console.warn(`[webhook] order ${orderId}: no customer email — skipping confirmation`);
-    return;
-  }
-
-  const customerName = profile?.full_name || 'there';
-  const shortOrderId = orderId.slice(0, 8).toUpperCase();
-  const items = (order.order_items ?? []) as Array<{
-    product_name: string;
-    quantity: number;
-    unit_price: number;
-    selected_size: string | null;
-  }>;
-
-  const itemRowsHtml = items
-    .map((item) => {
-      const name = escapeHtml(
-        item.selected_size ? `${item.product_name} (${item.selected_size})` : item.product_name,
-      );
-      return `
-        <tr>
-          <td style="padding: 8px 0; font-size: 14px; color: #444;">${name} × ${item.quantity}</td>
-          <td style="padding: 8px 0; font-size: 14px; color: #444; text-align: right;">${formatMoney(Number(item.unit_price) * item.quantity)}</td>
-        </tr>`;
-    })
-    .join('');
-
-  const itemLinesText = items
-    .map(
-      (item) =>
-        `- ${item.selected_size ? `${item.product_name} (${item.selected_size})` : item.product_name} × ${item.quantity}: ${formatMoney(Number(item.unit_price) * item.quantity)}`,
-    )
-    .join('\n');
-
-  await sendEmail({
-    to: customerEmail,
-    subject: `Order confirmed — #${shortOrderId}`,
-    html: renderEmail({
-      eyebrow: 'Order confirmed',
-      heading: `Thanks for your order, ${escapeHtml(customerName)}!`,
-      bodyHtml: `
-        <p style="font-size: 15px; color: #444; line-height: 1.7; margin: 0 0 16px;">
-          We've received your payment for order <strong>#${shortOrderId}</strong> and we're getting it ready to ship.
-        </p>
-        <table style="width: 100%; border-collapse: collapse; margin: 0 0 16px;">
-          ${itemRowsHtml}
-          <tr>
-            <td style="padding: 12px 0 0; font-size: 15px; font-weight: 700; border-top: 1px solid #eee;">Total</td>
-            <td style="padding: 12px 0 0; font-size: 15px; font-weight: 700; text-align: right; border-top: 1px solid #eee;">${formatMoney(Number(order.total))}</td>
-          </tr>
-        </table>
-        <p style="font-size: 14px; color: #666; line-height: 1.7; margin: 0;">
-          We'll email you tracking details as soon as your order ships. Questions? Just reply to this email.
-        </p>
-      `,
-    }),
-    text: `Hi ${customerName},\n\nWe've received your payment for order #${shortOrderId}.\n\n${itemLinesText}\n\nTotal: ${formatMoney(Number(order.total))}\n\nWe'll email you tracking details as soon as it ships.\n\nThanks for shopping with ${STORE_NAME}.`,
+  const { data, error } = await client.rpc('sync_order_refunds', {
+    p_payment_intent: paymentIntentId,
+    p_refunds: refunds.data.map((refund) => ({
+      id: refund.id,
+      amount: dollars(refund.amount ?? 0),
+      status: refund.status ?? 'pending',
+      request_id: refund.metadata?.refund_request_id ?? null,
+      created: refund.created ? new Date(refund.created * 1000).toISOString() : null,
+    })),
+    p_amount_refunded: charge ? dollars(charge.amount_refunded ?? 0) : null,
+    p_amount_charged: charge ? dollars(charge.amount ?? 0) : null,
   });
+
+  if (error) {
+    const code = (error as { code?: string }).code;
+    if (isBusinessRuleCode(code, error.message)) throw new BusinessRuleError(error.message);
+    throw new Error(`Refund sync failed: ${error.message}`);
+  }
+  return (data as string | null) ?? null;
 }
 
 Deno.serve(async (req) => {
@@ -286,7 +244,7 @@ Deno.serve(async (req) => {
     event = await getStripeClient().webhooks.constructEventAsync(
       body,
       signature,
-      webhookSecret,
+      webhookSecret!, // checked with the other secrets above
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -350,6 +308,24 @@ Deno.serve(async (req) => {
           // Malformed event payload — retrying can't fix it; record and ACK.
           console.error(`[webhook] ${event.type} invalid: ${decision.reason}`);
           break;
+
+        case 'sync_refunds': {
+          try {
+            updatedOrderId = await syncRefunds(client, decision.paymentIntentId);
+          } catch (err) {
+            if (!(err instanceof BusinessRuleError)) throw err;
+            console.error(`[webhook] ${event.type} refund sync rejected by business rules: ${err.message}`);
+            if (order) {
+              const { error: parkError } = await client
+                .from('orders')
+                .update({ needs_review: true, review_reason: `${event.type}: ${err.message}`.slice(0, 500) })
+                .eq('id', order.id);
+              if (parkError) throw new Error(`Failed to park order ${order.id}: ${parkError.message}`);
+              updatedOrderId = order.id;
+            }
+          }
+          break;
+        }
 
         case 'update': {
           try {

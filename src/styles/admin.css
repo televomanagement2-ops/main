@@ -498,6 +498,359 @@
   .size-bulk__skus { margin-left: 0; }
 }
 
+/* ── VARIANTS — colours × sizes (product editor) ─────────────────────────
+   Colours are a list with a swatch each, sizes a row of compact fields, and
+   every combination one line of the stock table — grouped by colour, with a
+   price and a cost when the product is priced per variant. Rows place their
+   cells by area, so the shared size-row classes inside them stay put. */
+.variant-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--line);
+}
+.variant-block:first-child { padding-top: 0; border-top: 0; }
+.color-preset { gap: var(--s-2); }
+
+/* The native colour picker, reduced to its swatch. */
+.swatch-input {
+  width: 34px; height: 34px;
+  padding: 2px;
+  flex-shrink: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+  cursor: pointer;
+}
+.swatch-input::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch-input::-webkit-color-swatch { border: 0; border-radius: 1px; }
+.swatch-input::-moz-color-swatch { border: 0; border-radius: 1px; }
+.swatch-input:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.variant-option {
+  display: grid;
+  grid-template-columns: 56px minmax(120px, auto) minmax(0, 1fr) 30px;
+  grid-template-areas: 'order swatch name remove';
+  align-items: center;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+.swatch-field { grid-area: swatch; display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.variant-option > .input { grid-area: name; }
+.variant-option > .size-row__icon { grid-area: remove; }
+.variant-option.has-error [aria-invalid='true'] { border-color: var(--critical); }
+
+.variant-sizes { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.variant-size {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+}
+.variant-size .input { width: 88px; }
+.variant-size .field__error { flex-basis: 100%; padding-inline: var(--s-1); }
+.variant-size.has-error { border-color: color-mix(in srgb, var(--critical) 55%, var(--line)); }
+.variant-size.has-error [aria-invalid='true'] { border-color: var(--critical); }
+
+.variant-table { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.variant-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(112px, 1.5fr) 80px 56px;
+  grid-template-areas: 'label sku stock toggle';
+  align-items: center;
+  gap: var(--s-2);
+  padding-block: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+.variant-table--pricing .variant-row {
+  grid-template-columns: minmax(72px, 1fr) minmax(104px, 1.3fr) 88px 88px 80px 56px;
+  grid-template-areas: 'label sku price cost stock toggle';
+}
+.variant-row--head {
+  padding-block: var(--s-2) var(--s-1);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.variant-row--head > span:last-child { text-align: center; }
+.variant-row__label {
+  grid-area: label;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.variant-row__sku { grid-area: sku; }
+.variant-row__price { grid-area: price; font-variant-numeric: tabular-nums; }
+.variant-row__cost { grid-area: cost; font-variant-numeric: tabular-nums; }
+.variant-row__stock { grid-area: stock; }
+.variant-row__toggle { grid-area: toggle; justify-content: center; }
+.variant-row .size-row__error { grid-column: 1 / -1; }
+.variant-row.is-off .variant-row__label { color: var(--ink-3); }
+.variant-row.is-off .input { color: var(--ink-3); background: var(--neutral-soft); }
+.variant-row.has-error [aria-invalid='true'] { border-color: var(--critical); }
+
+.variant-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4) 0 var(--s-2);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.variant-group__head strong { font-weight: 500; }
+
+/* Catalog list and restock panel: sizes grouped under their colour. */
+.size-chips__color {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 72px;
+  margin-right: var(--s-1);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.size-quick__group { display: flex; flex-direction: column; gap: var(--s-2); }
+.size-quick__title { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); font-weight: 500; color: var(--ink); }
+
+/* Product photos: which colour each one belongs to. */
+.media-manager__color {
+  width: 100%;
+  height: 28px;
+  padding-inline: 6px 22px;
+  font-size: var(--fs-xs);
+  background-position: right 6px center;
+}
+
+@media (max-width: 640px) {
+  .variant-option {
+    grid-template-columns: 52px minmax(0, 1fr) 30px;
+    grid-template-areas:
+      'order name remove'
+      'swatch swatch swatch';
+  }
+  .variant-row,
+  .variant-table--pricing .variant-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+    grid-template-areas:
+      'label stock toggle'
+      'sku sku sku';
+  }
+  .variant-table--pricing .variant-row {
+    grid-template-areas:
+      'label stock toggle'
+      'sku sku sku'
+      'price cost cost';
+  }
+  .variant-row--head { display: none; }
+  .variant-row__toggle { justify-content: flex-end; }
+}
+
+/* ── ORDER OPERATIONS — refunds, exchanges, restocks ─────────────────────
+   An operation opens in place, inside the order, as a bordered panel. */
+.order-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+  padding: var(--s-5);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+}
+.refund-lines { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.refund-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-3) var(--s-2);
+  border-bottom: 1px solid var(--line);
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+.refund-line.is-on { background: var(--accent-soft); }
+.refund-line__pick { align-items: flex-start; flex: 1 1 220px; min-width: 0; }
+.refund-line__pick input[type='checkbox'] { margin-top: 2px; }
+.refund-line__controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-4); }
+
+/* Orders list: pick orders to print or export together. */
+.table__select { width: 40px; }
+.table__select input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  margin-top: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+}
+.bulk-bar > :first-child { margin-right: auto; }
+
+/* Order timeline: notes read as notes; the dot names the kind of event. */
+.activity__row--note .activity__label {
+  padding: var(--s-2) var(--s-3);
+  border-left: 2px solid var(--accent-line);
+  background: var(--accent-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.activity__dot--note,
+.activity__dot--exchange { background: var(--accent); }
+.activity__dot--status   { background: var(--ink-3); }
+.activity__dot--invoice  { background: var(--ink); }
+.activity__dot--tracking,
+.activity__dot--payment  { background: var(--positive); }
+.activity__dot--review   { background: var(--caution); }
+.activity__dot--refund   { background: var(--critical); }
+
+/* Stock movements: the change carries its direction, never colour alone. */
+.movement-table td { vertical-align: top; }
+.movement-delta.is-in { color: var(--positive); }
+.movement-delta.is-out { color: var(--critical); }
+
+/* Catalog import: the rules as a quiet list, the problems as a scrolling one. */
+.import-rules { padding-left: var(--s-4); list-style: disc; }
+.import-rules li::marker { color: var(--ink-3); }
+.import-issues {
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: var(--s-2);
+  padding-left: var(--s-4);
+  list-style: disc;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+
+/* Size guide editor: a grid of small fields, scrolling sideways when wide. */
+.guide-editor { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-xs); }
+.guide-editor table { min-width: 100%; border-collapse: collapse; }
+.guide-editor th,
+.guide-editor td { padding: 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.guide-editor thead th { background: var(--neutral-soft); }
+.guide-editor tbody tr:last-child td { border-bottom: 0; }
+.guide-editor .input { width: 92px; min-width: 64px; }
+.guide-editor__head { display: flex; align-items: center; gap: 2px; }
+.guide-editor__head .input { font-weight: 500; }
+
+/* ── PRINTED DOCUMENTS — packing slips and invoices ──────────────────────
+   On screen the documents sit on the page as sheets; on paper each one is a
+   page, black on white whatever the screen theme. */
+.print-root {
+  max-width: 860px;
+  margin-inline: auto;
+  padding: 0 var(--page-pad) var(--s-16);
+}
+.print-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-block: var(--s-4);
+  margin-bottom: var(--s-6);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.print-error { margin-bottom: var(--s-6); font-size: var(--fs-sm); color: var(--critical); }
+.print-doc {
+  margin-bottom: var(--s-8);
+  padding: 48px 52px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.print-head { display: flex; justify-content: space-between; gap: var(--s-8); margin-bottom: var(--s-8); }
+.print-seller { color: var(--ink-2); }
+.print-brand { margin-bottom: var(--s-2); font-family: var(--font-serif); font-size: 26px; line-height: 1.1; color: var(--ink); }
+.print-meta { text-align: right; }
+.print-meta h1 { margin-bottom: var(--s-2); font-family: var(--font-serif); font-size: 24px; font-weight: 400; line-height: 1.15; }
+.print-label {
+  margin-bottom: var(--s-1);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.print-address { margin-bottom: var(--s-6); }
+.print-table { width: 100%; margin-bottom: var(--s-6); border-collapse: collapse; }
+.print-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line-2);
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.print-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.print-table th:first-child, .print-table td:first-child { padding-left: 0; }
+.print-table th:last-child, .print-table td:last-child { padding-right: 0; }
+.print-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.print-table .check { width: 32px; text-align: center; }
+.print-table tfoot td { border-bottom: 0; font-weight: 600; }
+.print-root .mono { font-family: var(--font-mono); font-size: 11px; }
+.print-sku { color: var(--ink-3); }
+.print-box { display: inline-block; width: 14px; height: 14px; border: 1px solid var(--ink); vertical-align: middle; }
+.print-totals { display: flex; flex-direction: column; gap: 4px; width: min(320px, 100%); margin-left: auto; }
+.print-totals > div { display: flex; justify-content: space-between; gap: var(--s-4); }
+.print-totals dd { font-variant-numeric: tabular-nums; }
+.print-total { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--line-2); font-size: 14px; font-weight: 600; }
+.print-sign { margin-top: var(--s-8); }
+.print-lines { height: 72px; background: repeating-linear-gradient(to bottom, transparent 0 23px, var(--line-2) 23px 24px); }
+.print-foot { margin-top: var(--s-10); padding-top: var(--s-4); border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); }
+
+@media (max-width: 640px) {
+  .print-doc { padding: var(--s-5); }
+  .print-head { flex-direction: column; gap: var(--s-4); }
+  .print-meta { text-align: left; }
+}
+
+@page { margin: 14mm; }
+
+@media print {
+  .print-root {
+    --ink: #16140F;
+    --ink-2: #4A443A;
+    --ink-3: #5C554A;
+    --line: rgba(0, 0, 0, 0.14);
+    --line-2: rgba(0, 0, 0, 0.32);
+    --surface: #FFFFFF;
+    --paper: #FFFFFF;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    color: var(--ink);
+  }
+  html, body { background: #FFFFFF; }
+  .print-toolbar, .print-error { display: none; }
+  .print-doc { margin: 0; padding: 0; border: 0; break-after: page; }
+  .print-doc:last-child { break-after: auto; }
+  .print-table tr { break-inside: avoid; }
+}
+
 /* ── RESPONSIVE ──────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .dash-hero { grid-template-columns: 1fr; }

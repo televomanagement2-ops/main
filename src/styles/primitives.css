@@ -665,6 +665,116 @@ a:hover > .media--zoom > img,
 .empty__title { font-family: var(--font-serif); font-size: var(--fs-h2); line-height: 1.15; color: var(--ink); }
 .empty__body { font-size: var(--fs-body); color: var(--ink-2); }
 
+/* ── COLOUR SWATCH — a product colour as a dot ──────────────────────────
+   The hairline keeps white and very pale swatches visible on paper. */
+.swatch {
+  display: inline-block;
+  width: 18px; height: 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-2);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.swatch--sm { width: 12px; height: 12px; }
+.swatch--xs { width: 10px; height: 10px; }
+
+/* ── PRICES — the struck-through original and the markdown ─────────────── */
+.price-was {
+  margin-left: 0.5em;
+  color: var(--ink-3);
+  font-size: 0.8em;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.price-off {
+  margin-left: 0.5em;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── CODE CHIP — a discount code, set in mono ───────────────────────────── */
+.code-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── SEGMENTED — one choice out of a few, all visible ───────────────────── */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  align-self: flex-start;
+}
+.segmented__item {
+  padding: 0 var(--s-4);
+  height: 34px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+}
+.segmented__item:first-child { border-left: 0; }
+.segmented__item:hover { color: var(--ink); }
+.segmented__item.is-active { background: var(--action); color: var(--on-action); }
+
+/* ── CHECK LIST — many checkboxes in a bounded, scrollable box ──────────── */
+.check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--s-2) var(--s-4);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+}
+.check-list .checkbox { align-items: flex-start; min-width: 0; overflow-wrap: anywhere; }
+
+/* ── SIZE GUIDE — a measurement table (product page, admin preview) ─────
+   The first column is the size and reads as each row's heading. */
+.size-guide { display: flex; flex-direction: column; gap: var(--s-4); }
+.size-guide__scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-xs); }
+.size-guide__table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.size-guide__table th,
+.size-guide__table td {
+  padding: var(--s-2) var(--s-3);
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+.size-guide__table thead th {
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: var(--neutral-soft);
+}
+.size-guide__table tbody th { text-align: left; font-weight: 500; color: var(--ink); }
+.size-guide__table td { color: var(--ink-2); }
+.size-guide__table tbody tr:last-child > * { border-bottom: 0; }
+.size-guide__table tbody tr:hover { background: var(--neutral-soft); }
+.size-guide__notes { font-size: var(--fs-xs); color: var(--ink-3); line-height: 1.6; white-space: pre-line; }
+
 /* ══ TOUCH ═══════════════════════════════════════════════════════════════
    The vocabulary above is sized for a cursor, which is accurate to the pixel.
    A fingertip is not: controls that read as precise and quiet on a desktop
@@ -694,6 +804,7 @@ a:hover > .media--zoom > img,
   .stepper { height: 46px; }
   .stepper__btn { width: 46px; }
   .checkbox input[type='checkbox'] { width: 20px; height: 20px; }
+  .segmented__item { height: 42px; }
 
   /* Tabs are laid out to fit a wide workspace; on a phone they simply run off
      the edge, so they scroll instead — with the hairline still spanning the

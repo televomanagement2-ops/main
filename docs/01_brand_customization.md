@@ -91,8 +91,8 @@ STORE_BRAND_COLOR=#111111
 
 The shared email template lives in
 [`supabase/functions/_shared/store.ts`](../supabase/functions/_shared/store.ts) if you want to
-customize the layout itself. Redeploy `update-tracking` and `handle-order-action` after code
-changes (secret changes need no redeploy).
+customize the layout itself. Redeploy `stripe-webhook`, `update-tracking`,
+`handle-order-action` and `store-worker` after code changes (secret changes need no redeploy).
 
 > **Note —** Sign-up confirmation, password-reset, and magic-link emails are sent by
 > **Supabase Auth**, not this code. Customize them under Supabase → Authentication → Email

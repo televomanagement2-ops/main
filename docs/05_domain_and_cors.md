@@ -50,7 +50,7 @@ In Google Cloud Console → your OAuth client:
 ## 4. Lock down CORS for production
 
 CORS is **configured by a secret, not by editing code**. The browser-facing Edge Functions
-(`create-checkout-session`, `update-tracking`, `handle-order-action`) read the
+(`create-checkout-session`, `update-tracking`, `handle-order-action`, `store-worker`) read the
 `ALLOWED_ORIGINS` secret at runtime. Setting it is **required** — with it unset, every
 browser origin is rejected and checkout returns 403 (the checkout redirect URLs are built
 from the caller's verified origin, so an unverifiable origin can't be trusted).

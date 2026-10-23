@@ -12,7 +12,9 @@
 -- (product-images/catalog/). Replace the demo catalogue with your own products
 -- (and images uploaded to YOUR bucket) before going live.
 --
--- Stock: 70 units per product; sized products split them across XS-XL.
+-- Stock: 70 units per product; sized products split them across XS-XL, and
+-- the Braided Leather Belt, sold by colour, across its two colours.
+-- Ready-to-Wear shows a demo size guide (Admin -> Size guides).
 -- ============================================================
 
 BEGIN;
@@ -337,7 +339,7 @@ VALUES
     '3ab2b8e7-ca84-425f-8d7b-2fa0c818d5c9',
     'Braided Leather Belt',
     'braided-leather-belt',
-    'Hand-braided strips of chestnut calf leather on a 3.5 cm strap, finished with a brushed nickel buckle. The braid lets you fasten it at any length. Leather-lined keeper.',
+    'Hand-braided strips of calf leather, in chestnut or black, on a 3.5 cm strap, finished with a brushed nickel buckle. The braid lets you fasten it at any length. Leather-lined keeper.',
     240.00, NULL, 'AUR-AC-105', 70, 180, FALSE, TRUE, '2026-10-19T05:00:00.000Z'
   ),
   (
@@ -540,11 +542,12 @@ INSERT INTO public.product_images (product_id, url, alt_text, sort_order, is_pri
 
 -- ============================================================
 -- SIZES — Ready-to-Wear only, 70 units split across XS-XL
--- Upserted on (product_id, size) so existing variant ids survive.
+-- Upserted on (product_id, color_id, size) so existing variant ids survive.
 -- ============================================================
--- Products without sizes lose any size rows. A size that appears on an order
--- cannot be deleted (order_items.variant_id, migration 021), so it is
--- switched off first and only the rest are deleted.
+-- Products without variants lose any variant rows (the belt keeps its
+-- colours, below). A variant that appears on an order cannot be deleted
+-- (order_items.variant_id, migration 021), so it is switched off first and
+-- only the rest are deleted.
 UPDATE public.product_variants
 SET is_active = FALSE, updated_at = now()
 WHERE product_id IN (
@@ -568,7 +571,6 @@ WHERE product_id IN (
   'b1000000-0000-0000-0000-000000000004'::uuid,
   'd2000000-0000-0000-0000-000000000001'::uuid,
   'd2000000-0000-0000-0000-000000000022'::uuid,
-  'd2000000-0000-0000-0000-000000000033'::uuid,
   'b1000000-0000-0000-0000-000000000005'::uuid,
   'd2000000-0000-0000-0000-000000000005'::uuid,
   'd2000000-0000-0000-0000-000000000026'::uuid,
@@ -602,7 +604,6 @@ WHERE NOT EXISTS (SELECT 1 FROM public.order_items oi WHERE oi.variant_id = v.id
   'b1000000-0000-0000-0000-000000000004'::uuid,
   'd2000000-0000-0000-0000-000000000001'::uuid,
   'd2000000-0000-0000-0000-000000000022'::uuid,
-  'd2000000-0000-0000-0000-000000000033'::uuid,
   'b1000000-0000-0000-0000-000000000005'::uuid,
   'd2000000-0000-0000-0000-000000000005'::uuid,
   'd2000000-0000-0000-0000-000000000026'::uuid,
@@ -669,7 +670,7 @@ INSERT INTO public.product_variants (product_id, size, sku, stock_qty, sort_orde
   ('b1000000-0000-0000-0000-000000000003', 'M', 'AUR-RW-110-M', 20, 3, TRUE),
   ('b1000000-0000-0000-0000-000000000003', 'L', 'AUR-RW-110-L', 16, 4, TRUE),
   ('b1000000-0000-0000-0000-000000000003', 'XL', 'AUR-RW-110-XL', 12, 5, TRUE)
-ON CONFLICT (product_id, size) DO UPDATE SET
+ON CONFLICT (product_id, color_id, size) DO UPDATE SET
   sku        = EXCLUDED.sku,
   stock_qty  = EXCLUDED.stock_qty,
   sort_order = EXCLUDED.sort_order,
@@ -694,13 +695,86 @@ WHERE product_id IN (
   AND size NOT IN ('XS', 'S', 'M', 'L', 'XL');
 
 -- ============================================================
--- SOLD BY SIZE — exactly the Ready-to-Wear pieces above
--- A sized product's stock_quantity is derived from its sizes on sale
--- (migration 021), so the 70 written in the products upsert is recomputed
--- here from XS-XL — to the same 70.
+-- COLOURS — the Braided Leather Belt, sold by colour (no sizes)
+-- Colours are matched by name and variants by colour, so ids survive a
+-- re-run. Its photo shows the chestnut belt but stays untagged, so it is
+-- shown whichever colour is chosen.
+-- ============================================================
+INSERT INTO public.product_colors (product_id, name, swatch, sort_order) VALUES
+  ('d2000000-0000-0000-0000-000000000033', 'Chestnut', '#7B4A2A', 0),
+  ('d2000000-0000-0000-0000-000000000033', 'Black', '#161412', 1)
+ON CONFLICT (product_id, lower(name)) DO UPDATE SET
+  swatch     = EXCLUDED.swatch,
+  sort_order = EXCLUDED.sort_order,
+  updated_at = now();
+
+INSERT INTO public.product_variants (product_id, color_id, size, sku, stock_qty, sort_order, is_active)
+SELECT c.product_id, c.id, NULL, v.sku, v.stock_qty, v.sort_order, TRUE
+FROM (VALUES
+  ('Chestnut', 'AUR-AC-105-CHE', 40, 0),
+  ('Black', 'AUR-AC-105-BLK', 30, 1)
+) AS v(name, sku, stock_qty, sort_order)
+JOIN public.product_colors c
+  ON c.product_id = 'd2000000-0000-0000-0000-000000000033' AND lower(c.name) = lower(v.name)
+ON CONFLICT (product_id, color_id, size) DO UPDATE SET
+  sku        = EXCLUDED.sku,
+  stock_qty  = EXCLUDED.stock_qty,
+  sort_order = EXCLUDED.sort_order,
+  is_active  = TRUE,
+  updated_at = now();
+
+-- Any other row of the belt (a size, another colour) is switched off, and
+-- deleted unless an order uses it; then colours without variants go.
+UPDATE public.product_variants v
+SET is_active = FALSE, updated_at = now()
+WHERE v.product_id = 'd2000000-0000-0000-0000-000000000033'
+  AND (v.size IS NOT NULL OR v.color_id IS NULL OR v.color_id NOT IN (
+    SELECT id FROM public.product_colors
+    WHERE product_id = v.product_id AND lower(name) IN ('chestnut', 'black')
+  ));
+DELETE FROM public.product_variants v
+WHERE v.product_id = 'd2000000-0000-0000-0000-000000000033'
+  AND NOT v.is_active
+  AND NOT EXISTS (SELECT 1 FROM public.order_items oi WHERE oi.variant_id = v.id);
+DELETE FROM public.product_colors c
+WHERE c.product_id = 'd2000000-0000-0000-0000-000000000033'
+  AND NOT EXISTS (SELECT 1 FROM public.product_variants v WHERE v.color_id = c.id);
+
+-- ============================================================
+-- SIZE GUIDE — Ready-to-Wear (body measurements, as the admin template)
+-- ============================================================
+INSERT INTO public.size_guides (id, name, columns, rows, notes) VALUES (
+  'a3000000-0000-0000-0000-000000000001',
+  'Ready-to-Wear',
+  '["Size", "IT", "EU", "US", "UK", "Chest (cm)", "Waist (cm)"]',
+  '[["XS", "38", "32", "0-2", "4-6", "80-84", "62-66"],
+    ["S", "40", "34-36", "4-6", "8-10", "84-88", "66-70"],
+    ["M", "42-44", "38", "8-10", "12", "88-94", "70-76"],
+    ["L", "46", "40-42", "12", "14-16", "94-100", "76-82"],
+    ["XL", "48-50", "44", "14-16", "18", "100-106", "82-88"]]',
+  'Measurements are of the body, not the garment. Between two sizes? We suggest the larger one.'
+)
+ON CONFLICT (id) DO UPDATE SET
+  name       = EXCLUDED.name,
+  columns    = EXCLUDED.columns,
+  rows       = EXCLUDED.rows,
+  notes      = EXCLUDED.notes,
+  updated_at = now();
+
+UPDATE public.categories
+SET size_guide_id = 'a3000000-0000-0000-0000-000000000001'
+WHERE id = 'a1000000-0000-0000-0000-000000000002';
+
+-- ============================================================
+-- SOLD BY SIZE / BY COLOUR — exactly the pieces above
+-- A varied product's stock_quantity is derived from its variants on sale
+-- (migrations 021, 022), so the 70 written in the products upsert is
+-- recomputed here from XS-XL (or from the belt's colours) — to the same 70.
 -- ============================================================
 UPDATE public.products
-SET has_sizes = id IN (
+SET has_colors = id = 'd2000000-0000-0000-0000-000000000033'::uuid,
+    color_label = 'color',
+    has_sizes = id IN (
       'd2000000-0000-0000-0000-000000000014'::uuid,
       'd2000000-0000-0000-0000-000000000013'::uuid,
       'd2000000-0000-0000-0000-000000000012'::uuid,

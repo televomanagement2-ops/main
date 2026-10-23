@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { useCartStore } from '../../../store/cartStore';
+import { cartLineKey, useCartStore } from '../../../store/cartStore';
 import { useCartSync } from '../../../hooks/useCartSync';
 import { CartItemRow } from '../components/CartItemRow';
 import { IconArrowRight, IconInfo } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
-import { computeOrderTotals } from '../../../lib/pricing';
+import { cartSubtotal, computeOrderTotals } from '../../../lib/pricing';
 
 export function CartPage() {
   const items = useCartStore((s) => s.items);
@@ -12,7 +12,7 @@ export function CartPage() {
   const cartSync = useCartSync();
   const { t, tCount, formatCurrency } = useI18n();
 
-  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const subtotal = cartSubtotal(items);
   const count = items.reduce((n, i) => n + i.quantity, 0);
   const { tax, total } = computeOrderTotals(subtotal, 0);
 
@@ -64,7 +64,7 @@ export function CartPage() {
       <div className="cart-layout">
         <div className="cart-layout__items">
           {items.map((item) => (
-            <CartItemRow key={`${item.product.id}-${item.selectedSize ?? ''}`} item={item} />
+            <CartItemRow key={cartLineKey(item)} item={item} />
           ))}
         </div>
 

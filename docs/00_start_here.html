@@ -45,6 +45,7 @@
 <body>
 
 <h1>CommerceJet — Start Here</h1>
+
 <p class="subtitle">Your roadmap to launching the store.</p>
 
 <p>Welcome, and thank you for your purchase! CommerceJet is a complete, production-ready
@@ -96,8 +97,9 @@ first (03, 06, 04), then personalize it.</p></blockquote>
   </tbody>
 </table>
 
-<p>This store ships with <strong>four</strong> Edge Functions: <code>create-checkout-session</code>, <code>stripe-webhook</code>,
-<code>update-tracking</code>, and <code>handle-order-action</code>.</p>
+<p>This store ships with <strong>five</strong> Edge Functions: <code>create-checkout-session</code>, <code>stripe-webhook</code>,
+<code>update-tracking</code>, <code>handle-order-action</code>, and <code>store-worker</code> (the scheduled low-stock and
+back-in-stock emails).</p>
 
 <blockquote><p><strong>Important —</strong> Never commit your <code>.env</code> file or share your secret keys. Use the provided
 <code>.env.example</code> as a template and keep your real keys private. If you distribute the project

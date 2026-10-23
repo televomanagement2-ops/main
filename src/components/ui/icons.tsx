@@ -275,3 +275,46 @@ export const IconImage = (p: IconProps) => (
     <circle cx="9" cy="9.5" r="1.2" />
   </svg>
 );
+
+/* ── Operations ──────────────────────────────────────────────────────── */
+export const IconTag = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <path d="M3.5 12.6V4.75a1.25 1.25 0 0 1 1.25-1.25h7.85a1.25 1.25 0 0 1 .88.37l7.2 7.2a1.25 1.25 0 0 1 0 1.77l-7.83 7.83a1.25 1.25 0 0 1-1.77 0l-7.2-7.2a1.25 1.25 0 0 1-.38-.87z" />
+    <circle cx="8.25" cy="8.25" r="1.4" />
+  </svg>
+);
+export const IconRuler = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <rect x="2.6" y="8.5" width="18.8" height="7" rx="1.2" transform="rotate(-30 12 12)" />
+    <path d="m7.4 13.9-1-1.7M10.4 12.2l-1.5-2.6M13.4 10.5l-1-1.7M16.4 8.8l-1.5-2.6" />
+  </svg>
+);
+export const IconPrinter = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <path d="M7 8.5V3.5h10v5" />
+    <rect x="3.5" y="8.5" width="17" height="8" rx="1.5" />
+    <path d="M7 14.5h10v6H7z" />
+  </svg>
+);
+export const IconDownload = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5M4.5 19.5h15" />
+  </svg>
+);
+export const IconUpload = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4.5 19.5h15" />
+  </svg>
+);
+export const IconCopy = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <rect x="8.5" y="8.5" width="12" height="12" rx="1.5" />
+    <path d="M15.5 8.5V5A1.5 1.5 0 0 0 14 3.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5" />
+  </svg>
+);
+export const IconBell = (p: IconProps) => (
+  <svg {...svgProps(p)} className={p.className}>
+    <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" />
+    <path d="M10 20.5a2 2 0 0 0 4 0" />
+  </svg>
+);

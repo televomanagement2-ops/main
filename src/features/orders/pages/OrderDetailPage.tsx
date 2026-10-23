@@ -55,10 +55,13 @@ export function OrderDetailPage() {
     );
   }
 
-  const canCancel = CANCELLABLE_STATUSES.includes(order.status) && !order.refund_id;
+  // Once the shop has refunded part of an order, the rest goes through support.
+  const refunded = Number(order.refund_amount ?? 0);
+  const canCancel = CANCELLABLE_STATUSES.includes(order.status) && refunded === 0;
   const subtotal = order.order_items?.reduce((s, i) => s + i.total_price, 0) ?? 0;
   const shippingCost = order.shipping_cost ?? 0;
   const taxAmount = order.tax_amount ?? 0;
+  const discount = Number(order.discount_amount ?? 0);
   const addr = order.shipping_address ?? null;
   const title = order.order_items?.[0]?.product_name ?? t('orderDetail.order');
 
@@ -111,16 +114,24 @@ export function OrderDetailPage() {
         <section className="detail-block detail-block--wide">
           <p className="t-label">{t('orderDetail.itemsOrdered')}</p>
           <div className="info-rows">
-            {order.order_items?.map((item) => (
-              <div key={item.id} className="info-row">
-                <span>
-                  {item.product_name}
-                  {item.selected_size && <span className="t-faint"> · {item.selected_size}</span>}
-                  <span className="t-faint"> × {item.quantity}</span>
-                </span>
-                <strong>{formatCurrency(item.total_price)}</strong>
-              </div>
-            ))}
+            {order.order_items?.map((item) => {
+              const option = [item.selected_color, item.selected_size].filter(Boolean).join(' / ');
+              return (
+                <div key={item.id} className="info-row">
+                  <span>
+                    {item.product_name}
+                    {option && <span className="t-faint"> · {option}</span>}
+                    <span className="t-faint"> × {item.quantity}</span>
+                    {(item.refunded_quantity ?? 0) > 0 && (
+                      <span className="t-xs t-faint" style={{ display: 'block' }}>
+                        {t('orderDetail.unitsRefunded', { count: item.refunded_quantity ?? 0 })}
+                      </span>
+                    )}
+                  </span>
+                  <strong>{formatCurrency(item.total_price)}</strong>
+                </div>
+              );
+            })}
           </div>
 
           <div className="summary" style={{ marginTop: 'var(--s-4)' }}>
@@ -128,6 +139,16 @@ export function OrderDetailPage() {
               <span>{t('orderDetail.subtotal')}</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
+            {discount > 0 && (
+              <div className="summary__row">
+                <span>
+                  {order.discount_code
+                    ? t('checkout.discount.lineWithCode', { code: order.discount_code })
+                    : t('checkout.discount.line')}
+                </span>
+                <span>−{formatCurrency(discount)}</span>
+              </div>
+            )}
             <div className="summary__row">
               <span>
                 {t('orderDetail.shipping')}
@@ -145,6 +166,12 @@ export function OrderDetailPage() {
               <span>{t('orderDetail.total')}</span>
               <span>{formatCurrency(order.total)}</span>
             </div>
+            {refunded > 0 && order.status !== 'refunded' && (
+              <div className="summary__row">
+                <span>{t('orderDetail.refunded')}</span>
+                <span>−{formatCurrency(refunded)}</span>
+              </div>
+            )}
           </div>
         </section>
 

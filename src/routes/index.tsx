@@ -38,6 +38,10 @@ const AdminDashboardPage = named(() => import('../features/admin/pages/AdminDash
 const AdminOrdersPage = named(() => import('../features/admin/pages/AdminOrdersPage'), 'AdminOrdersPage');
 const AdminCatalogPage = named(() => import('../features/admin/pages/AdminCatalogPage'), 'AdminCatalogPage');
 const AdminFinancePage = named(() => import('../features/admin/pages/AdminFinancePage'), 'AdminFinancePage');
+const AdminInventoryPage = named(() => import('../features/admin/pages/AdminInventoryPage'), 'AdminInventoryPage');
+const AdminDiscountsPage = named(() => import('../features/admin/pages/AdminDiscountsPage'), 'AdminDiscountsPage');
+const AdminSizeGuidesPage = named(() => import('../features/admin/pages/AdminSizeGuidesPage'), 'AdminSizeGuidesPage');
+const OrderPrintPage = named(() => import('../features/admin/pages/OrderPrintPage'), 'OrderPrintPage');
 const PrivacyPage = named(() => import('../features/legal/pages/PrivacyPage'), 'PrivacyPage');
 const PrivacyPolicyPage = named(() => import('../features/legal/pages/PrivacyPolicyPage'), 'PrivacyPolicyPage');
 const TermsPage = named(() => import('../features/legal/pages/TermsPage'), 'TermsPage');
@@ -151,6 +155,16 @@ const router = createBrowserRouter([
     ],
   },
 
+  // ── Admin documents: printed pages, without the admin shell ──
+  {
+    path: '/admin/print',
+    element: (
+      <AuthBoundary>
+        <AdminRoute>{deferred(<OrderPrintPage />)}</AdminRoute>
+      </AuthBoundary>
+    ),
+  },
+
   // ── Admin: operational shell (rail + workspace) ──
   {
     path: '/admin',
@@ -164,6 +178,9 @@ const router = createBrowserRouter([
       { path: 'orders', element: deferred(<AdminOrdersPage />) },
       { path: 'catalog', element: deferred(<AdminCatalogPage />) },
       { path: 'finance', element: deferred(<AdminFinancePage />) },
+      { path: 'inventory', element: deferred(<AdminInventoryPage />) },
+      { path: 'discounts', element: deferred(<AdminDiscountsPage />) },
+      { path: 'size-guides', element: deferred(<AdminSizeGuidesPage />) },
     ],
   },
 ]);

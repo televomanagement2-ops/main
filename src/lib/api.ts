@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import type { Database } from './database.types';
+import type { Database, Json } from './database.types';
 import type {
   Product,
   Category,
@@ -13,10 +13,21 @@ import type {
   PublicProductReview,
   ProductVariant,
   ProductImage,
+  ProductColor,
   AdminAnalytics,
-  SizeLabel,
+  SizeGuide,
+  OrderEvent,
+  OrderRefund,
+  InventoryMovement,
+  MovementReason,
+  LowStockItem,
+  StockRequestSummary,
+  StoreSettings,
+  DiscountCode,
+  DiscountUsage,
 } from '../types';
-import type { VariantPayload } from './sizes';
+import type { VariantsSaveConfig } from './variants';
+import type { DiscountRule } from '../../supabase/functions/_shared/discounts.ts';
 
 export type ProductUpdate = Database['public']['Tables']['products']['Update'];
 
@@ -28,6 +39,30 @@ function slugify(input: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
+}
+
+/** Postgres/PostgREST error with the HINT our functions use as a machine code. */
+type DbError = { message: string; hint?: string | null; details?: string | null; code?: string };
+
+/** An error the UI can translate: `code` is the database function's HINT. */
+export class AppError extends Error {
+  readonly code: string;
+  readonly detail: string | null;
+
+  constructor(message: string, code: string, detail: string | null = null) {
+    super(message);
+    this.name = 'AppError';
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+function toError(error: DbError): Error {
+  if (error.hint === 'stock_conflict') {
+    return new StockConflictError(error.message, error.details || null);
+  }
+  if (error.hint) return new AppError(error.message, error.hint, error.details ?? null);
+  return error instanceof Error ? error : new Error(error.message);
 }
 
 // ============================================================
@@ -53,16 +88,23 @@ const PRODUCT_COLUMNS = [
   'weight_grams',
   'is_active',
   'is_featured',
-  // Migration 021 grants these two explicitly (the table is column-granted).
+  // Granted explicitly by 021/022 (the table is column-granted).
   'has_sizes',
   'size_label',
+  'has_colors',
+  'color_label',
+  'price_min',
+  'price_max',
+  'size_guide_id',
   'metadata',
   'created_at',
   'updated_at',
 ].join(', ');
 
-// Listing views only need enough to render a card and link it.
-const PRODUCT_IMAGE_COLUMNS = 'id, url, alt_text, is_primary, sort_order';
+// Listing views only need enough to render a card and link it — and the
+// colours on sale, for the swatches (RLS hides colours with nothing on sale).
+const PRODUCT_IMAGE_COLUMNS = 'id, url, alt_text, is_primary, sort_order, color_id';
+const PRODUCT_COLOR_COLUMNS = 'id, product_id, name, swatch, sort_order, is_active, created_at, updated_at';
 
 export async function fetchProducts(
   filters: ProductFilters = {}
@@ -80,9 +122,10 @@ export async function fetchProducts(
   // With a category filter the join must be INNER, otherwise the filter on
   // categories.slug only nulls out the embedded category instead of
   // excluding the product rows.
+  const embeds = `product_images(${PRODUCT_IMAGE_COLUMNS}), product_colors(${PRODUCT_COLOR_COLUMNS})`;
   const select = categorySlug
-    ? `${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), categories!inner(*)`
-    : `${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), categories(*)`;
+    ? `${PRODUCT_COLUMNS}, ${embeds}, categories!inner(*)`
+    : `${PRODUCT_COLUMNS}, ${embeds}, categories(*)`;
 
   // 'estimated' returns the exact count for a small result set and the planner's
   // estimate for a large one. 'exact' made every page, filter and search
@@ -97,8 +140,10 @@ export async function fetchProducts(
   if (categorySlug) {
     query = query.eq('categories.slug', categorySlug);
   }
-  if (minPrice !== undefined) query = query.gte('price', minPrice);
-  if (maxPrice !== undefined) query = query.lte('price', maxPrice);
+  // A product with variants at several prices matches a price range it
+  // overlaps: a 40–120 rug is in "50 to 100".
+  if (minPrice !== undefined) query = query.gte('price_max', minPrice);
+  if (maxPrice !== undefined) query = query.lte('price_min', maxPrice);
   if (featured !== undefined) query = query.eq('is_featured', featured);
   if (search) {
     query = query.ilike('name', `%${search}%`);
@@ -118,7 +163,7 @@ export async function fetchProducts(
 export async function fetchProductBySlug(slug: string): Promise<Product> {
   const { data, error } = await supabase
     .from('products')
-    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*)`)
+    .select(`${PRODUCT_COLUMNS}, product_images(*), categories(*), product_colors(${PRODUCT_COLOR_COLUMNS})`)
     .eq('slug', slug)
     .eq('is_active', true)
     .single();
@@ -143,7 +188,9 @@ export async function fetchProductBySlug(slug: string): Promise<Product> {
 export async function fetchFeaturedProducts(): Promise<Product[]> {
   const { data, error } = await supabase
     .from('products')
-    .select(`${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), categories(*)`)
+    .select(
+      `${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), product_colors(${PRODUCT_COLOR_COLUMNS}), categories(*)`,
+    )
     .eq('is_active', true)
     .eq('is_featured', true)
     .order('created_at', { ascending: false })
@@ -155,15 +202,17 @@ export async function fetchFeaturedProducts(): Promise<Product[]> {
 
 /**
  * Fetch fresh price/stock/availability for the given products (cart sync).
- * product_variants is included because the cart clamps sized lines against the
- * SELECTED SIZE's stock — without it the sync would overwrite each cart item's
- * product with a variant-less row and silently lose that limit.
+ * product_variants is included because the cart clamps variant lines against
+ * the CHOSEN VARIANT's stock and price — without it the sync would overwrite
+ * each cart item's product with a variant-less row and silently lose both.
  */
 export async function fetchProductsByIds(ids: string[]): Promise<Product[]> {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('products')
-    .select(`${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), product_variants(*)`)
+    .select(
+      `${PRODUCT_COLUMNS}, product_images(${PRODUCT_IMAGE_COLUMNS}), product_variants(*), product_colors(${PRODUCT_COLOR_COLUMNS})`,
+    )
     .in('id', ids)
     .eq('is_active', true);
 
@@ -184,6 +233,81 @@ export async function fetchCategories(): Promise<Category[]> {
 
   if (error) throw error;
   return (data as Category[]) ?? [];
+}
+
+// ============================================================
+// SIZE GUIDES (migration 022)
+// ============================================================
+
+export async function fetchSizeGuides(): Promise<SizeGuide[]> {
+  const { data, error } = await supabase.from('size_guides').select('*').order('name');
+  if (error) throw error;
+  return (data as unknown as SizeGuide[]) ?? [];
+}
+
+export async function fetchSizeGuide(id: string): Promise<SizeGuide | null> {
+  const { data, error } = await supabase.from('size_guides').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as unknown as SizeGuide) ?? null;
+}
+
+export type SizeGuideInput = Pick<SizeGuide, 'name' | 'columns' | 'rows' | 'notes'> & { id?: string };
+
+export async function saveSizeGuide(input: SizeGuideInput): Promise<SizeGuide> {
+  const row = { name: input.name.trim(), columns: input.columns, rows: input.rows, notes: input.notes?.trim() || null };
+  const query = input.id
+    ? supabase.from('size_guides').update(row).eq('id', input.id)
+    : supabase.from('size_guides').insert(row);
+  const { data, error } = await query.select('*').single();
+  if (error) throw error;
+  return data as unknown as SizeGuide;
+}
+
+export async function deleteSizeGuide(id: string): Promise<void> {
+  const { error } = await supabase.from('size_guides').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Assigns a guide to categories: `categoryIds` get it, the others that had it lose it. */
+export async function setSizeGuideCategories(guideId: string, categoryIds: string[]): Promise<void> {
+  const { error: clearError } = await supabase
+    .from('categories')
+    .update({ size_guide_id: null })
+    .eq('size_guide_id', guideId)
+    .not('id', 'in', `(${categoryIds.length ? categoryIds.join(',') : '00000000-0000-0000-0000-000000000000'})`);
+  if (clearError) throw clearError;
+  if (categoryIds.length > 0) {
+    const { error } = await supabase.from('categories').update({ size_guide_id: guideId }).in('id', categoryIds);
+    if (error) throw error;
+  }
+}
+
+// ============================================================
+// BACK-IN-STOCK REQUESTS (migration 023)
+// ============================================================
+
+/** Whether the shop takes "email me when it is back" requests. */
+export async function fetchBackInStockEnabled(): Promise<boolean> {
+  const { data, error } = await supabase.from('store_settings').select('back_in_stock_enabled').maybeSingle();
+  if (error) return false;
+  return Boolean(data?.back_in_stock_enabled);
+}
+
+/** 'subscribed' | 'already_subscribed'; an AppError with code disabled | invalid_email | not_found | in_stock | rate_limited. */
+export async function requestStockNotification(input: {
+  productId: string;
+  variantId: string | null;
+  email: string;
+  locale: string;
+}): Promise<'subscribed' | 'already_subscribed'> {
+  const { data, error } = await supabase.rpc('request_stock_notification', {
+    p_product_id: input.productId,
+    p_variant_id: input.variantId ?? undefined,
+    p_email: input.email,
+    p_locale: input.locale,
+  });
+  if (error) throw toError(error);
+  return data as 'subscribed' | 'already_subscribed';
 }
 
 // ============================================================
@@ -303,6 +427,21 @@ export async function submitReview(
 }
 
 // ============================================================
+// DISCOUNT CODES — storefront (migration 025)
+// ============================================================
+
+export type DiscountPreview =
+  | ({ ok: true; id: string; description: string | null; ends_at: string | null } & DiscountRule)
+  | { ok: false; reason: 'auth' | 'rate_limited' | 'not_found' | 'not_started' | 'expired' | 'exhausted' | 'already_used' };
+
+/** What a code is worth before paying; the checkout function recomputes it. */
+export async function previewDiscountCode(code: string): Promise<DiscountPreview> {
+  const { data, error } = await supabase.rpc('preview_discount_code', { p_code: code });
+  if (error) throw error;
+  return data as unknown as DiscountPreview;
+}
+
+// ============================================================
 // ORDERS
 // ============================================================
 
@@ -328,11 +467,22 @@ export async function fetchOrderById(orderId: string): Promise<Order> {
   return data as unknown as Order;
 }
 
-async function invokeOrderFunction(
-  functionName: 'handle-order-action' | 'update-tracking',
+/** An Edge Function refused: `code` is its machine code (e.g. AMOUNT_TOO_HIGH). */
+export class FunctionError extends Error {
+  readonly code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = 'FunctionError';
+    this.code = code;
+  }
+}
+
+async function invokeFunction<T>(
+  functionName: 'handle-order-action' | 'update-tracking' | 'store-worker',
   body: Record<string, unknown>,
   errorLabel: string,
-): Promise<Order> {
+): Promise<T> {
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -354,21 +504,28 @@ async function invokeOrderFunction(
     body: JSON.stringify(body),
   });
 
-  let payload: { order?: Order; error?: string } | null = null;
+  let payload: (T & { error?: string; code?: string }) | null = null;
   try {
-    payload = (await res.json()) as { order?: Order; error?: string };
+    payload = (await res.json()) as T & { error?: string; code?: string };
   } catch {
     payload = null;
   }
 
   if (!res.ok) {
-    throw new Error(payload?.error || `${errorLabel} failed with status ${res.status}.`);
+    throw new FunctionError(payload?.error || `${errorLabel} failed with status ${res.status}.`, payload?.code ?? 'UNKNOWN');
   }
+  return payload as T;
+}
 
+async function invokeOrderFunction(
+  functionName: 'handle-order-action' | 'update-tracking',
+  body: Record<string, unknown>,
+  errorLabel: string,
+): Promise<Order> {
+  const payload = await invokeFunction<{ order?: Order }>(functionName, body, errorLabel);
   if (!payload?.order) {
     throw new Error(`${errorLabel} did not return order details.`);
   }
-
   return payload.order;
 }
 
@@ -395,23 +552,36 @@ export interface AdminOrdersFilters {
   pageSize?: number;
   status?: OrderStatus;
   needsReviewOnly?: boolean;
+  /** ISO dates, inclusive. */
+  from?: string;
+  to?: string;
+  ids?: string[];
+}
+
+function adminOrdersQuery(filters: AdminOrdersFilters, select: string, count = false) {
+  const { status, needsReviewOnly, from, to, ids } = filters;
+  let query = supabase
+    .from('orders')
+    .select(select, count ? { count: 'exact' } : undefined)
+    .order('created_at', { ascending: false });
+  if (status) query = query.eq('status', status);
+  if (needsReviewOnly) query = query.eq('needs_review', true);
+  if (from) query = query.gte('created_at', from);
+  if (to) query = query.lte('created_at', to);
+  if (ids && ids.length > 0) query = query.in('id', ids);
+  return query;
 }
 
 export async function fetchAdminOrders(
   filters: AdminOrdersFilters = {}
 ): Promise<PaginatedResponse<Order>> {
-  const { page = 1, pageSize = ADMIN_ORDERS_PAGE_SIZE, status, needsReviewOnly } = filters;
+  const { page = 1, pageSize = ADMIN_ORDERS_PAGE_SIZE } = filters;
 
-  let query = supabase
-    .from('orders')
-    .select(`*, order_items(*), ${ORDER_CUSTOMER_EMBED}`, { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range((page - 1) * pageSize, page * pageSize - 1);
-
-  if (status) query = query.eq('status', status);
-  if (needsReviewOnly) query = query.eq('needs_review', true);
-
-  const { data, error, count } = await query;
+  const { data, error, count } = await adminOrdersQuery(
+    filters,
+    `*, order_items(*), ${ORDER_CUSTOMER_EMBED}`,
+    true,
+  ).range((page - 1) * pageSize, page * pageSize - 1);
   if (error) throw error;
 
   return {
@@ -422,6 +592,23 @@ export async function fetchAdminOrders(
   };
 }
 
+/** Every order matching the filters (for exports and printing), up to `limit`. */
+export async function fetchAllAdminOrders(filters: AdminOrdersFilters = {}, limit = 5000): Promise<Order[]> {
+  const out: Order[] = [];
+  const batch = 500;
+  for (let start = 0; start < limit; start += batch) {
+    const { data, error } = await adminOrdersQuery(filters, `*, order_items(*), ${ORDER_CUSTOMER_EMBED}`).range(
+      start,
+      Math.min(start + batch, limit) - 1,
+    );
+    if (error) throw error;
+    const rows = (data as unknown as Order[]) ?? [];
+    out.push(...rows);
+    if (rows.length < batch) break;
+  }
+  return out;
+}
+
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<Order> {
   const { data, error } = await supabase
     .from('orders')
@@ -430,7 +617,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
     .select(`*, order_items(*), ${ORDER_CUSTOMER_EMBED}`)
     .single();
 
-  if (error) throw error;
+  if (error) throw toError(error);
   return data as unknown as Order;
 }
 
@@ -444,8 +631,114 @@ export async function markOrderDelivered(orderId: string): Promise<Order> {
   return invokeOrderFunction('handle-order-action', { action: 'deliver', order_id: orderId }, 'Delivery update');
 }
 
-export async function refundOrder(orderId: string, amount?: number): Promise<Order> {
-  return invokeOrderFunction('handle-order-action', { action: 'refund', order_id: orderId, amount }, 'Refund');
+export interface RefundRequest {
+  orderId: string;
+  /** Chosen by the dialog when it opens: a double click is one refund. */
+  requestId: string;
+  amount: number;
+  lines: { order_item_id: string; quantity: number; restock: boolean }[];
+  shippingAmount: number;
+  reason?: string | null;
+}
+
+/** All or part of an order: lines (restocked or not), shipping, any amount up to what is left. */
+export async function refundOrderLines(request: RefundRequest): Promise<Order> {
+  return invokeOrderFunction(
+    'handle-order-action',
+    {
+      action: 'refund',
+      order_id: request.orderId,
+      request_id: request.requestId,
+      amount: request.amount,
+      lines: request.lines,
+      shipping_amount: request.shippingAmount,
+      reason: request.reason ?? null,
+    },
+    'Refund',
+  );
+}
+
+/** Everything left to refund on the order. */
+export async function refundOrder(orderId: string): Promise<Order> {
+  return invokeOrderFunction('handle-order-action', { action: 'refund', order_id: orderId }, 'Refund');
+}
+
+/** Cancels an order: an open checkout is closed at Stripe first; a paid order is refunded in full. */
+export async function adminCancelOrder(orderId: string): Promise<Order> {
+  return invokeOrderFunction('handle-order-action', { action: 'cancel', order_id: orderId }, 'Cancel');
+}
+
+/** Asks Stripe what happened to an order's checkout and applies the answer. */
+export async function syncOrderPayment(orderId: string): Promise<{ order: Order; stripe_status: string }> {
+  return invokeFunction('handle-order-action', { action: 'sync_payment', order_id: orderId }, 'Payment check');
+}
+
+/** Accepts a payment held for review, once Stripe confirms it succeeded. */
+export async function confirmOrderPayment(orderId: string): Promise<Order> {
+  return invokeOrderFunction('handle-order-action', { action: 'confirm_payment', order_id: orderId }, 'Payment confirmation');
+}
+
+export async function resolveOrderReview(orderId: string, note: string | null): Promise<void> {
+  const { error } = await supabase.rpc('admin_resolve_review', { p_order_id: orderId, p_note: note ?? undefined });
+  if (error) throw toError(error);
+}
+
+export async function exchangeOrderItem(input: {
+  orderItemId: string;
+  variantId: string;
+  quantity: number;
+  restock: boolean;
+  note?: string | null;
+}): Promise<{ order_id: string; item_id: string; price_difference: number; oversold: boolean }> {
+  const { data, error } = await supabase.rpc('admin_exchange_order_item', {
+    p_order_item_id: input.orderItemId,
+    p_variant_id: input.variantId,
+    p_quantity: input.quantity,
+    p_restock: input.restock,
+    p_note: input.note ?? undefined,
+  });
+  if (error) throw toError(error);
+  return data as unknown as { order_id: string; item_id: string; price_difference: number; oversold: boolean };
+}
+
+/** The timeline: status changes, tracking, refunds, exchanges, review flags and notes. */
+export async function fetchOrderEvents(orderId: string): Promise<(OrderEvent & { profiles?: Pick<Profile, 'full_name' | 'email'> | null })[]> {
+  const { data, error } = await supabase
+    .from('order_events')
+    .select('*, profiles(full_name, email)')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data as unknown as (OrderEvent & { profiles?: Pick<Profile, 'full_name' | 'email'> | null })[]) ?? [];
+}
+
+export async function addOrderNote(orderId: string, actorId: string, message: string): Promise<void> {
+  const { error } = await supabase
+    .from('order_events')
+    .insert({ order_id: orderId, kind: 'note', message: message.trim().slice(0, 2000), actor_id: actorId });
+  if (error) throw error;
+}
+
+export async function deleteOrderNote(eventId: number): Promise<void> {
+  const { error } = await supabase.from('order_events').delete().eq('id', eventId).eq('kind', 'note');
+  if (error) throw error;
+}
+
+export async function fetchOrderRefunds(orderId: string): Promise<OrderRefund[]> {
+  const { data, error } = await supabase
+    .from('order_refunds')
+    .select('*')
+    .eq('order_id', orderId)
+    .order('created_at');
+  if (error) throw error;
+  return (data as unknown as OrderRefund[]) ?? [];
+}
+
+/** Issues the invoice numbers still missing; returns order id → number. */
+export async function issueInvoices(orderIds: string[]): Promise<Record<string, string>> {
+  const { data, error } = await supabase.rpc('admin_issue_invoices', { p_order_ids: orderIds });
+  if (error) throw toError(error);
+  return (data as unknown as Record<string, string>) ?? {};
 }
 
 export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
@@ -463,6 +756,13 @@ export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
     bestSeller?: { productId: string; productName: string; quantity: number } | null;
     revenueByDay?: { day: string; revenue: number }[];
     revenueByStatus?: Record<string, number>;
+    partialRefunds?: number;
+    refundedTotal?: number;
+    discounts30d?: number;
+    margin30d?: { revenue?: number; cost?: number; coveredUnits?: number; totalUnits?: number } | null;
+    lowStock?: number;
+    outOfStock?: number;
+    stockRequests?: number;
   };
 
   const statusCounts: Record<OrderStatus, number> = {
@@ -489,12 +789,24 @@ export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
     statusCounts,
     revenueByDay: raw.revenueByDay ?? [],
     revenueByStatus: (raw.revenueByStatus ?? {}) as AdminAnalytics['revenueByStatus'],
+    partialRefunds: Number(raw.partialRefunds ?? 0),
+    refundedTotal: Number(raw.refundedTotal ?? 0),
+    discounts30d: Number(raw.discounts30d ?? 0),
+    margin30d: {
+      revenue: Number(raw.margin30d?.revenue ?? 0),
+      cost: Number(raw.margin30d?.cost ?? 0),
+      coveredUnits: Number(raw.margin30d?.coveredUnits ?? 0),
+      totalUnits: Number(raw.margin30d?.totalUnits ?? 0),
+    },
+    lowStock: Number(raw.lowStock ?? 0),
+    outOfStock: Number(raw.outOfStock ?? 0),
+    stockRequests: Number(raw.stockRequests ?? 0),
   };
 }
 
-// Admin product rows carry EVERY size, switched-off ones included: RLS lets an
-// admin read them ("variants: admin all"), and the editor needs them.
-const ADMIN_PRODUCT_SELECT = `${PRODUCT_COLUMNS}, product_images(*), categories(*), product_variants(*)`;
+// Admin product rows carry EVERY variant and colour, switched-off ones
+// included: RLS lets an admin read them, and the editor needs them.
+const ADMIN_PRODUCT_SELECT = `${PRODUCT_COLUMNS}, product_images(*), categories(*), product_variants(*), product_colors(*)`;
 
 export async function fetchAdminProducts(): Promise<Product[]> {
   const { data, error } = await supabase
@@ -507,8 +819,8 @@ export async function fetchAdminProducts(): Promise<Product[]> {
 }
 
 /**
- * Product fields other than stock. Stock goes through setProductInventory /
- * setVariantStock / updateProductStock, which refuse to overwrite a figure that
+ * Product fields other than stock. Stock goes through saveProductVariants /
+ * setVariantStock / setProductStock, which refuse to overwrite a figure that
  * moved while the editor was open.
  */
 export async function updateProduct(
@@ -526,8 +838,19 @@ export async function updateProduct(
   return data as unknown as Product;
 }
 
+/**
+ * Cost prices for the admin. products.cost_price cannot be selected through
+ * the API at all (016), so it comes from admin_catalog_costs().
+ */
+export async function fetchCatalogCosts(): Promise<{ products: Record<string, number>; variants: Record<string, number> }> {
+  const { data, error } = await supabase.rpc('admin_catalog_costs');
+  if (error) throw error;
+  const raw = (data ?? {}) as { products?: Record<string, number>; variants?: Record<string, number> };
+  return { products: raw.products ?? {}, variants: raw.variants ?? {} };
+}
+
 // ============================================================
-// ADMIN — STOCK AND SIZES (migration 021)
+// ADMIN — STOCK AND VARIANTS (migrations 021/022)
 // ============================================================
 
 /**
@@ -535,77 +858,56 @@ export async function updateProduct(
  * save — usually an order was paid in between. Nothing was written.
  */
 export class StockConflictError extends Error {
-  /** The size whose stock moved; null for an unsized product. */
-  readonly size: string | null;
+  /** The variant whose stock moved; null for a product without variants. */
+  readonly variantId: string | null;
 
-  constructor(message: string, size: string | null) {
+  constructor(message: string, variantId: string | null) {
     super(message);
     this.name = 'StockConflictError';
-    this.size = size;
+    this.variantId = variantId;
   }
 }
 
-/** The stock functions flag a moved figure with HINT 'stock_conflict', DETAIL = size. */
-function stockError(error: { message: string; hint?: string | null; details?: string | null }): Error {
-  if (error.hint === 'stock_conflict') {
-    return new StockConflictError(error.message, error.details || null);
-  }
-  return error instanceof Error ? error : new Error(error.message);
-}
-
-export interface InventoryInput {
-  productId: string;
-  hasSizes: boolean;
-  sizeLabel?: SizeLabel;
-  /** Sized: the complete, ordered size list. */
-  variants?: VariantPayload[];
-  /** Unsized: the new stock (omit to leave it). */
-  stockQuantity?: number;
-  /** Unsized: the stock the editor was showing. */
-  expectedStock?: number | null;
-}
-
-export interface InventoryResult {
+export interface VariantsSaveResult {
   product_id: string;
   has_sizes: boolean;
-  size_label: SizeLabel;
+  has_colors: boolean;
   stock_quantity: number;
-  /** Sizes removed from the list and deleted. */
+  /** Variants removed from the list and deleted. */
   deleted: number;
-  /** Sizes removed from the list but kept, switched off, because they have orders. */
+  /** Removed from the list but kept, switched off, because they have orders. */
   archived: number;
+  /** Colour draft key → saved colour id. */
+  color_ids: Record<string, string>;
+  colors: ProductColor[];
   variants: ProductVariant[];
 }
 
-export type ProductInventory = Pick<Product, 'id' | 'stock_quantity' | 'has_sizes'> & {
-  product_variants: ProductVariant[];
-};
-
-/** A product's current stock figures — what an editor rebases on after a conflict. */
-export async function fetchProductInventory(productId: string): Promise<ProductInventory> {
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, stock_quantity, has_sizes, product_variants(*)')
-    .eq('id', productId)
-    .single();
-
-  if (error) throw error;
-  return data as unknown as ProductInventory;
-}
-
-/** Atomically replaces a product's sizes, or switches it to a single stock figure. */
-export async function setProductInventory(input: InventoryInput): Promise<InventoryResult> {
-  const { data, error } = await supabase.rpc('admin_set_product_inventory', {
-    p_product_id: input.productId,
-    p_has_sizes: input.hasSizes,
-    p_size_label: input.sizeLabel ?? null,
-    p_variants: input.variants ?? [],
-    p_stock_quantity: input.stockQuantity ?? null,
-    p_expected_stock: input.expectedStock ?? null,
+/**
+ * Atomically replaces a product's colours and variants — or, with neither
+ * sizes nor colours, sets its single stock figure (`stock_quantity`, checked
+ * against `expected_stock`).
+ */
+export async function saveProductVariants(
+  productId: string,
+  config:
+    | VariantsSaveConfig
+    | {
+        has_sizes: false;
+        has_colors: false;
+        size_label?: string;
+        color_label?: string;
+        stock_quantity?: number | null;
+        expected_stock?: number | null;
+        note?: string | null;
+      },
+): Promise<VariantsSaveResult> {
+  const { data, error } = await supabase.rpc('admin_save_product_variants', {
+    p_product_id: productId,
+    p_config: config as unknown as Json,
   });
-
-  if (error) throw stockError(error);
-  return data as unknown as InventoryResult;
+  if (error) throw toError(error);
+  return data as unknown as VariantsSaveResult;
 }
 
 // A `type`, not an interface: only object types without a declared shape are
@@ -616,37 +918,73 @@ export type VariantStockChange = {
   expected_stock_qty: number;
 };
 
-/** Sets the stock of the given sizes, leaving everything else about them alone. */
-export async function setVariantStock(changes: VariantStockChange[]): Promise<ProductVariant[]> {
-  const { data, error } = await supabase.rpc('admin_set_variant_stock', { p_changes: changes });
-  if (error) throw stockError(error);
+/** Sets the stock of the given variants, leaving everything else about them alone. */
+export async function setVariantStock(changes: VariantStockChange[], note?: string | null): Promise<ProductVariant[]> {
+  const { data, error } = await supabase.rpc('admin_set_variant_stock', {
+    p_changes: changes,
+    p_note: note?.trim() || undefined,
+  });
+  if (error) throw toError(error);
   return (data as unknown as ProductVariant[]) ?? [];
 }
 
 /**
- * Sets an unsized product's stock, only if it still holds `expected` and is
- * still unsized — otherwise nothing is written and a StockConflictError is
- * thrown.
+ * Sets a product's single stock figure (no variants), only if it still holds
+ * `expected` — otherwise nothing is written and a StockConflictError is thrown.
  */
-export async function updateProductStock(
+export async function setProductStock(
   productId: string,
   stock: number,
-  expected: number
-): Promise<Product> {
+  expected: number,
+  note?: string | null,
+): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_set_product_stock', {
+    p_product_id: productId,
+    p_stock: stock,
+    p_expected: expected,
+    p_note: note?.trim() || undefined,
+  });
+  if (error) throw toError(error);
+  return Number(data);
+}
+
+export type ProductInventory = Pick<Product, 'id' | 'stock_quantity' | 'has_sizes' | 'has_colors'> & {
+  product_variants: ProductVariant[];
+};
+
+/** A product's current stock figures — what an editor rebases on after a conflict. */
+export async function fetchProductInventory(productId: string): Promise<ProductInventory> {
   const { data, error } = await supabase
     .from('products')
-    .update({ stock_quantity: stock })
+    .select('id, stock_quantity, has_sizes, has_colors, product_variants(*)')
     .eq('id', productId)
-    .eq('has_sizes', false)
-    .eq('stock_quantity', expected)
-    .select(ADMIN_PRODUCT_SELECT)
-    .maybeSingle();
+    .single();
 
   if (error) throw error;
-  if (!data) {
-    throw new StockConflictError('Stock changed while it was being edited.', null);
-  }
-  return data as unknown as Product;
+  return data as unknown as ProductInventory;
+}
+
+/** Copies a product (hidden, no SKUs, no stock) and returns the copy's id. */
+export async function duplicateProduct(productId: string, name: string): Promise<string> {
+  const { data, error } = await supabase.rpc('admin_duplicate_product', { p_product_id: productId, p_name: name });
+  if (error) throw toError(error);
+  return data as string;
+}
+
+export interface ImportResult {
+  created: number;
+  updated: number;
+  products: { slug: string; id: string; action: 'created' | 'updated' }[];
+}
+
+/** All or nothing; an AppError with code 'import_row' names the failing product (detail = its position). */
+export async function importProducts(products: unknown[], options: { createCategories: boolean }): Promise<ImportResult> {
+  const { data, error } = await supabase.rpc('admin_import_products', {
+    p_products: products as unknown as Json,
+    p_options: { create_categories: options.createCategories },
+  });
+  if (error) throw toError(error);
+  return data as unknown as ImportResult;
 }
 
 // ============================================================
@@ -657,6 +995,8 @@ export type ProductInput = {
   name: string;
   category_id: string;
   price: number;
+  compare_at_price?: number | null;
+  cost_price?: number | null;
   description?: string | null;
   sku?: string | null;
   stock_quantity?: number;
@@ -664,6 +1004,7 @@ export type ProductInput = {
   weight_grams?: number | null;
   is_active?: boolean;
   is_featured?: boolean;
+  size_guide_id?: string | null;
   slug?: string;
 };
 
@@ -688,6 +1029,8 @@ export async function createProduct(input: ProductInput): Promise<Product> {
       slug,
       category_id: input.category_id,
       price: input.price,
+      compare_at_price: input.compare_at_price ?? null,
+      cost_price: input.cost_price ?? null,
       description: input.description ?? null,
       sku: input.sku || null,
       stock_quantity: input.stock_quantity ?? 0,
@@ -695,6 +1038,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
       weight_grams: input.weight_grams ?? null,
       is_active: input.is_active ?? true,
       is_featured: input.is_featured ?? false,
+      size_guide_id: input.size_guide_id ?? null,
     })
     .select(ADMIN_PRODUCT_SELECT)
     .single();
@@ -717,7 +1061,7 @@ export async function uploadProductImage(file: File): Promise<string> {
 
 export async function addProductImages(
   productId: string,
-  images: { url: string; alt_text?: string | null; is_primary?: boolean; sort_order?: number }[]
+  images: { url: string; alt_text?: string | null; is_primary?: boolean; sort_order?: number; color_id?: string | null }[]
 ): Promise<ProductImage[]> {
   const rows = images.map((img, i) => ({
     product_id: productId,
@@ -725,10 +1069,17 @@ export async function addProductImages(
     alt_text: img.alt_text ?? null,
     is_primary: img.is_primary ?? i === 0,
     sort_order: img.sort_order ?? i,
+    color_id: img.color_id ?? null,
   }));
   const { data, error } = await supabase.from('product_images').insert(rows).select();
   if (error) throw error;
   return (data as ProductImage[]) ?? [];
+}
+
+/** Which colour a photo shows (null: the product as a whole). */
+export async function setImageColor(imageId: string, colorId: string | null): Promise<void> {
+  const { error } = await supabase.from('product_images').update({ color_id: colorId }).eq('id', imageId);
+  if (error) throw error;
 }
 
 export async function deleteProductImage(imageId: string): Promise<void> {
@@ -765,4 +1116,161 @@ export async function createCategory(name: string): Promise<Category> {
     .single();
   if (error) throw error;
   return data as Category;
+}
+
+// ============================================================
+// ADMIN — INVENTORY, ALERTS, SETTINGS (migration 023)
+// ============================================================
+
+export const MOVEMENTS_PAGE_SIZE = 50;
+
+export interface MovementFilters {
+  page?: number;
+  productId?: string;
+  reason?: MovementReason;
+  from?: string;
+  to?: string;
+}
+
+const MOVEMENT_SELECT = '*, products(name, slug), profiles(full_name, email)';
+
+export async function fetchInventoryMovements(
+  filters: MovementFilters = {},
+): Promise<PaginatedResponse<InventoryMovement>> {
+  const { page = 1, productId, reason, from, to } = filters;
+  let query = supabase
+    .from('inventory_movements')
+    .select(MOVEMENT_SELECT, { count: 'estimated' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range((page - 1) * MOVEMENTS_PAGE_SIZE, page * MOVEMENTS_PAGE_SIZE - 1);
+  if (productId) query = query.eq('product_id', productId);
+  if (reason) query = query.eq('reason', reason);
+  if (from) query = query.gte('created_at', from);
+  if (to) query = query.lte('created_at', to);
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+  return {
+    data: (data as unknown as InventoryMovement[]) ?? [],
+    count: count ?? 0,
+    page,
+    pageSize: MOVEMENTS_PAGE_SIZE,
+  };
+}
+
+/** Every movement matching the filters, for a CSV export (up to `limit`). */
+export async function fetchAllInventoryMovements(filters: MovementFilters = {}, limit = 20000): Promise<InventoryMovement[]> {
+  const out: InventoryMovement[] = [];
+  const batch = 1000;
+  for (let start = 0; start < limit; start += batch) {
+    let query = supabase
+      .from('inventory_movements')
+      .select(MOVEMENT_SELECT)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(start, Math.min(start + batch, limit) - 1);
+    if (filters.productId) query = query.eq('product_id', filters.productId);
+    if (filters.reason) query = query.eq('reason', filters.reason);
+    if (filters.from) query = query.gte('created_at', filters.from);
+    if (filters.to) query = query.lte('created_at', filters.to);
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = (data as unknown as InventoryMovement[]) ?? [];
+    out.push(...rows);
+    if (rows.length < batch) break;
+  }
+  return out;
+}
+
+export async function fetchLowStock(): Promise<LowStockItem[]> {
+  const { data, error } = await supabase.rpc('admin_low_stock', { p_limit: 2000 });
+  if (error) throw error;
+  return (data as unknown as LowStockItem[]) ?? [];
+}
+
+export async function fetchStockRequests(): Promise<StockRequestSummary[]> {
+  const { data, error } = await supabase.rpc('admin_stock_requests');
+  if (error) throw error;
+  return (data as unknown as StockRequestSummary[]) ?? [];
+}
+
+export async function fetchStoreSettings(): Promise<StoreSettings> {
+  const { data, error } = await supabase.rpc('admin_get_store_settings');
+  if (error) throw error;
+  return data as unknown as StoreSettings;
+}
+
+export async function updateStoreSettings(
+  settings: Partial<Pick<StoreSettings, 'back_in_stock_enabled' | 'low_stock_alerts' | 'alert_emails'>>,
+): Promise<StoreSettings> {
+  const { data, error } = await supabase.rpc('admin_update_store_settings', { p_settings: settings as Json });
+  if (error) throw toError(error);
+  return data as unknown as StoreSettings;
+}
+
+/** Runs the scheduled emails now (back-in-stock and/or the low-stock digest). */
+export async function runStoreWorker(task: 'back_in_stock' | 'low_stock' | 'all'): Promise<{
+  backInStock?: { sent: number; failed: number };
+  lowStock?: { items: number; sent: number; skipped?: string };
+}> {
+  return invokeFunction('store-worker', { task }, 'Send');
+}
+
+// ============================================================
+// ADMIN — DISCOUNT CODES (migration 025)
+// ============================================================
+
+export async function fetchDiscountCodes(): Promise<DiscountCode[]> {
+  const { data, error } = await supabase.from('discount_codes').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data as unknown as DiscountCode[]) ?? [];
+}
+
+export async function fetchDiscountUsage(): Promise<DiscountUsage[]> {
+  const { data, error } = await supabase.rpc('admin_discount_usage');
+  if (error) throw error;
+  return (data as unknown as DiscountUsage[]) ?? [];
+}
+
+export type DiscountCodeInput = Omit<DiscountCode, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+
+export async function saveDiscountCode(input: DiscountCodeInput): Promise<DiscountCode> {
+  const { id } = input;
+  // Only the editable columns: a row read back from the list also carries
+  // created_at / updated_at.
+  const row = {
+    code: input.code,
+    description: input.description,
+    kind: input.kind,
+    value: input.value,
+    min_subtotal: input.min_subtotal,
+    starts_at: input.starts_at,
+    ends_at: input.ends_at,
+    usage_limit: input.usage_limit,
+    per_customer_limit: input.per_customer_limit,
+    applies_to: input.applies_to,
+    category_ids: input.category_ids,
+    product_ids: input.product_ids,
+    exclude_sale_items: input.exclude_sale_items,
+    is_active: input.is_active,
+  };
+  const query = id
+    ? supabase.from('discount_codes').update(row).eq('id', id)
+    : supabase.from('discount_codes').insert(row);
+  const { data, error } = await query.select('*').single();
+  if (error) {
+    if (error.code === '23505') throw new AppError(error.message, 'code_taken');
+    throw error;
+  }
+  return data as unknown as DiscountCode;
+}
+
+/** Codes that were used cannot be deleted (their orders keep them); switch them off instead. */
+export async function deleteDiscountCode(id: string): Promise<void> {
+  const { error } = await supabase.from('discount_codes').delete().eq('id', id);
+  if (error) {
+    if (error.code === '23503') throw new AppError(error.message, 'code_used');
+    throw error;
+  }
 }

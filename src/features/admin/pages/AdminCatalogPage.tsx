@@ -5,33 +5,44 @@ import { ErrorMessage } from '../../../components/ui/ErrorMessage';
 import { Media } from '../../../components/ui/Media';
 import { StatusDot } from '../../../components/ui/StatusIndicator';
 import {
+  useAdminCategories,
   useAdminProducts,
+  useCatalogCosts,
+  useDuplicateProduct,
+  useSetProductStock,
   useUpdateAdminProduct,
-  useUpdateProductStock,
 } from '../../../hooks/useAdminProducts';
 import { ProductFormDrawer } from '../components/ProductFormDrawer';
-import { SizeStockPanel } from '../components/SizeStockPanel';
+import { VariantStockPanel } from '../components/VariantStockPanel';
+import { ImportProductsDrawer } from '../components/ImportProductsDrawer';
 import { StockConflictError } from '../../../lib/api';
-import { parseStock, summarizeSizes } from '../../../lib/sizes';
+import { parseStock } from '../../../lib/sizes';
+import { hasVariants, priceRange, sellableColors, summarizeVariants } from '../../../lib/variants';
+import { datedFilename, dialectForLocale, downloadCsv, toCsv } from '../../../lib/csv';
+import { productsToCsvRows } from '../../../lib/productCsv';
 import { toast } from '../../../store/toastStore';
 import { useI18n } from '../../../lib/i18n';
-import { IconExternal, IconPlus } from '../../../components/ui/icons';
-import type { Product } from '../../../types';
+import { IconCopy, IconDownload, IconExternal, IconPlus, IconUpload } from '../../../components/ui/icons';
+import type { Product, ProductVariant } from '../../../types';
 
 type Tab = 'active' | 'archive';
 
 export function AdminCatalogPage() {
   const { data: products = [], isLoading, error } = useAdminProducts();
+  const { data: categories = [] } = useAdminCategories();
+  const costs = useCatalogCosts();
   const updateProduct = useUpdateAdminProduct();
-  const updateStock = useUpdateProductStock();
-  const { t, tCount, formatCurrency } = useI18n();
+  const updateStock = useSetProductStock();
+  const duplicate = useDuplicateProduct();
+  const { t, tCount, formatCurrency, locale } = useI18n();
 
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('active');
   const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
-  // The sized product whose per-size restock panel is open.
+  // The product with variants whose quick restock panel is open.
   const [restockId, setRestockId] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<{ mode: 'create' | 'edit'; product?: Product } | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -42,8 +53,9 @@ export function AdminCatalogPage() {
         product.slug,
         product.sku,
         product.categories?.name,
-        // A size SKU off a packing slip finds its product.
+        // A variant SKU off a packing slip finds its product, and so does a colour.
         ...(product.product_variants ?? []).map((v) => v.sku),
+        ...(product.product_colors ?? []).map((c) => c.name),
       ]
         .filter(Boolean)
         .join(' ')
@@ -51,6 +63,15 @@ export function AdminCatalogPage() {
         .includes(term)
     );
   }, [products, search]);
+
+  const exportCatalog = () => {
+    if (!costs.data) return;
+    const dialect = dialectForLocale(locale);
+    downloadCsv(
+      datedFilename('catalog'),
+      toCsv(productsToCsvRows(products, { dialect, categories, costs: costs.data }), dialect),
+    );
+  };
 
   if (isLoading) {
     return (
@@ -77,8 +98,8 @@ export function AdminCatalogPage() {
   // `<= 0`, not `=== 0`: stock can be NEGATIVE for an oversold product
   // (migration 013). With `=== 0` an oversold item matched NEITHER tab and
   // disappeared from the catalog altogether — exactly the item the operator
-  // most needs to see, because it has orders to cover. For a sized product
-  // stock_quantity is the database-derived sum of its sizes on sale.
+  // most needs to see, because it has orders to cover. For a product with
+  // variants stock_quantity is the database-derived sum of those on sale.
   const activeProducts = filtered.filter((p) => p.is_active && p.stock_quantity > 0);
   const archivedProducts = filtered.filter((p) => !p.is_active || p.stock_quantity <= 0);
   const visible = tab === 'active' ? activeProducts : archivedProducts;
@@ -90,7 +111,7 @@ export function AdminCatalogPage() {
       return next;
     });
 
-  // Unsized products only — a sized product's figure is derived from its sizes.
+  // Products without variants only — the others' figure is derived.
   const saveStock = (product: Product) => {
     const draft = stockDrafts[product.id];
     if (draft == null) return;
@@ -134,6 +155,36 @@ export function AdminCatalogPage() {
     );
   };
 
+  const duplicateProduct = (product: Product) => {
+    duplicate.mutate(
+      { productId: product.id, name: t('admin.catalog.copyName', { name: product.name }) },
+      {
+        onSuccess: () => {
+          toast(t('admin.catalog.duplicated', { name: product.name }));
+          // The copy is hidden: show where it went.
+          setTab('archive');
+        },
+        onError: (err) => toast(err instanceof Error ? err.message : t('common.error'), 'critical'),
+      }
+    );
+  };
+
+  const chip = (product: Product, variant: ProductVariant, label: string) => (
+    <span
+      key={variant.id}
+      className={`size-chip${
+        variant.stock_qty <= 0
+          ? ' size-chip--out'
+          : variant.stock_qty <= product.low_stock_threshold
+            ? ' size-chip--low'
+            : ''
+      }`}
+    >
+      <span className="size-chip__size">{label}</span>
+      <span className="size-chip__qty">{variant.stock_qty}</span>
+    </span>
+  );
+
   return (
     <>
       <header className="admin-page__head">
@@ -143,6 +194,19 @@ export function AdminCatalogPage() {
           <p className="t-sm t-faint admin-page__desc">{t('admin.catalog.subtitle')}</p>
         </div>
         <div className="admin-page__actions">
+          <button type="button" className="btn btn--quiet btn--sm" onClick={() => setImporting(true)}>
+            <IconUpload size={14} />
+            {t('admin.catalog.import.open')}
+          </button>
+          <button
+            type="button"
+            className="btn btn--quiet btn--sm"
+            onClick={exportCatalog}
+            disabled={!costs.data || products.length === 0}
+          >
+            <IconDownload size={14} />
+            {t('admin.catalog.export')}
+          </button>
           <button type="button" className="btn btn--primary btn--sm" onClick={() => setDrawer({ mode: 'create' })}>
             <IconPlus size={15} />
             {t('admin.catalog.newProduct')}
@@ -212,18 +276,20 @@ export function AdminCatalogPage() {
                   product.product_images?.find((img) => img.is_primary)
                   ?? product.product_images?.[0]
                   ?? null;
-                const sized = product.has_sizes;
-                const sizes = summarizeSizes(product);
-                const switchedOff = (product.product_variants ?? []).length - sizes.active.length;
-                const restocking = sized && restockId === product.id;
+                const varied = hasVariants(product);
+                const summary = summarizeVariants(product);
+                const switchedOff = (product.product_variants ?? []).filter((v) => !v.is_active).length;
+                const restocking = varied && restockId === product.id;
+                const range = priceRange(product);
+                const colors = sellableColors(product);
 
                 const draft = stockDrafts[product.id];
                 const dirty = draft != null && draft.trim() !== String(product.stock_quantity);
                 const out = product.stock_quantity <= 0;
-                // A sized product is "low" as soon as one of its sizes is low
-                // or gone — the total can look healthy while M is sold out.
-                const low = !out && (sized
-                  ? sizes.low > 0 || sizes.soldOut > 0
+                // A product with variants is "low" as soon as one of them is
+                // low or gone — the total can look healthy while M is sold out.
+                const low = !out && (varied
+                  ? summary.low > 0 || summary.soldOut > 0
                   : product.stock_quantity <= product.low_stock_threshold);
                 const fill = Math.min(
                   100,
@@ -254,35 +320,42 @@ export function AdminCatalogPage() {
                         </div>
                       </td>
                       <td data-col="full">{product.categories?.name ?? t('admin.catalog.uncategorized')}</td>
-                      <td data-col="end" className="table__num">{formatCurrency(product.price)}</td>
+                      <td data-col="end" className="table__num">
+                        {range.min === range.max ? formatCurrency(range.min) : `${formatCurrency(range.min)} – ${formatCurrency(range.max)}`}
+                        {product.compare_at_price != null && product.compare_at_price > product.price && (
+                          <span className="t-xs t-faint price-was" style={{ display: 'block' }}>
+                            {formatCurrency(product.compare_at_price)}
+                          </span>
+                        )}
+                      </td>
                       <td data-col="full">
-                        {sized ? (
+                        {varied ? (
                           <div className="stack gap-2">
-                            {sizes.active.length > 0 ? (
-                              <div className="size-chips">
-                                {sizes.active.map((variant) => (
-                                  <span
-                                    key={variant.id}
-                                    className={`size-chip${
-                                      variant.stock_qty <= 0
-                                        ? ' size-chip--out'
-                                        : variant.stock_qty <= product.low_stock_threshold
-                                          ? ' size-chip--low'
-                                          : ''
-                                    }`}
-                                  >
-                                    <span className="size-chip__size">{variant.size}</span>
-                                    <span className="size-chip__qty">{variant.stock_qty}</span>
-                                  </span>
+                            {summary.active.length === 0 ? (
+                              <span className="t-xs t-faint">{t('admin.catalog.variants.noneOnSale')}</span>
+                            ) : product.has_colors && product.has_sizes ? (
+                              <div className="stack gap-1">
+                                {colors.map((color) => (
+                                  <div key={color.id} className="size-chips">
+                                    <span className="size-chips__color">
+                                      {color.swatch && <span className="swatch swatch--sm" style={{ background: color.swatch }} aria-hidden="true" />}
+                                      {color.name}
+                                    </span>
+                                    {summary.active
+                                      .filter((v) => v.color_id === color.id)
+                                      .map((v) => chip(product, v, v.size ?? ''))}
+                                  </div>
                                 ))}
-                                {switchedOff > 0 && (
-                                  <span className="t-xs t-faint">
-                                    {tCount('admin.catalog.sizes.hiddenCount', switchedOff)}
-                                  </span>
-                                )}
                               </div>
                             ) : (
-                              <span className="t-xs t-faint">{t('admin.catalog.sizes.noneOnSale')}</span>
+                              <div className="size-chips">
+                                {summary.active.map((v) =>
+                                  chip(product, v, v.size ?? colors.find((c) => c.id === v.color_id)?.name ?? '—'),
+                                )}
+                              </div>
+                            )}
+                            {switchedOff > 0 && (
+                              <span className="t-xs t-faint">{tCount('admin.catalog.sizes.hiddenCount', switchedOff)}</span>
                             )}
                             <button
                               type="button"
@@ -291,7 +364,7 @@ export function AdminCatalogPage() {
                               onClick={() => setRestockId(restocking ? null : product.id)}
                               aria-expanded={restocking}
                             >
-                              {restocking ? t('admin.catalog.sizes.closeStock') : t('admin.catalog.sizes.editStock')}
+                              {restocking ? t('admin.catalog.sizes.closeStock') : t('admin.catalog.variants.restock')}
                             </button>
                           </div>
                         ) : (
@@ -333,8 +406,8 @@ export function AdminCatalogPage() {
                           <StatusDot tone="neutral" label={t('admin.catalog.statusHidden')} />
                         ) : out ? (
                           <StatusDot tone="critical" label={t('admin.catalog.outOfStock')} />
-                        ) : sized && sizes.soldOut > 0 ? (
-                          <StatusDot tone="caution" label={tCount('admin.catalog.sizes.soldOut', sizes.soldOut)} />
+                        ) : varied && summary.soldOut > 0 ? (
+                          <StatusDot tone="caution" label={tCount('admin.catalog.variants.soldOut', summary.soldOut)} />
                         ) : low ? (
                           <StatusDot tone="caution" label={t('admin.catalog.lowStock')} />
                         ) : (
@@ -358,6 +431,16 @@ export function AdminCatalogPage() {
                           >
                             {product.is_active ? t('admin.catalog.hide') : t('admin.catalog.activate')}
                           </button>
+                          <button
+                            type="button"
+                            className="btn btn--quiet btn--sm"
+                            onClick={() => duplicateProduct(product)}
+                            disabled={duplicate.isPending}
+                            aria-label={t('admin.catalog.duplicate')}
+                            title={t('admin.catalog.duplicate')}
+                          >
+                            <IconCopy size={14} />
+                          </button>
                           <Link
                             to={`/products/${product.slug}`}
                             className="btn btn--quiet btn--sm"
@@ -371,7 +454,7 @@ export function AdminCatalogPage() {
                     {restocking && (
                       <tr className="table__subrow">
                         <td colSpan={6} data-col="full">
-                          <SizeStockPanel product={product} onClose={() => setRestockId(null)} />
+                          <VariantStockPanel product={product} onClose={() => setRestockId(null)} />
                         </td>
                       </tr>
                     )}
@@ -395,6 +478,7 @@ export function AdminCatalogPage() {
           onClose={() => setDrawer(null)}
         />
       )}
+      {importing && <ImportProductsDrawer products={products} onClose={() => setImporting(false)} />}
     </>
   );
 }

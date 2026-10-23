@@ -45,9 +45,11 @@
 <body>
 
 <h1>CommerceJet — Domain &amp; CORS</h1>
+
 <p class="subtitle">Connect your domain and secure cross-origin access.</p>
 
 <h2>Contents</h2>
+
 <ol>
   <li>Connect a custom domain in Vercel</li>
   <li>Update Supabase Auth URLs</li>
@@ -57,8 +59,8 @@
 </ol>
 
 <blockquote><p><strong>Note —</strong> "CORS" controls which websites may call your backend functions from a browser.
-During development the functions accept any origin (<code>*</code>); before going live, restrict them
-to your own domain. <strong>This is done entirely with a secret — no code editing.</strong></p></blockquote>
+The functions <strong>fail closed</strong>: until you set <code>ALLOWED_ORIGINS</code>, every browser origin is
+rejected — including localhost. <strong>This is done entirely with a secret — no code editing.</strong></p></blockquote>
 
 <hr>
 
@@ -98,19 +100,23 @@ and add it (and <code>https://www.yourstore.com</code>) to <strong>Redirect URLs
 <h2>4. Lock down CORS for production</h2>
 
 <p>CORS is <strong>configured by a secret, not by editing code</strong>. The browser-facing Edge Functions
-(<code>create-checkout-session</code>, <code>update-tracking</code>, <code>handle-order-action</code>) read the
-<code>ALLOWED_ORIGINS</code> secret at runtime.</p>
+(<code>create-checkout-session</code>, <code>update-tracking</code>, <code>handle-order-action</code>, <code>store-worker</code>) read the
+<code>ALLOWED_ORIGINS</code> secret at runtime. Setting it is <strong>required</strong> — with it unset, every
+browser origin is rejected and checkout returns 403 (the checkout redirect URLs are built
+from the caller's verified origin, so an unverifiable origin can't be trusted).</p>
 
 <ol>
   <li>Supabase → Project Settings → Edge Functions → Secrets → Add secret.</li>
   <li>Name: <code>ALLOWED_ORIGINS</code> — Value: your origin(s), comma-separated, no spaces, no trailing
     slash:
-    <pre><code>https://yourstore.com,https://www.yourstore.com</code></pre></li>
-  <li>(Optional) While the Vercel preview subdomain keeps changing, any <code>*.vercel.app</code> origin is
-    accepted automatically. To turn that off once on your final domain, add:
-    <pre><code>ALLOW_VERCEL_PREVIEWS=false</code></pre></li>
-  <li>Save. <strong>No redeploy needed</strong> — secrets are read at runtime. If <code>ALLOWED_ORIGINS</code> is unset,
-    CORS falls back to <code>*</code> (fine for dev, not for production).</li>
+    For local development include your dev server too, e.g.
+    <code>http://localhost:5173,https://yourstore.com</code>.
+<pre><code>https://yourstore.com,https://www.yourstore.com</code></pre></li>
+  <li>(Optional) While the Vercel preview subdomain keeps changing, you can accept any
+    <code>*.vercel.app</code> origin with <code>ALLOW_VERCEL_PREVIEWS=true</code>. The default is <strong>false</strong> —
+    leave it that way in production:
+<pre><code>ALLOW_VERCEL_PREVIEWS=false</code></pre></li>
+  <li>Save. <strong>No redeploy needed</strong> — secrets are read at runtime.</li>
 </ol>
 
 <blockquote><p><strong>Note —</strong> The <code>stripe-webhook</code> function is called by Stripe's servers (not a browser), so

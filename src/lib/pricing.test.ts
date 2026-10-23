@@ -36,4 +36,17 @@ describe('computeOrderTotals', () => {
     const r = computeOrderTotals(200, 50, 0.1);
     expect(r.tax).toBe(25); // (200 + 50) * 0.1, not 200 * 0.1
   });
+
+  it('taxes what is charged after a discount code', () => {
+    const r = computeOrderTotals(200, 10, 0.1, { items: 20, shipping: 10 });
+    expect(r.discount).toBe(30);
+    expect(r.tax).toBe(18); // (200 - 20 + 10 - 10) * 0.1
+    expect(r.total).toBe(198);
+  });
+
+  it('never takes off more than there is', () => {
+    const r = computeOrderTotals(50, 5, 0, { items: 80, shipping: 9 });
+    expect(r.discount).toBe(55);
+    expect(r.total).toBe(0);
+  });
 });

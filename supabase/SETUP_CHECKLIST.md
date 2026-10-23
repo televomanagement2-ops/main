@@ -7,7 +7,7 @@
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
 3. **Every file in `supabase/migrations/` in numeric order**, `001_fixes.sql` through
-   `021_product_sizes.sql`. Run each one — do not stop early.
+   `026_import_keeps_variants.sql`. Run each one — do not stop early.
    > Already-migrated database? Run whatever is newer than your last one, then
    > `NOTIFY pgrst, 'reload schema';`
    >
@@ -15,11 +15,19 @@
    > again afterwards. Older copies of `schema.sql` re-create insert-time stock
    > triggers that make every paid order deduct its stock twice, and `004` puts back
    > review policies that let any account review any product; 019 removes both. If
-   > the file you re-ran was `005`, `007` or `013`, run `021` again too — those three
-   > redefine the stock trigger, and 021 is what makes it stock-per-size aware.
+   > the file you re-ran was `005`, `007`, `013` or `021`, run `021`, `022`, `024` and
+   > `026` again too, in that order; if it was `003`, run `024` again. Those files
+   > define the stock and order-line triggers, and the later ones are what make them
+   > aware of sizes, colours, partial refunds and the stock history.
    >
-   > **020 schedules the stale-order cron for you** and **021 turns on stock per size**
-   > for every product that already has sizes — see the two sections below.
+   > `004` and `013` stop with an error once `022` is in: they write sizes against
+   > the uniqueness rule 022 replaced (one row per product × colour × size). They
+   > never need to be re-run; if one was run anyway outside the SQL Editor (which
+   > runs a file all or nothing), follow the rule above as if it had completed.
+   >
+   > **020 schedules the stale-order cron for you**, **021 turns on stock per size**
+   > for every product that already has sizes, and **023 schedules the store's
+   > emails** (they stay silent until you finish "Store emails" below).
    >
    > **015 and 016 are security migrations, not optional polish.** 015 turns
    > `set_user_role()` from authorise-by-elimination into an allowlist. 016 adds the
@@ -116,15 +124,108 @@ Catalog → edit a product → Inventory (see `docs/02_products_setup.md`). Chec
 that every sized product's total agrees with its sizes (must return no rows):
 
 ```sql
-SELECT name, stock_quantity, public.sized_product_stock(id) AS sum_of_sizes
+SELECT name, stock_quantity, public.sized_product_stock(id) AS sum_of_variants
   FROM public.products
- WHERE has_sizes AND stock_quantity <> public.sized_product_stock(id);
+ WHERE (has_sizes OR has_colors) AND stock_quantity <> public.sized_product_stock(id);
 ```
+
+### Colours, variant prices, size guides and catalogue tools (migration 022)
+
+A product can also be **Sold by colour** (`products.has_colors`; the word shown
+to customers can be colour, material, finish, pattern, style, scent or variant).
+With sizes too, stock is kept per colour × size. Each variant can have its own
+price (and a private cost), so listings show "From …"; each photo can belong to
+a colour, so the gallery follows the colour chosen. Size guides (Admin → Size
+guides) are measurement tables attached to a category or a single product.
+
+Everything about variants is saved by one function,
+`admin_save_product_variants()`, which also keeps orders intact: a size or
+colour that was ever sold is switched off instead of deleted. The total stock
+check above covers colours too.
+
+Catalogue import/export (Admin → Catalog → Import CSV / Export CSV) uses one
+row per variant. An import is all or nothing; a file **without** size and
+colour columns leaves every product's variants as they are (migration 026).
+
+### Store emails: low-stock digest and back-in-stock requests (REQUIRED — migration 023 + `store-worker`)
+
+023 records every stock movement (sale, cancellation, refund, return,
+exchange, manual change, import) in `inventory_movements`, lets customers ask
+to be emailed when a sold-out item returns, and schedules two jobs that call the
+`store-worker` Edge Function: back-in-stock emails every 10 minutes and a
+low-stock digest to the admins every hour. The jobs find the function through
+two **Vault** secrets; until both exist they do nothing.
+
+1. Choose a long random value (32+ characters), e.g. `openssl rand -hex 32`.
+2. Add it as an Edge Function secret named `STORE_WORKER_SECRET` (section 3).
+3. Store the same value, and the function's address, in Vault (SQL Editor):
+
+   ```sql
+   SELECT vault.create_secret('https://<project-ref>.supabase.co/functions/v1/store-worker', 'store_worker_url');
+   SELECT vault.create_secret('<the same random value>', 'store_worker_secret');
+   ```
+
+   (To change one later: `SELECT vault.update_secret(id, '<new value>') FROM vault.secrets WHERE name = 'store_worker_secret';`)
+4. Deploy `store-worker` (section 5).
+5. Check the jobs and one real call:
+
+   ```sql
+   SELECT jobname, schedule, active FROM cron.job
+    WHERE jobname IN ('store-worker-back-in-stock', 'store-worker-low-stock',
+                      'purge-stock-requests', 'purge-discount-attempts');
+   -- store-worker-back-in-stock | */10 * * * * | true
+   -- store-worker-low-stock     | 7 * * * *    | true
+   -- purge-stock-requests       | 50 3 * * *   | true
+   -- purge-discount-attempts    | 55 3 * * *   | true
+
+   SELECT public.invoke_store_worker('low_stock');   -- returns a request id
+   SELECT status_code, content FROM net._http_response ORDER BY created DESC LIMIT 1;
+   -- 200 {"task":"low_stock","lowStock":{...}}
+   ```
+
+   A `401` means the two secrets differ; `NULL` from `invoke_store_worker` means a
+   Vault secret is missing (or pg_net is not enabled: Database → Extensions →
+   **pg_net**, then run 023 again).
+
+Who receives the digest, and whether customers may ask for back-in-stock emails,
+is set in Admin → Inventory → Alerts (no recipients = every admin account).
+
+### Order operations (migration 024)
+
+Each order now has a timeline (status changes, tracking, refunds, exchanges,
+review flags, internal notes), any number of **partial refunds** chosen line by
+line (with or without putting the goods back in stock), **exchanges** to
+another size or colour of the same product, and printable **packing slips and
+invoices**. Invoice numbers (`2026-00001`, …) are issued on first print, with no
+gaps, per calendar year.
+
+> **Invoices are a template, not tax advice.** Fill in `taxId` and
+> `invoiceNotes` in `src/config/storeConfig.ts` and check with your accountant
+> what your country requires (e.g. VAT breakdown, legal wording, e-invoicing).
+
+024 also stops an admin screen from marking a `processing` / `requires_action`
+order as paid, failed or cancelled by writing the row: those go through
+"Check with Stripe", "Confirm payment" and "Cancel order", which close or check
+the Stripe session first.
+
+### Discount codes (migration 025)
+
+Admin → Discounts: percentage, fixed amount or free shipping; optional minimum
+order, validity window, total and per-customer limits, scope (whole order,
+categories, products) and exclusion of items already on sale. The checkout
+function recomputes the discount from the database, reserves one use per order
+and applies it in Stripe as a one-off coupon, so the amount charged always
+matches the order. A use is given back when the order is abandoned or its
+payment fails.
 
 ### Verify tables exist
 Go to **Table Editor** and confirm these tables are present:
 - profiles, categories, products, product_images, product_variants
-- addresses, orders, order_items, shipping_methods, product_reviews
+- product_colors, product_variant_costs, size_guides
+- addresses, orders, order_items, order_item_costs, shipping_methods, product_reviews
+- order_events, order_refunds, invoice_counters
+- inventory_movements, store_settings, stock_notifications, low_stock_alert_state
+- discount_codes, discount_redemptions
 - processed_stripe_events
 
 (There is **no** carts/cart_items table — the storefront cart lives in
@@ -198,6 +299,12 @@ RESEND_FROM_EMAIL=Your Store <support@your-domain.com>
 STORE_NAME=Your Store
 SUPPORT_EMAIL=support@your-domain.com
 # Optional: STORE_LOCALE (default en-US), STORE_BRAND_COLOR (default #111111).
+# REQUIRED for the store emails (low-stock digest, back-in-stock). The same
+# long random value as the store_worker_secret Vault entry — see "Store emails".
+STORE_WORKER_SECRET=<32+ random characters>
+# Optional. The storefront address used for links in those emails; defaults to
+# the first entry of ALLOWED_ORIGINS.
+SITE_URL=https://your-domain.com
 ```
 
 > **The currency is NOT a secret here.** It used to be, and that was the bug: an
@@ -214,8 +321,8 @@ origin gets no `Access-Control-Allow-Origin` header and the browser reports
 "Failed to fetch".
 
 > **If your site domain changes** (e.g. a new Vercel URL), you must update
-> `ALLOWED_ORIGINS` here **and** the Supabase Auth URL Configuration below, then
-> redeploy the three browser-facing functions.
+> `ALLOWED_ORIGINS` here (and `SITE_URL`, if you set it) **and** the Supabase Auth URL
+> Configuration below. Secrets are read at runtime, so the functions need no redeploy.
 
 ### Key rotation
 
@@ -301,15 +408,25 @@ supabase functions deploy create-checkout-session
 supabase functions deploy stripe-webhook
 supabase functions deploy update-tracking
 supabase functions deploy handle-order-action
+supabase functions deploy store-worker
 ```
 
-> Deploy **all four** functions. `handle-order-action` powers cancellations,
-> refunds and delivery; `update-tracking` sends the shipping email.
+> Deploy **all five** functions. `handle-order-action` powers cancellations,
+> refunds, payment checks and delivery; `update-tracking` sends the
+> shipping email; `store-worker` sends the low-stock digest and the
+> back-in-stock emails.
+>
+> **Apply migrations 022–025 before deploying the functions.** The checkout
+> function reads colours, variant prices and discount codes and writes the
+> colour, SKU and discount of each line; the webhook and the order actions
+> record refunds through functions added by 024.
 
 ### JWT verification is set in `supabase/config.toml` — leave it alone
 
 `supabase/config.toml` declares `verify_jwt` per function, and it is the **only** file the
-CLI reads that from. `stripe-webhook` must stay `verify_jwt = false`: Stripe authenticates
+CLI reads that from. `store-worker` is also `verify_jwt = false`: pg_cron calls it with the
+shared `x-worker-secret` header, not a JWT, and the function checks that secret (or an
+admin session) itself. `stripe-webhook` must stay `verify_jwt = false`: Stripe authenticates
 its POST with a signature, not a JWT, so with verification on the platform gateway rejects
 it with **401 before the function runs**. Paid orders then never reach `paid` — no stock
 deduction, no confirmation email — and the expire-pending-orders cron cancels them two
@@ -350,23 +467,28 @@ select column_name
 from information_schema.columns
 where table_schema = 'public'
    and table_name = 'order_items'
-   and column_name in ('selected_size', 'variant_id')
+   and column_name in ('selected_size', 'variant_id', 'selected_color', 'sku', 'discount_amount')
 order by column_name;
 
 select column_name
 from information_schema.columns
 where table_schema = 'public'
    and table_name = 'products'
-   and column_name in ('has_sizes', 'size_label')
+   and column_name in ('has_sizes', 'size_label', 'has_colors', 'color_label', 'price_min')
 order by column_name;
+
+select to_regprocedure('public.reserve_discount(uuid,uuid,uuid,numeric)') as reserve_discount,
+       to_regprocedure('public.sync_order_refunds(text,jsonb,numeric,numeric)') as sync_order_refunds;
 ```
 
-If any column is missing, apply at least:
+If any column or function is missing, apply at least:
 
 - `supabase/migrations/001_fixes.sql`
 - `supabase/migrations/004_variants_reviews_shipping.sql`
-- `supabase/migrations/021_product_sizes.sql` — the checkout function reads
-  `has_sizes` and writes `variant_id`, so it must land **before** the function is deployed
+- `supabase/migrations/021_product_sizes.sql` … `025_discount_codes.sql` — the
+  checkout function reads sizes, colours, variant prices and discount codes and
+  writes `variant_id`, the colour, the SKU and the discount of each line, so they
+  must land **before** the functions are deployed
 
 1. Sign up → check profiles table has a row
 2. Add products to cart → verify cart persists on refresh
@@ -374,9 +496,13 @@ If any column is missing, apply at least:
 4. Use test card `4242 4242 4242 4242` exp `12/34` CVC `123`
 5. After payment: redirected to /checkout/success + order confirmation email
 6. Check orders table: status should be `paid`
-7. Check stock decreased: `stock_quantity` for an unsized product; for a sized
-   one, `stock_qty` on the size bought (`order_items.variant_id`) — the product's
-   `stock_quantity` follows it automatically
+7. Check stock decreased: `stock_quantity` for a product without variants; for
+   one sold by size or colour, `stock_qty` on the variant bought
+   (`order_items.variant_id`) — the product's `stock_quantity` follows it
+   automatically. Admin → Inventory → Movements shows the sale.
+8. Optional: create a discount code in Admin → Discounts and repeat with it; then
+   refund one line from Admin → Orders → the order → Refunds and check the
+   refund in Stripe and in the order's timeline
 
 ### Backorder policy (`needs_review`)
 

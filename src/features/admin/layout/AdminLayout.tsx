@@ -15,8 +15,11 @@ import {
   IconLogout,
   IconMenu,
   IconMoon,
+  IconPackage,
   IconReceipt,
+  IconRuler,
   IconSun,
+  IconTag,
   IconUser,
   IconWallet,
 } from '../../../components/ui/icons';
@@ -50,6 +53,7 @@ export function AdminLayout() {
     (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const pendingReview = analytics?.needsReview ?? 0;
+  const stockAlerts = (analytics?.lowStock ?? 0) + (analytics?.outOfStock ?? 0);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -85,6 +89,14 @@ export function AdminLayout() {
               count={pendingReview > 0 ? pendingReview : undefined}
             />
             <RailLink to="/admin/catalog" icon={<IconGrid size={16} />} label={t('admin.tabs.catalog')} />
+            <RailLink
+              to="/admin/inventory"
+              icon={<IconPackage size={16} />}
+              label={t('admin.tabs.inventory')}
+              count={stockAlerts > 0 ? stockAlerts : undefined}
+            />
+            <RailLink to="/admin/discounts" icon={<IconTag size={16} />} label={t('admin.tabs.discounts')} />
+            <RailLink to="/admin/size-guides" icon={<IconRuler size={16} />} label={t('admin.tabs.sizeGuides')} />
             <RailLink to="/admin/finance" icon={<IconWallet size={16} />} label={t('admin.tabs.finance')} />
           </nav>
 

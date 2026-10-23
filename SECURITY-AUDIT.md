@@ -241,10 +241,14 @@ Signatures are verified via `stripe.webhooks.constructEventAsync` with
 `STRIPE_WEBHOOK_SECRET`; missing/invalid signatures return 400. Replays are de-duplicated
 via the `processed_stripe_events` table (event id primary key).
 
-### VERIFIED OK — Refunds
-Customer cancel and admin refund both use a Stripe idempotency key (`refund_${orderId}`)
-and a `refund_id` lock, preventing double refunds. Admin refunds verify the admin role and
-cap the amount at the order total.
+### VERIFIED OK — Refunds (mechanism replaced 2026-10-23, migration 024)
+Every refund is a row of `order_refunds` keyed by a client request id: `begin_order_refund()`
+returns the existing row on a retry, and the same id is the Stripe idempotency key
+(`refund_<request_id>`), so a double click or a network retry is one refund. A customer
+self-cancel derives its request id from the order id. The database caps each refund at what
+is left (amount, per-line units, shipping) and only `handle-order-action` (service role) can
+call the refund functions; admin refunds verify the admin role first. Refunds made in the
+Stripe Dashboard are mirrored from Stripe's own list by the webhook, never from client input.
 
 ### VERIFIED OK — Order immutability
 A DB trigger blocks changes to financial fields (`subtotal`, `tax_amount`, `total`,
@@ -262,6 +266,36 @@ Queries go through the parameterized Supabase SDK (no raw SQL from user input). 
 `dangerouslySetInnerHTML`/`innerHTML`/`eval`. The frontend ships only the **public** anon
 key; secret keys (Stripe, service role, Resend) live in Edge Function env, not in the repo.
 `.env` is gitignored.
+
+### CHANGED (2026-10-23) — Catalogue, inventory, order and discount features (migrations 022–026)
+New surface, and the control on each:
+
+- **Costs stay private.** Variant costs (`product_variant_costs`) are admin-only by RLS; the
+  per-line cost snapshot (`order_item_costs`) is not readable through the API at all. New
+  `products` columns are granted to the API roles one by one (as 016 requires), never with `*`.
+- **Discount codes** are not readable by shoppers. `preview_discount_code()` needs a session
+  and is throttled (`discount_attempts`); the checkout function recomputes the discount from
+  the code's row, takes a use under a row lock (`reserve_discount()`), and charges it as a
+  single-use Stripe coupon for exactly the computed amount, so the charge still equals the
+  recorded total.
+- **Back-in-stock requests** (`request_stock_notification()`, open to `anon`) validate the
+  email, refuse items that are in stock, and are rate-limited to 20 an hour per requester
+  (a SHA-256 of the IP, never the IP itself). Requests are purged after 90/180 days.
+- **`store-worker`** runs with `verify_jwt = false` because pg_cron calls it; it accepts only
+  the shared `x-worker-secret` (constant-time compare, ≥ 16 characters, stored in Vault and in
+  the function secret) or an admin session. Alert recipients in `store_settings` are not
+  readable by the API roles (column grant on `back_in_stock_enabled` only).
+- **Order status action guard.** A signed-in session can no longer move a `processing` /
+  `requires_action` order to `paid`, `failed` or `cancelled` by writing the row; Stripe must be
+  asked first through `handle-order-action` (`sync_payment`, `confirm_payment`, `cancel`).
+- **Order lines stay immutable after payment**; only the refund and exchange functions may move
+  `refunded_quantity` / `restocked_quantity`, through a transaction-local allowlist.
+- **Admin RPCs** (`admin_save_product_variants`, `admin_import_products`,
+  `admin_exchange_order_item`, `admin_issue_invoices`, …) are `SECURITY DEFINER`, check
+  `is_admin()` first and have `EXECUTE` revoked from `anon`; service-role helpers are revoked
+  from every API role.
+- **CSV exports** neutralise spreadsheet formulas (cells starting with `=`, `+`, `-`, `@`) and
+  imports are checked line by line, then applied all or nothing.
 
 ### NOTE (2026-08-25) — Legal and contact placeholders still unfilled
 `src/config/storeConfig.ts` still carries `[SELLER_LEGAL_NAME]`, `[SELLER_ENTITY_TYPE]`,
@@ -314,6 +348,8 @@ place to avoid unrelated churn.
       "Estimated sales tax" line item, so the amount charged equals the recorded total.
       Keep `TAX_RATE` in sync with the frontend `VITE_TAX_RATE`.
 - [ ] Confirm all migrations (incl. `003_payment_hardening.sql`) are applied to prod.
+- [ ] Set `STORE_WORKER_SECRET` to a long random value (32+ characters) and the same value
+      in the `store_worker_secret` Vault entry; never reuse another key.
 - [ ] Confirm `.env` is excluded from all deployments (frontend bundle must contain only
       the public anon key).
 - [ ] Run a full test-mode checkout → webhook → refund and confirm the Stripe charge equals

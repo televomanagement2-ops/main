@@ -1,29 +1,46 @@
 import { useMemo, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useProduct, useProducts } from '../../../hooks/useProducts';
 import { useReviews, useSubmitReview, useHasPurchased } from '../../../hooks/useReviews';
-import { REVIEW_BODY_MAX_LENGTH } from '../../../lib/api';
+import { useCategories } from '../../../hooks/useCategories';
+import { useBackInStockEnabled, useRequestStockNotification, useSizeGuide } from '../../../hooks/useSizeGuides';
+import { AppError, REVIEW_BODY_MAX_LENGTH } from '../../../lib/api';
 import { useCartStore } from '../../../store/cartStore';
 import { useUiStore } from '../../../store/uiStore';
+import { usePreferencesStore } from '../../../store/preferencesStore';
 import { useAuth } from '../../../hooks/useAuth';
 import { ProductDetailSkeleton } from '../../../components/ui/Skeletons';
 import { Media } from '../../../components/ui/Media';
 import { Reveal } from '../../../components/ui/Reveal';
+import { Drawer } from '../../../components/ui/Drawer';
+import { SizeGuideTable } from '../../../components/ui/SizeGuideTable';
 import { StockStatus } from '../../../components/ui/StatusIndicator';
 import { ProductCard } from '../components/ProductCard';
 import {
+  IconBell,
   IconCheck,
   IconLock,
   IconMinus,
   IconPlus,
   IconReturn,
+  IconRuler,
   IconStar,
   IconTruck,
 } from '../../../components/ui/icons';
 import { useI18n } from '../../../lib/i18n';
 import { availableStock } from '../../../lib/stock';
-import { sellableSizes, sizeLabelKey } from '../../../lib/sizes';
-import type { Product, ProductImage } from '../../../types';
+import { sizeLabelKey } from '../../../lib/sizes';
+import {
+  colorLabelKey,
+  findVariant,
+  hasVariants,
+  imagesForColor,
+  priceRange,
+  sellableColors,
+  variantPrice,
+  variantsForColor,
+} from '../../../lib/variants';
+import type { Product, ProductImage, ProductVariant } from '../../../types';
 
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -47,42 +64,73 @@ export function ProductDetailPage() {
     );
   }
 
-  // Keyed so switching products resets gallery, size and quantity state.
+  // Keyed so switching products resets gallery, choice and quantity state.
   return <ProductView key={product.id} product={product} />;
+}
+
+/** The first colour with something in stock, else the first colour. */
+function initialColor(product: Product, requested: string | null): string | null {
+  const colors = sellableColors(product);
+  if (colors.length === 0) return null;
+  if (requested && colors.some((c) => c.id === requested)) return requested;
+  return (
+    colors.find((c) => variantsForColor(product, c.id).some((v) => v.stock_qty > 0))?.id
+    ?? colors[0].id
+  );
+}
+
+/** With one size on offer (in stock) there is nothing to choose. */
+function initialSize(product: Product, colorId: string | null): string | null {
+  if (!product.has_sizes) return null;
+  const sizes = variantsForColor(product, colorId);
+  return sizes.length === 1 && sizes[0].stock_qty > 0 ? sizes[0].size : null;
 }
 
 function ProductView({ product }: { product: Product }) {
   const { t, formatCurrency } = useI18n();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const addItem = useCartStore((s) => s.addItem);
   const openCart = useUiStore((s) => s.open);
+  const { data: categories = [] } = useCategories();
 
-  // Sizes on sale, in the order the shop arranged them. A sized product whose
-  // sizes are all switched off lists none and reads as out of stock (its
-  // derived total is 0).
-  const variants = useMemo(() => sellableSizes(product), [product]);
+  const varied = hasVariants(product);
+  const colors = useMemo(() => sellableColors(product), [product]);
   const sizeLabel = t(sizeLabelKey(product.size_label));
+  const colorLabel = t(colorLabelKey(product.color_label));
 
+  const [colorId, setColorId] = useState<string | null>(() => initialColor(product, searchParams.get('color')));
+  const [size, setSize] = useState<string | null>(() => initialSize(product, colorId));
   const [activeImage, setActiveImage] = useState<ProductImage | null>(null);
   const [quantity, setQuantity] = useState(1);
-  // One size on sale and in stock: there is nothing to choose.
-  const [selectedSize, setSelectedSize] = useState<string | null>(() =>
-    variants.length === 1 && variants[0].stock_qty > 0 ? variants[0].size : null
-  );
-  const [sizeError, setSizeError] = useState(false);
+  const [choiceError, setChoiceError] = useState<'color' | 'size' | null>(null);
   const [added, setAdded] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
-  const images = product.product_images ?? [];
-  const primary = images.find((i) => i.is_primary) ?? images[0];
-  const displayed = activeImage ?? primary;
+  // The sizes offered in the chosen colour (every size without colours).
+  const sizes = useMemo(() => (product.has_sizes ? variantsForColor(product, colorId) : []), [product, colorId]);
+  const variant: ProductVariant | null = varied ? findVariant(product, colorId, size) : null;
+
+  const images = useMemo(() => imagesForColor(product, colorId), [product, colorId]);
+  const displayed = activeImage && images.some((i) => i.id === activeImage.id) ? activeImage : images[0];
   const support = images.filter((i) => i.id !== displayed?.id).slice(0, 2);
+
+  const range = priceRange(product);
+  const shownPrice = variant ? variantPrice(product, variant) : range.min;
+  const compareAt = product.compare_at_price != null && product.compare_at_price > shownPrice ? product.compare_at_price : null;
 
   // Oversold products report negative stock (migration 013), so `<= 0`.
   const isOut = product.stock_quantity <= 0;
-  // The stepper's ceiling is the SELECTED SIZE's stock, not the product total.
-  // A shirt with 300 units but 2 left in XL used to let you pick 300 XL and
-  // only fail at the very end, when the checkout function rejected the order.
-  const maxQuantity = availableStock(product, selectedSize);
+  // The stepper's ceiling is the chosen VARIANT's stock, not the product total.
+  const maxQuantity = varied ? (variant ? availableStock(product, variant.id) : 0) : availableStock(product);
+  const chosenSoldOut = varied ? Boolean(variant && variant.stock_qty <= 0) : isOut;
+
+  // Size guide: the product's own, else its category's, else the parent's.
+  const category = product.categories ?? null;
+  const parent = category?.parent_id ? categories.find((c) => c.id === category.parent_id) : undefined;
+  const guideId =
+    product.size_guide_id
+    ?? (product.has_sizes ? category?.size_guide_id ?? parent?.size_guide_id ?? null : null);
 
   const { data: relatedPage } = useProducts({
     categorySlug: product.categories?.slug,
@@ -91,26 +139,53 @@ function ProductView({ product }: { product: Product }) {
   });
   const related = (relatedPage?.data ?? []).filter((p) => p.id !== product.id).slice(0, 4);
 
-  const requireSize = () => {
-    if (product.has_sizes && !selectedSize) {
-      setSizeError(true);
+  const chooseColor = (id: string) => {
+    setColorId(id);
+    setActiveImage(null);
+    setChoiceError(null);
+    // Keep the size when the new colour has it; otherwise choose again.
+    const nextSizes = variantsForColor(product, id);
+    const keep = size && nextSizes.some((v) => v.size === size) ? size : initialSize(product, id);
+    setSize(keep);
+    const next = findVariant(product, id, keep);
+    setQuantity((q) => Math.max(1, Math.min(q, next ? availableStock(product, next.id) : q)));
+    const params = new URLSearchParams(searchParams);
+    params.set('color', id);
+    setSearchParams(params, { replace: true });
+  };
+
+  const chooseSize = (value: string) => {
+    setSize(value);
+    setChoiceError(null);
+    // The new size may hold less than the quantity already dialled in.
+    const next = findVariant(product, colorId, value);
+    setQuantity((q) => Math.max(1, Math.min(q, next ? availableStock(product, next.id) : q)));
+  };
+
+  const requireChoice = () => {
+    if (product.has_colors && !colorId) {
+      setChoiceError('color');
+      return false;
+    }
+    if (product.has_sizes && !size) {
+      setChoiceError('size');
       return false;
     }
     return true;
   };
 
   const handleAdd = () => {
-    if (!requireSize()) return;
-    addItem(product, quantity, selectedSize);
-    setSizeError(false);
+    if (!requireChoice()) return;
+    addItem(product, quantity, variant?.id ?? null);
+    setChoiceError(null);
     setAdded(true);
     openCart('cart');
     window.setTimeout(() => setAdded(false), 2200);
   };
 
   const handleBuyNow = () => {
-    if (!requireSize()) return;
-    addItem(product, quantity, selectedSize);
+    if (!requireChoice()) return;
+    addItem(product, quantity, variant?.id ?? null);
     navigate('/checkout');
   };
 
@@ -186,64 +261,122 @@ function ProductView({ product }: { product: Product }) {
           )}
 
           <h1 className="pdp__name">{product.name}</h1>
-          <p className="pdp__price">{formatCurrency(product.price)}</p>
+          <p className="pdp__price">
+            {!variant && range.min !== range.max ? t('product.priceFrom', { price: formatCurrency(range.min) }) : formatCurrency(shownPrice)}
+            {compareAt != null && (
+              <>
+                <span className="price-was">{formatCurrency(compareAt)}</span>
+                <span className="price-off">−{Math.round(((compareAt - shownPrice) / compareAt) * 100)}%</span>
+              </>
+            )}
+          </p>
 
           {product.description && <p className="pdp__desc">{product.description}</p>}
 
           <div className="pdp__rule" />
 
-          {variants.length > 0 && (
+          {colors.length > 0 && (
             <div className="field">
               <span className="field__label">
-                {sizeLabel}
-                {selectedSize && <span style={{ color: 'var(--ink)' }}> — {selectedSize}</span>}
+                {colorLabel}
+                {colorId && <span style={{ color: 'var(--ink)' }}> — {colors.find((c) => c.id === colorId)?.name}</span>}
               </span>
-              <div className="size-grid">
-                {variants.map((variant) => {
-                  const soldOut = variant.stock_qty <= 0;
-                  const lowStock = !soldOut && variant.stock_qty <= product.low_stock_threshold;
+              <div className="swatch-grid" role="radiogroup" aria-label={colorLabel}>
+                {colors.map((color) => {
+                  const soldOut = !variantsForColor(product, color.id).some((v) => v.stock_qty > 0);
                   return (
                     <button
-                      key={variant.id}
+                      key={color.id}
                       type="button"
-                      className={`size-btn${selectedSize === variant.size ? ' is-active' : ''}`}
-                      onClick={() => {
-                        setSelectedSize(variant.size);
-                        setSizeError(false);
-                        // The new size may hold less than the quantity already
-                        // dialled in against the previous one.
-                        setQuantity((q) => Math.max(1, Math.min(q, availableStock(product, variant.size))));
-                      }}
-                      disabled={soldOut}
-                      aria-pressed={selectedSize === variant.size}
-                      title={
-                        soldOut
-                          ? t('product.stockOut')
-                          : lowStock
-                            ? t('product.stockLow', { count: variant.stock_qty })
-                            : variant.size
-                      }
+                      role="radio"
+                      aria-checked={colorId === color.id}
+                      className={`swatch-btn${colorId === color.id ? ' is-active' : ''}${soldOut ? ' is-out' : ''}${color.swatch ? '' : ' swatch-btn--text'}`}
+                      onClick={() => chooseColor(color.id)}
+                      title={soldOut ? `${color.name} — ${t('product.stockOut')}` : color.name}
                     >
-                      {variant.size}
+                      {color.swatch ? (
+                        <>
+                          <span className="swatch" style={{ background: color.swatch }} aria-hidden="true" />
+                          <span className="sr-only">{color.name}</span>
+                        </>
+                      ) : (
+                        color.name
+                      )}
                     </button>
                   );
                 })}
               </div>
-              {sizeError && <p className="field__error">{t('product.sizeError')}</p>}
+              {choiceError === 'color' && <p className="field__error">{t('product.colorError', { label: colorLabel.toLowerCase() })}</p>}
             </div>
           )}
 
-          {/* Once a size is chosen, availability is that size's, not the
-              product's total across all sizes. */}
+          {product.has_sizes && sizes.length > 0 && (
+            <div className="field">
+              <span className="field__label pdp__size-label">
+                <span>
+                  {sizeLabel}
+                  {size && <span style={{ color: 'var(--ink)' }}> — {size}</span>}
+                </span>
+                {guideId && (
+                  <button type="button" className="link pdp__guide-link" onClick={() => setGuideOpen(true)}>
+                    <IconRuler size={14} />
+                    {t('product.sizeGuide')}
+                  </button>
+                )}
+              </span>
+              <div className="size-grid">
+                {sizes.map((v) => {
+                  const soldOut = v.stock_qty <= 0;
+                  const lowStock = !soldOut && v.stock_qty <= product.low_stock_threshold;
+                  const vPrice = variantPrice(product, v);
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      className={`size-btn${size === v.size ? ' is-active' : ''}${soldOut ? ' is-out' : ''}`}
+                      onClick={() => chooseSize(v.size as string)}
+                      aria-pressed={size === v.size}
+                      title={
+                        soldOut
+                          ? t('product.stockOut')
+                          : lowStock
+                            ? t('product.stockLow', { count: v.stock_qty })
+                            : v.size ?? ''
+                      }
+                    >
+                      {v.size}
+                      {range.min !== range.max && vPrice !== range.min && (
+                        <span className="size-btn__price">{formatCurrency(vPrice)}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {choiceError === 'size' && <p className="field__error">{t('product.sizeError')}</p>}
+            </div>
+          )}
+
+          {!product.has_sizes && guideId && (
+            <button type="button" className="link pdp__guide-link" style={{ alignSelf: 'flex-start' }} onClick={() => setGuideOpen(true)}>
+              <IconRuler size={14} />
+              {t('product.sizeGuide')}
+            </button>
+          )}
+
+          {/* Once a variant is chosen, availability is that variant's, not the
+              product's total across all of them. */}
           <StockStatus
-            quantity={selectedSize ? maxQuantity : product.stock_quantity}
+            quantity={variant ? variant.stock_qty : product.stock_quantity}
             threshold={product.low_stock_threshold}
           />
 
-          {isOut ? (
-            <button type="button" className="btn btn--secondary btn--lg btn--block" disabled>
-              {t('product.stockOut')}
-            </button>
+          {isOut || chosenSoldOut ? (
+            <>
+              <button type="button" className="btn btn--secondary btn--lg btn--block" disabled>
+                {t('product.stockOut')}
+              </button>
+              <NotifyMe product={product} variant={varied ? variant : null} />
+            </>
           ) : (
             <>
               <div className="pdp__actions">
@@ -261,8 +394,8 @@ function ProductView({ product }: { product: Product }) {
                   <button
                     type="button"
                     className="stepper__btn"
-                    onClick={() => setQuantity((q) => Math.min(q + 1, maxQuantity))}
-                    disabled={quantity >= maxQuantity}
+                    onClick={() => setQuantity((q) => Math.min(q + 1, Math.max(1, maxQuantity)))}
+                    disabled={varied ? !variant || quantity >= maxQuantity : quantity >= maxQuantity}
                     aria-label={t('cart.increase')}
                   >
                     <IconPlus size={14} />
@@ -302,10 +435,10 @@ function ProductView({ product }: { product: Product }) {
               <dt>{t('product.meta.returns')}</dt>
               <dd>{t('product.meta.returnsValue')}</dd>
             </div>
-            {product.sku && (
+            {(variant?.sku || product.sku) && (
               <div className="pdp__meta-row">
                 <dt>{t('product.meta.sku')}</dt>
-                <dd className="t-mono">{product.sku}</dd>
+                <dd className="t-mono">{variant?.sku || product.sku}</dd>
               </div>
             )}
           </dl>
@@ -386,7 +519,101 @@ function ProductView({ product }: { product: Product }) {
           </div>
         </section>
       )}
+
+      {guideId && <SizeGuideDrawer guideId={guideId} open={guideOpen} onClose={() => setGuideOpen(false)} />}
     </div>
+  );
+}
+
+/** The size guide, fetched the first time the shopper opens it. */
+function SizeGuideDrawer({ guideId, open, onClose }: { guideId: string; open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
+  const { data: guide, isLoading } = useSizeGuide(guideId, open);
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      wide
+      eyebrow={t('product.sizeGuide')}
+      title={guide?.name ?? t('product.sizeGuide')}
+      closeLabel={t('common.close')}
+    >
+      {isLoading ? (
+        <div className="page-loading"><div className="spinner" /></div>
+      ) : guide ? (
+        <SizeGuideTable columns={guide.columns} rows={guide.rows} notes={guide.notes} />
+      ) : (
+        <p className="t-sm t-faint">{t('product.sizeGuideMissing')}</p>
+      )}
+    </Drawer>
+  );
+}
+
+/**
+ * "Email me when it is back" for a sold-out product — or the sold-out
+ * variant the shopper picked. Signed-in shoppers have their address filled in.
+ */
+function NotifyMe({ product, variant }: { product: Product; variant: ProductVariant | null }) {
+  const { t } = useI18n();
+  const { user } = useAuth();
+  const language = usePreferencesStore((s) => s.language);
+  const { data: enabled } = useBackInStockEnabled();
+  const request = useRequestStockNotification();
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // A product with variants: only once the sold-out variant is chosen.
+  if (!enabled || (hasVariants(product) && !variant)) return null;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    request.mutate(
+      { productId: product.id, variantId: variant?.id ?? null, email: email.trim(), locale: language },
+      {
+        onSuccess: (status) => setDone(status === 'already_subscribed' ? t('product.notify.already') : t('product.notify.done')),
+        onError: (err) =>
+          setError(
+            err instanceof AppError ? t(`product.notify.errors.${err.code}`) : err instanceof Error ? err.message : t('common.error'),
+          ),
+      },
+    );
+  };
+
+  if (done) {
+    return (
+      <p className="notify-done">
+        <IconCheck size={15} />
+        {done}
+      </p>
+    );
+  }
+
+  return (
+    <form className="notify-form" onSubmit={submit}>
+      <p className="t-sm">
+        <IconBell size={15} /> {t('product.notify.title')}
+      </p>
+      <div className="row gap-2">
+        <input
+          type="email"
+          className="input"
+          required
+          maxLength={254}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder={t('product.notify.placeholder')}
+          aria-label={t('product.notify.emailLabel')}
+          autoComplete="email"
+        />
+        <button type="submit" className="btn btn--secondary" disabled={request.isPending}>
+          {t('product.notify.submit')}
+        </button>
+      </div>
+      <p className="t-xs t-faint">{t('product.notify.privacy')}</p>
+      {error && <p className="field__error">{error}</p>}
+    </form>
   );
 }
 

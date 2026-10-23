@@ -4,67 +4,49 @@ import { ErrorMessage } from '../../../components/ui/ErrorMessage';
 import { Drawer } from '../../../components/ui/Drawer';
 import { Media } from '../../../components/ui/Media';
 import { OrderStatus as OrderStatusIndicator } from '../../../components/ui/StatusIndicator';
-import {
-  useAdminOrders,
-  useMarkOrderDelivered,
-  useUpdateAdminOrderStatus,
-  useUpdateAdminOrderTracking,
-} from '../../../hooks/useAdminOrders';
+import { useAdminOrders } from '../../../hooks/useAdminOrders';
+import { fetchAllAdminOrders, type AdminOrdersFilters } from '../../../lib/api';
+import { datedFilename, dialectForLocale, downloadCsv, toCsv } from '../../../lib/csv';
+import { LINE_COLUMNS, ORDER_COLUMNS, orderLinesToCsvRows, ordersToCsvRows } from '../../../lib/orderCsv';
 import { toast } from '../../../store/toastStore';
 import { useI18n } from '../../../lib/i18n';
 import {
-  IconAlert,
   IconArrowLeft,
   IconArrowRight,
   IconChevronRight,
+  IconDownload,
+  IconPrinter,
 } from '../../../components/ui/icons';
-import type { Order, OrderStatus } from '../../../types';
+import { OrderDetailPanel } from '../components/OrderDetailPanel';
+import { openPrint } from '../../../lib/printDocuments';
+import type { OrderStatus } from '../../../types';
 
 type StatusFilter = 'all' | OrderStatus;
 
-// Transitions offered by the plain status dropdown, which writes to PostgREST
-// directly. 'paid' deliberately has NO options: shipping an order has to go
-// through the update-tracking Edge Function, because that is what records the
-// tracking ID and emails the customer. Offering paid → shipped here shipped the
-// order silently — no tracking, no notification — and then the tracking field
-// (which only accepted a paid order) could never be filled in again.
-const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['processing', 'cancelled'],
-  processing: ['requires_action', 'paid', 'failed', 'cancelled'],
-  requires_action: ['paid', 'failed', 'cancelled'],
-  paid: [],
-  shipped: ['delivered'],
-  delivered: [],
-  failed: [],
-  cancelled: [],
-  refunded: [],
-};
-
-const TIMELINE_STEPS: OrderStatus[] = ['paid', 'shipped', 'delivered'];
-const TERMINAL_STATUSES: OrderStatus[] = ['cancelled', 'failed', 'refunded'];
-
-function formatAddress(order: Order): string {
-  const addr = order.shipping_address;
-  if (!addr) return '—';
-  return [addr.line1, addr.line2, addr.city, addr.state, addr.postal_code, addr.country]
-    .filter(Boolean)
-    .join(', ');
-}
+/** 'YYYY-MM-DD' (a date input) → the start or end of that day, as ISO. */
+const dayBound = (value: string, end: boolean) =>
+  value ? new Date(`${value}T${end ? '23:59:59.999' : '00:00:00'}`).toISOString() : undefined;
 
 export function AdminOrdersPage() {
-  const { t, tCount, formatCurrency, formatDate, formatDateTime } = useI18n();
+  const { t, tCount, formatCurrency, formatDate, locale } = useI18n();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [needsReviewOnly, setNeedsReviewOnly] = useState(false);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [openOrderId, setOpenOrderId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
-  const { data, isLoading, error } = useAdminOrders({
-    page,
+  const filters: AdminOrdersFilters = {
     status: statusFilter === 'all' ? undefined : statusFilter,
     needsReviewOnly: needsReviewOnly || undefined,
-  });
+    from: dayBound(from, false),
+    to: dayBound(to, true),
+  };
+  const { data, isLoading, error } = useAdminOrders({ ...filters, page });
 
   const orders = useMemo(() => data?.data ?? [], [data]);
   const totalPages = Math.max(1, Math.ceil((data?.count ?? 0) / (data?.pageSize ?? 50)));
@@ -79,7 +61,10 @@ export function AdminOrdersPage() {
         order.profiles?.email,
         order.profiles?.full_name,
         order.shipping_address?.full_name,
-        ...(order.order_items?.map((item) => item.product_name) ?? []),
+        order.discount_code,
+        order.tracking_id,
+        order.invoice_number,
+        ...(order.order_items?.flatMap((item) => [item.product_name, item.sku]) ?? []),
       ]
         .filter(Boolean)
         .join(' ')
@@ -88,22 +73,52 @@ export function AdminOrdersPage() {
     });
   }, [orders, search]);
 
-  const openOrder = filteredOrders.find((order) => order.id === openOrderId) ?? null;
+  const openOrder = orders.find((order) => order.id === openOrderId) ?? null;
+  const allVisibleSelected = filteredOrders.length > 0 && filteredOrders.every((o) => selected.has(o.id));
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) filteredOrders.forEach((o) => next.delete(o.id));
+      else filteredOrders.forEach((o) => next.add(o.id));
+      return next;
+    });
+
+  const exportCsv = async (shape: 'orders' | 'lines') => {
+    setExporting(true);
+    try {
+      const rows = selected.size > 0
+        ? await fetchAllAdminOrders({ ids: [...selected] })
+        : await fetchAllAdminOrders(filters);
+      const dialect = dialectForLocale(locale);
+      const columns = shape === 'orders' ? ORDER_COLUMNS : LINE_COLUMNS;
+      const options = {
+        dialect,
+        headings: Object.fromEntries(columns.map((c) => [c, t(`admin.orders.csv.${c}`)])),
+        statusLabel: (status: OrderStatus) => t(`status.${status}`),
+        formatDate: (iso: string) => new Date(iso).toLocaleString(locale),
+      };
+      const table = shape === 'orders' ? ordersToCsvRows(rows, options) : orderLinesToCsvRows(rows, options);
+      downloadCsv(datedFilename(shape === 'orders' ? 'orders' : 'order-lines'), toCsv(table, dialect));
+      toast(tCount('admin.orders.exported', rows.length));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t('common.error'), 'critical');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: 'all', label: t('admin.orders.filterAll') },
     ...(
-      [
-        'paid',
-        'processing',
-        'requires_action',
-        'shipped',
-        'delivered',
-        'cancelled',
-        'failed',
-        'refunded',
-        'pending',
-      ] as OrderStatus[]
+      ['paid', 'processing', 'requires_action', 'shipped', 'delivered', 'cancelled', 'failed', 'refunded', 'pending'] as OrderStatus[]
     ).map((status) => ({ value: status, label: t(`status.${status}`) })),
   ];
 
@@ -137,6 +152,16 @@ export function AdminOrdersPage() {
           <h1 className="admin-page__title">{t('admin.orders.title')}</h1>
           <p className="t-sm t-faint admin-page__desc">{t('admin.orders.subtitle')}</p>
         </div>
+        <div className="admin-page__actions">
+          <button type="button" className="btn btn--quiet btn--sm" onClick={() => void exportCsv('orders')} disabled={exporting}>
+            <IconDownload size={14} />
+            {t('admin.orders.exportOrders')}
+          </button>
+          <button type="button" className="btn btn--quiet btn--sm" onClick={() => void exportCsv('lines')} disabled={exporting}>
+            <IconDownload size={14} />
+            {t('admin.orders.exportLines')}
+          </button>
+        </div>
       </header>
 
       <div className="admin-toolbar">
@@ -167,6 +192,25 @@ export function AdminOrdersPage() {
           </select>
         </div>
 
+        <div className="admin-toolbar__group">
+          <label className="t-label" htmlFor="order-from">{t('admin.orders.from')}</label>
+          <input
+            id="order-from"
+            type="date"
+            className="input input--sm"
+            value={from}
+            onChange={(event) => { setFrom(event.target.value); setPage(1); }}
+          />
+          <label className="t-label" htmlFor="order-to">{t('admin.orders.to')}</label>
+          <input
+            id="order-to"
+            type="date"
+            className="input input--sm"
+            value={to}
+            onChange={(event) => { setTo(event.target.value); setPage(1); }}
+          />
+        </div>
+
         <label className="checkbox">
           <input
             type="checkbox"
@@ -180,9 +224,26 @@ export function AdminOrdersPage() {
         </label>
 
         <span className="admin-toolbar__count">
-          {tCount('admin.orders.count', filteredOrders.length)}
+          {tCount('admin.orders.count', data?.count ?? filteredOrders.length)}
         </span>
       </div>
+
+      {selected.size > 0 && (
+        <div className="bulk-bar" role="region" aria-label={t('admin.orders.bulk.label')}>
+          <span className="t-sm">{tCount('admin.orders.bulk.selected', selected.size)}</span>
+          <button type="button" className="btn btn--secondary btn--sm" onClick={() => openPrint([...selected], 'packing')}>
+            <IconPrinter size={14} />
+            {t('admin.orders.print.packing')}
+          </button>
+          <button type="button" className="btn btn--secondary btn--sm" onClick={() => openPrint([...selected], 'invoice')}>
+            <IconPrinter size={14} />
+            {t('admin.orders.print.invoice')}
+          </button>
+          <button type="button" className="btn btn--quiet btn--sm" onClick={() => setSelected(new Set())}>
+            {t('admin.orders.bulk.clear')}
+          </button>
+        </div>
+      )}
 
       {filteredOrders.length === 0 ? (
         <div className="empty">
@@ -194,6 +255,14 @@ export function AdminOrdersPage() {
           <table className="table table--clickable table--stack">
             <thead>
               <tr>
+                <th className="table__select">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleAll}
+                    aria-label={t('admin.orders.bulk.all')}
+                  />
+                </th>
                 <th>{t('admin.orders.table.order')}</th>
                 <th>{t('admin.orders.table.customer')}</th>
                 <th>{t('admin.orders.table.status')}</th>
@@ -206,12 +275,21 @@ export function AdminOrdersPage() {
               {filteredOrders.map((order) => {
                 const primaryItem = order.order_items?.[0] ?? null;
                 const extra = Math.max((order.order_items?.length ?? 0) - 1, 0);
+                const refunded = Number(order.refund_amount ?? 0);
                 return (
                   <tr
                     key={order.id}
                     onClick={() => setOpenOrderId(order.id)}
                     className={openOrderId === order.id ? 'is-selected' : undefined}
                   >
+                    <td data-col="end" className="table__select" onClick={(event) => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(order.id)}
+                        onChange={() => toggle(order.id)}
+                        aria-label={t('admin.orders.bulk.one', { id: order.id.slice(0, 8).toUpperCase() })}
+                      />
+                    </td>
                     <td data-col="meta">
                       <div className="row gap-3">
                         <Media
@@ -226,7 +304,10 @@ export function AdminOrdersPage() {
                             {primaryItem?.product_name ?? order.id.slice(0, 8).toUpperCase()}
                             {extra > 0 && <span className="t-faint"> +{extra}</span>}
                           </p>
-                          <p className="t-xs t-faint t-mono">{order.id.slice(0, 8).toUpperCase()}</p>
+                          <p className="t-xs t-faint t-mono">
+                            {order.id.slice(0, 8).toUpperCase()}
+                            {order.invoice_number && ` · ${order.invoice_number}`}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -241,9 +322,13 @@ export function AdminOrdersPage() {
                     <td data-col="full">
                       <div className="row gap-3 row--wrap">
                         <OrderStatusIndicator status={order.status} />
+                        {refunded > 0 && order.status !== 'refunded' && (
+                          <span className="status status--neutral">{t('admin.orders.partiallyRefunded')}</span>
+                        )}
                         {order.needs_review && (
                           <span className="status status--critical">{t('admin.orders.needsReview')}</span>
                         )}
+                        {order.discount_code && <span className="code-chip">{order.discount_code}</span>}
                       </div>
                     </td>
                     <td data-col="full">{formatDate(new Date(order.created_at))}</td>
@@ -292,325 +377,8 @@ export function AdminOrdersPage() {
         title={openOrder ? `#${openOrder.id.slice(0, 8).toUpperCase()}` : ''}
         closeLabel={t('common.close')}
       >
-        {openOrder && (
-          <OrderDetailPanel
-            order={openOrder}
-            formatAddress={formatAddress}
-            formatCurrency={formatCurrency}
-            formatDateTime={formatDateTime}
-          />
-        )}
+        {openOrder && <OrderDetailPanel key={openOrder.id} order={openOrder} />}
       </Drawer>
     </>
-  );
-}
-
-/* ── Order detail ────────────────────────────────────────────────────── */
-
-function OrderDetailPanel({
-  order,
-  formatAddress,
-  formatCurrency,
-  formatDateTime,
-}: {
-  order: Order;
-  formatAddress: (order: Order) => string;
-  formatCurrency: (value: number) => string;
-  formatDateTime: (value: Date) => string;
-}) {
-  const { t, tCount } = useI18n();
-  const updateStatus = useUpdateAdminOrderStatus();
-  const updateTracking = useUpdateAdminOrderTracking();
-  const markDelivered = useMarkOrderDelivered();
-
-  const [trackingDraft, setTrackingDraft] = useState(order.tracking_id ?? '');
-
-  const nextStatuses = [order.status, ...STATUS_TRANSITIONS[order.status]].filter(
-    (value, index, arr) => arr.indexOf(value) === index
-  );
-  // 'shipped' is included so a wrong tracking number can still be corrected —
-  // the Edge Function re-sends the notification with the new one, and the DB
-  // treats shipped → shipped as a no-op.
-  const canTrack = order.status === 'paid' || order.status === 'shipped';
-  const canSaveTracking = canTrack && trackingDraft.trim().length > 0;
-  const stopped = TERMINAL_STATUSES.includes(order.status);
-  const progress = TIMELINE_STEPS.indexOf(order.status);
-
-  const deliverErrorMessage = (err: unknown): string => {
-    const raw = err instanceof Error ? err.message : '';
-    if (raw.includes('delivered_at') || raw.includes('schema cache')) {
-      return t('admin.orders.errors.deliveredAtMissing');
-    }
-    if (raw.includes('JWT') || raw.includes('session') || raw.includes('Session')) {
-      return t('admin.orders.errors.sessionExpired');
-    }
-    return raw || t('admin.orders.markDeliveredError');
-  };
-
-  return (
-    <div className="order-detail">
-      <div className="order-detail__head">
-        <div className="row row--between gap-4" style={{ alignItems: 'flex-start' }}>
-          <div>
-            <p className="t-label">{t('admin.orders.orderTotal')}</p>
-            <p className="order-detail__total" style={{ marginTop: 'var(--s-2)' }}>
-              {formatCurrency(order.total)}
-            </p>
-            <p className="t-xs t-faint" style={{ marginTop: 'var(--s-2)' }}>
-              {formatDateTime(new Date(order.created_at))} · {tCount('orders.items', order.order_items?.length ?? 0)}
-            </p>
-          </div>
-          <div className="stack gap-2" style={{ alignItems: 'flex-end' }}>
-            <OrderStatusIndicator status={order.status} />
-            {order.needs_review && (
-              <span className="status status--critical">{t('admin.orders.needsReview')}</span>
-            )}
-          </div>
-        </div>
-
-        {order.needs_review && order.review_reason && (
-          <div className="notice notice--critical" style={{ marginTop: 'var(--s-4)' }}>
-            <IconAlert size={15} />
-            <div className="notice__body">
-              {t('admin.orders.reviewReasonLabel')}: {order.review_reason}
-            </div>
-          </div>
-        )}
-
-        <div className={`timeline${stopped ? ' timeline--stopped' : ''}`} style={{ marginBottom: 0 }}>
-          {(stopped
-            ? [
-                { key: 'placed', label: t('orderDetail.timeline.ordered'), state: 'done' as const },
-                { key: order.status, label: t(`status.${order.status}`), state: 'current' as const },
-              ]
-            : TIMELINE_STEPS.map((step, index) => ({
-                key: step,
-                label: t(`status.${step}`),
-                state:
-                  progress < 0
-                    ? ('todo' as const)
-                    : index < progress
-                    ? ('done' as const)
-                    : index === progress
-                    ? ('current' as const)
-                    : ('todo' as const),
-              }))
-          ).map((step) => (
-            <div
-              key={step.key}
-              className={`timeline__step${step.state === 'done' ? ' is-done' : ''}${
-                step.state === 'current' ? ' is-current' : ''
-              }`}
-            >
-              <div className="timeline__marker" aria-hidden="true">
-                <span className="timeline__dot" />
-                <span className="timeline__line" />
-              </div>
-              <span className="timeline__label">{step.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Items */}
-      <section className="order-detail__block">
-        <p className="t-label" style={{ marginBottom: 'var(--s-3)' }}>{t('orderDetail.itemsOrdered')}</p>
-        {order.order_items?.map((item) => (
-          <div key={item.id} className="order-detail__item">
-            <Media src={item.product_image} alt="" ratio="square" className="thumb" style={{ width: 48, height: 48 }} />
-            <div style={{ minWidth: 0 }}>
-              <p className="t-sm" style={{ color: 'var(--ink)' }}>{item.product_name}</p>
-              <p className="t-xs t-faint">
-                {item.selected_size ? `${item.selected_size} · ` : ''}
-                {formatCurrency(item.unit_price)} × {item.quantity}
-              </p>
-            </div>
-            <p className="t-sm t-num" style={{ color: 'var(--ink)' }}>{formatCurrency(item.total_price)}</p>
-          </div>
-        ))}
-
-        <div className="summary" style={{ marginTop: 'var(--s-4)' }}>
-          <div className="summary__row">
-            <span>{t('orderDetail.subtotal')}</span>
-            <span>{formatCurrency(order.subtotal)}</span>
-          </div>
-          <div className="summary__row">
-            <span>{order.shipping_method_name ?? t('orderDetail.shipping')}</span>
-            <span>{order.shipping_cost > 0 ? formatCurrency(order.shipping_cost) : t('common.free')}</span>
-          </div>
-          {order.tax_amount > 0 && (
-            <div className="summary__row">
-              <span>{t('orderDetail.tax')}</span>
-              <span>{formatCurrency(order.tax_amount)}</span>
-            </div>
-          )}
-          <div className="summary__row summary__row--total">
-            <span>{t('orderDetail.total')}</span>
-            <span>{formatCurrency(order.total)}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Customer + shipping */}
-      <section className="order-detail__block">
-        <div className="order-detail__grid">
-          <div>
-            <p className="t-label" style={{ marginBottom: 'var(--s-2)' }}>{t('admin.orders.customer')}</p>
-            <p className="t-sm" style={{ color: 'var(--ink)' }}>
-              {order.profiles?.full_name
-                || order.shipping_address?.full_name
-                || t('admin.orders.customerFallback')}
-            </p>
-            <p className="t-xs t-faint">{order.profiles?.email ?? t('admin.orders.emailUnavailable')}</p>
-            {order.shipping_address?.phone && (
-              <p className="t-xs t-faint">{order.shipping_address.phone}</p>
-            )}
-          </div>
-          <div>
-            <p className="t-label" style={{ marginBottom: 'var(--s-2)' }}>{t('admin.orders.shipping')}</p>
-            <p className="t-sm t-muted" style={{ lineHeight: 1.7 }}>{formatAddress(order)}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Actions */}
-      <section className="order-detail__block">
-        <p className="t-label" style={{ marginBottom: 'var(--s-4)' }}>{t('orderDetail.actions')}</p>
-
-        <div className="stack gap-5">
-          <div className="field">
-            <label className="field__label" htmlFor="drawer-status">{t('admin.orders.statusLabel')}</label>
-            <select
-              id="drawer-status"
-              className="select"
-              value={order.status}
-              disabled={nextStatuses.length === 1 || updateStatus.isPending}
-              onChange={(event) =>
-                updateStatus.mutate(
-                  { orderId: order.id, status: event.target.value as OrderStatus },
-                  {
-                    onSuccess: () => toast(t('admin.orders.statusUpdated')),
-                    onError: (err) =>
-                      toast(err instanceof Error ? err.message : t('common.error'), 'critical'),
-                  }
-                )
-              }
-            >
-              {nextStatuses.map((status) => (
-                <option key={status} value={status}>{t(`status.${status}`)}</option>
-              ))}
-            </select>
-            {nextStatuses.length === 1 && (
-              <p className="field__hint">
-                {/* A paid order is not stuck — it just advances via tracking,
-                    not via this dropdown. Saying "no further transitions"
-                    would tell the admin the opposite of the truth. */}
-                {order.status === 'paid'
-                  ? t('admin.orders.shipViaTracking')
-                  : t('admin.orders.noTransitions')}
-              </p>
-            )}
-          </div>
-
-          <div className="field">
-            <label className="field__label" htmlFor="drawer-tracking">{t('admin.orders.trackingId')}</label>
-            <div className="row gap-3">
-              <input
-                id="drawer-tracking"
-                className="input"
-                placeholder={t('admin.orders.trackingPlaceholder')}
-                value={trackingDraft}
-                onChange={(event) => setTrackingDraft(event.target.value)}
-              />
-              <button
-                type="button"
-                className="btn btn--secondary"
-                disabled={!canSaveTracking || updateTracking.isPending}
-                onClick={() =>
-                  updateTracking.mutate(
-                    { orderId: order.id, trackingId: trackingDraft.trim() },
-                    {
-                      onSuccess: () => toast(t('admin.orders.trackingSaved')),
-                      onError: (err) =>
-                        toast(err instanceof Error ? err.message : t('admin.orders.trackingSaveError'), 'critical'),
-                    }
-                  )
-                }
-              >
-                {updateTracking.isPending ? t('admin.orders.savingTracking') : t('admin.orders.saveTracking')}
-              </button>
-            </div>
-            {!canTrack && <p className="field__hint">{t('admin.orders.trackingHint')}</p>}
-          </div>
-
-          {order.status === 'shipped' && (
-            <button
-              type="button"
-              className="btn btn--primary"
-              style={{ alignSelf: 'flex-start' }}
-              disabled={markDelivered.isPending}
-              onClick={() =>
-                markDelivered.mutate(
-                  { orderId: order.id },
-                  {
-                    onSuccess: () => toast(t('admin.orders.deliveredConfirmed')),
-                    onError: (err) => toast(deliverErrorMessage(err), 'critical'),
-                  }
-                )
-              }
-            >
-              {markDelivered.isPending ? t('admin.orders.markingDelivered') : t('admin.orders.markDelivered')}
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* Activity */}
-      <section className="order-detail__block">
-        <p className="t-label" style={{ marginBottom: 'var(--s-4)' }}>{t('admin.orders.activity')}</p>
-        <div className="activity">
-          <ActivityRow
-            label={t('admin.orders.activityPlaced')}
-            time={formatDateTime(new Date(order.created_at))}
-          />
-          {order.tracking_updated_at && (
-            <ActivityRow
-              label={t('admin.orders.activityTracking', { id: order.tracking_id ?? '—' })}
-              time={formatDateTime(new Date(order.tracking_updated_at))}
-            />
-          )}
-          {order.delivered_at && (
-            <ActivityRow
-              label={t('admin.orders.activityDelivered')}
-              time={formatDateTime(new Date(order.delivered_at))}
-            />
-          )}
-          {order.refunded_at && (
-            <ActivityRow
-              label={t('admin.orders.activityRefunded', {
-                amount: order.refund_amount ? formatCurrency(order.refund_amount) : formatCurrency(order.total),
-              })}
-              time={formatDateTime(new Date(order.refunded_at))}
-            />
-          )}
-          <ActivityRow
-            label={t('admin.orders.activityUpdated')}
-            time={formatDateTime(new Date(order.updated_at))}
-          />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ActivityRow({ label, time }: { label: string; time: string }) {
-  return (
-    <div className="activity__row">
-      <span className="activity__dot" aria-hidden="true" />
-      <div>
-        <p className="activity__label">{label}</p>
-        <p className="activity__time">{time}</p>
-      </div>
-    </div>
   );
 }

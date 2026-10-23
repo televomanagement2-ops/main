@@ -2,11 +2,13 @@ import { Link } from 'react-router-dom';
 import { Drawer } from '../ui/Drawer';
 import { Media } from '../ui/Media';
 import { IconMinus, IconPlus } from '../ui/icons';
-import { useCartStore } from '../../store/cartStore';
+import { cartLineKey, useCartStore } from '../../store/cartStore';
 import { useUiStore } from '../../store/uiStore';
 import { useI18n } from '../../lib/i18n';
 import { availableStock } from '../../lib/stock';
-import { sizeLabelKey } from '../../lib/sizes';
+import { cartSubtotal, lineTotal } from '../../lib/pricing';
+import { CartLineOptions } from '../../features/cart/components/CartLineOptions';
+import { cartLineImage, cartLineLink } from '../../lib/cartLines';
 
 /**
  * The bag as a sheet: an extension of the storefront, not a separate screen.
@@ -21,7 +23,7 @@ export function CartDrawer() {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
 
-  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const subtotal = cartSubtotal(items);
   const count = items.reduce((n, i) => n + i.quantity, 0);
 
   return (
@@ -60,39 +62,27 @@ export function CartDrawer() {
       ) : (
         <div>
           {items.map((item) => {
-            const image =
-              item.product.product_images?.find((i) => i.is_primary)?.url ??
-              item.product.product_images?.[0]?.url ??
-              null;
-            // Cap by the selected size's stock, not the product total.
-            const max = availableStock(item.product, item.selectedSize);
+            const key = cartLineKey(item);
+            const href = cartLineLink(item);
+            // Cap by the chosen variant's stock, not the product total.
+            const max = availableStock(item.product, item.variantId, item.selectedSize);
             return (
-              <div key={`${item.product.id}-${item.selectedSize ?? ''}`} className="drawer-line">
-                <Link
-                  to={`/products/${item.product.slug}`}
-                  className="drawer-line__media"
-                  onClick={close}
-                  tabIndex={-1}
-                  aria-hidden="true"
-                >
-                  <Media src={image} alt="" ratio="portrait" />
+              <div key={key} className="drawer-line">
+                <Link to={href} className="drawer-line__media" onClick={close} tabIndex={-1} aria-hidden="true">
+                  <Media src={cartLineImage(item)} alt="" ratio="portrait" />
                 </Link>
 
                 <div style={{ minWidth: 0 }}>
-                  <Link to={`/products/${item.product.slug}`} className="line-item__name" onClick={close}>
+                  <Link to={href} className="line-item__name" onClick={close}>
                     {item.product.name}
                   </Link>
-                  {item.selectedSize && (
-                    <p className="line-item__meta">
-                      {t(sizeLabelKey(item.product.size_label))}: {item.selectedSize}
-                    </p>
-                  )}
+                  <CartLineOptions item={item} />
                   <div className="row gap-4" style={{ marginTop: 'var(--s-3)' }}>
                     <div className="stepper stepper--sm" aria-label={t('cart.quantity')}>
                       <button
                         type="button"
                         className="stepper__btn"
-                        onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedSize)}
+                        onClick={() => updateQuantity(key, item.quantity - 1)}
                         aria-label={t('cart.decrease')}
                       >
                         <IconMinus size={13} />
@@ -101,24 +91,20 @@ export function CartDrawer() {
                       <button
                         type="button"
                         className="stepper__btn"
-                        onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)}
+                        onClick={() => updateQuantity(key, item.quantity + 1)}
                         disabled={item.quantity >= max}
                         aria-label={t('cart.increase')}
                       >
                         <IconPlus size={13} />
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      className="line-item__remove"
-                      onClick={() => removeItem(item.product.id, item.selectedSize)}
-                    >
+                    <button type="button" className="line-item__remove" onClick={() => removeItem(key)}>
                       {t('cart.removeShort')}
                     </button>
                   </div>
                 </div>
 
-                <p className="line-item__price">{formatCurrency(item.product.price * item.quantity)}</p>
+                <p className="line-item__price">{formatCurrency(lineTotal(item))}</p>
               </div>
             );
           })}

@@ -34,7 +34,7 @@ click Run):
 1. `supabase/schema.sql` — tables & types
 2. `supabase/rls.sql` — security policies
 3. **Every file in `supabase/migrations/` in numeric order** — `001_fixes.sql` through
-   `021_product_sizes.sql`. Run each one.
+   `026_import_keeps_variants.sql`. Run each one.
 4. `supabase/seeds/002_mock_products.sql` — optional demo catalog (skip if you'll add your
    own products right away)
 
@@ -42,8 +42,9 @@ click Run):
 > leave the checkout schema incomplete. If your database already ran some of them, run every
 > file newer than your last one, then `NOTIFY pgrst, 'reload schema';`. Re-ran `schema.sql`
 > or an older migration on a migrated database? Run `019_reconcile_reverted_fixes.sql` again
-> afterwards — it puts back the fixes those files revert. (Re-ran `005`, `007` or `013`? Run
-> `021_product_sizes.sql` again too.)
+> afterwards — it puts back the fixes those files revert. (Re-ran `005`, `007`, `013` or
+> `021`? Run `021`, `022`, `024` and `026` again too, in that order. Re-ran `003`? Run `024`
+> again.)
 
 `014_role_management.sql` installs `set_user_role()`, the supported way to make somebody an
 admin (or put them back to customer) — see *Make the first admin* below.
@@ -61,6 +62,16 @@ SELECT jobname, schedule, active FROM cron.job;
 
 `021_product_sizes.sql` adds stock per size for clothing and anything sold by measurement —
 manage it from the admin (see *Products Setup*).
+
+`022` to `026` add the rest of the catalogue and order tools, all managed from the admin:
+
+| Migration | What it adds |
+|---|---|
+| `022_catalog_variants.sql` | Colours (or materials, finishes…) with swatches and photos per colour, stock per colour × size, a price and a private cost per variant, size guides, product duplication and CSV import/export. |
+| `023_inventory_and_alerts.sql` | The stock history (every sale, refund, restock…), low-stock emails to the admins and "email me when it is back" for customers — switch these on in step 6. |
+| `024_order_operations.sql` | Order timeline and internal notes, partial refunds line by line, exchanges to another size or colour, packing slips and invoices. |
+| `025_discount_codes.sql` | Discount codes: percentage, fixed amount or free shipping, with limits and dates. |
+| `026_import_keeps_variants.sql` | A CSV import without size/colour columns leaves the variants untouched. |
 
 > **Tip —** `supabase/SETUP_CHECKLIST.md` contains verification queries to confirm every
 > required column exists, plus how the `needs_review` backorder flag works.
@@ -121,6 +132,9 @@ RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=Your Store <support@yourstore.com>
 STORE_NAME=Your Store
 SUPPORT_EMAIL=support@yourstore.com
+# Store emails (low stock, back in stock) — see step 6
+STORE_WORKER_SECRET=<32+ random characters>
+SITE_URL=https://yourstore.com          # optional; links in those emails
 ```
 
 > **Note —** `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically by
@@ -130,7 +144,7 @@ SUPPORT_EMAIL=support@yourstore.com
 
 ## 6. Deploy the Edge Functions
 
-Install the Supabase CLI, log in, link your project, and deploy the **four** functions:
+Install the Supabase CLI, log in, link your project, and deploy the **five** functions:
 
 ```bash
 npm install -g supabase
@@ -140,14 +154,38 @@ supabase functions deploy create-checkout-session
 supabase functions deploy stripe-webhook
 supabase functions deploy update-tracking
 supabase functions deploy handle-order-action
+supabase functions deploy store-worker
 ```
 
 | Function | What it does |
 |---|---|
-| `create-checkout-session` | Starts a Stripe payment for the cart. |
-| `stripe-webhook` | Confirms payment & updates the order status. |
+| `create-checkout-session` | Starts a Stripe payment for the cart (with its discount code, if any). |
+| `stripe-webhook` | Confirms payment, updates the order status and records refunds made in Stripe. |
 | `update-tracking` | Saves tracking info & emails the customer. |
-| `handle-order-action` | Order actions (cancel, refund, mark delivered) + emails. |
+| `handle-order-action` | Order actions (cancel, refund all or part, check a payment with Stripe, mark delivered) + emails. |
+| `store-worker` | Sends the low-stock digest and the back-in-stock emails, on a schedule. |
+
+> **Important —** Run the migrations (step 2) before deploying: the functions read and write
+> the columns they add.
+
+### Switch on the store emails
+
+Migration 023 schedules the low-stock digest (hourly) and the back-in-stock emails (every 10
+minutes); they call `store-worker` with a shared secret, kept in two places:
+
+1. Pick a long random value (32+ characters, e.g. `openssl rand -hex 32`) and add it as the
+   `STORE_WORKER_SECRET` secret (step 5).
+2. In **SQL Editor**, store the same value and the function's address in Vault:
+
+   ```sql
+   SELECT vault.create_secret('https://<project-ref>.supabase.co/functions/v1/store-worker', 'store_worker_url');
+   SELECT vault.create_secret('<the same random value>', 'store_worker_secret');
+   ```
+
+3. Test it: Admin → Inventory → Alerts → **Check and send now**.
+
+Recipients (default: every admin) and the customer "email me when it is back" option are set
+on that same page. `supabase/SETUP_CHECKLIST.md` has the queries to check the schedule.
 
 ---
 

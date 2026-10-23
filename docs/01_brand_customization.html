@@ -45,9 +45,11 @@
 <body>
 
 <h1>CommerceJet — Brand Customization</h1>
+
 <p class="subtitle">Name, logo, colors, emails &amp; languages.</p>
 
 <h2>Contents</h2>
+
 <ol>
   <li>Change the store name &amp; contact details</li>
   <li>Change the logo &amp; favicon</li>
@@ -126,14 +128,18 @@ Edge Functions → Secrets). All have safe defaults, so set only what you want t
 <pre><code>STORE_NAME=Your Store
 SUPPORT_EMAIL=support@yourstore.com
 RESEND_FROM_EMAIL=Your Store &lt;support@yourstore.com&gt;
-STORE_CURRENCY=USD
 STORE_LOCALE=en-US
 STORE_BRAND_COLOR=#111111</code></pre>
 
+<blockquote><p><strong>The currency is not here.</strong> It has to match what Stripe charges and what the
+storefront shows, so it is a constant in
+<code>supabase/functions/_shared/money.ts</code>
+that all three import — not a secret only the emails would read.</p></blockquote>
+
 <p>The shared email template lives in
 <code>supabase/functions/_shared/store.ts</code> if you want to
-customize the layout itself. Redeploy <code>update-tracking</code> and <code>handle-order-action</code> after code
-changes (secret changes need no redeploy).</p>
+customize the layout itself. Redeploy <code>stripe-webhook</code>, <code>update-tracking</code>,
+<code>handle-order-action</code> and <code>store-worker</code> after code changes (secret changes need no redeploy).</p>
 
 <blockquote><p><strong>Note —</strong> Sign-up confirmation, password-reset, and magic-link emails are sent by
 <strong>Supabase Auth</strong>, not this code. Customize them under Supabase → Authentication → Email

@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { Media } from '../../../components/ui/Media';
 import { IconMinus, IconPlus } from '../../../components/ui/icons';
-import { useCartStore } from '../../../store/cartStore';
+import { cartLineKey, useCartStore } from '../../../store/cartStore';
 import { useI18n } from '../../../lib/i18n';
 import { availableStock } from '../../../lib/stock';
-import { sizeLabelKey } from '../../../lib/sizes';
+import { lineTotal, unitPrice } from '../../../lib/pricing';
+import { CartLineOptions } from './CartLineOptions';
+import { cartLineImage, cartLineLink } from '../../../lib/cartLines';
 import type { CartItemLocal } from '../../../types';
 
 export function CartItemRow({ item }: { item: CartItemLocal }) {
@@ -12,43 +14,31 @@ export function CartItemRow({ item }: { item: CartItemLocal }) {
   const removeItem = useCartStore((s) => s.removeItem);
   const { t, formatCurrency } = useI18n();
 
-  // Cap by the selected size's stock, not the product total across all sizes.
-  const max = availableStock(item.product, item.selectedSize);
-
-  const image =
-    item.product.product_images?.find((i) => i.is_primary)?.url ??
-    item.product.product_images?.[0]?.url ??
-    null;
-  const lineTotal = item.product.price * item.quantity;
+  const key = cartLineKey(item);
+  // Cap by the chosen variant's stock, not the product total across all of them.
+  const max = availableStock(item.product, item.variantId, item.selectedSize);
+  const image = cartLineImage(item);
+  const href = cartLineLink(item);
 
   return (
     <div className="line-item">
-      <Link
-        to={`/products/${item.product.slug}`}
-        className="line-item__media"
-        tabIndex={-1}
-        aria-hidden="true"
-      >
+      <Link to={href} className="line-item__media" tabIndex={-1} aria-hidden="true">
         <Media src={image} alt="" ratio="portrait" />
       </Link>
 
       <div className="line-item__body">
-        <Link to={`/products/${item.product.slug}`} className="line-item__name">
+        <Link to={href} className="line-item__name">
           {item.product.name}
         </Link>
         {item.product.categories && <p className="line-item__meta">{item.product.categories.name}</p>}
-        {item.selectedSize && (
-          <p className="line-item__meta">
-            {t(sizeLabelKey(item.product.size_label))}: {item.selectedSize}
-          </p>
-        )}
+        <CartLineOptions item={item} />
 
         <div className="line-item__controls">
           <div className="stepper stepper--sm" aria-label={t('cart.quantity')}>
             <button
               type="button"
               className="stepper__btn"
-              onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.selectedSize)}
+              onClick={() => updateQuantity(key, item.quantity - 1)}
               aria-label={t('cart.decrease')}
             >
               <IconMinus size={13} />
@@ -57,7 +47,7 @@ export function CartItemRow({ item }: { item: CartItemLocal }) {
             <button
               type="button"
               className="stepper__btn"
-              onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)}
+              onClick={() => updateQuantity(key, item.quantity + 1)}
               disabled={item.quantity >= max}
               aria-label={t('cart.increase')}
             >
@@ -68,7 +58,7 @@ export function CartItemRow({ item }: { item: CartItemLocal }) {
           <button
             type="button"
             className="line-item__remove"
-            onClick={() => removeItem(item.product.id, item.selectedSize)}
+            onClick={() => removeItem(key)}
             aria-label={t('cart.remove', { name: item.product.name })}
           >
             {t('cart.removeShort')}
@@ -77,10 +67,10 @@ export function CartItemRow({ item }: { item: CartItemLocal }) {
       </div>
 
       <div className="line-item__price">
-        {formatCurrency(lineTotal)}
+        {formatCurrency(lineTotal(item))}
         {item.quantity > 1 && (
           <p className="line-item__unit">
-            {formatCurrency(item.product.price)} {t('cart.each')}
+            {formatCurrency(unitPrice(item.product, item.variantId, item.selectedSize))} {t('cart.each')}
           </p>
         )}
       </div>

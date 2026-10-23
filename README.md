@@ -11,6 +11,11 @@ CommerceJet is a full-stack e-commerce storefront built with React, Supabase, an
 - Webhook confirmation that updates order status in the database.
 - Orders page that reflects the real order lifecycle.
 - RLS-protected Supabase schema, with stock handling and order immutability after payment.
+- Products sold by size, by colour (or material, finish…) or both, with stock, SKU, price and private cost per variant, photos per colour and size guides.
+- Admin catalogue tools: compare-at price and margin, duplicate, CSV import/export.
+- Inventory: full stock history, low-stock email digest, "email me when it is back" requests.
+- Order operations: timeline and internal notes, partial refunds per line with restock, exchanges, payment checks with Stripe, packing slips and invoices, CSV export.
+- Discount codes (percentage, fixed amount, free shipping) applied through Stripe.
 
 ## Tech Stack
 
@@ -39,7 +44,8 @@ supabase/
   rls.sql              # row level security policies
   migrations/          # hardening and payment fixes
   seeds/               # mock data for initial population
-  functions/           # create-checkout-session, stripe-webhook
+  functions/           # create-checkout-session, stripe-webhook, update-tracking,
+                       # handle-order-action, store-worker (+ _shared)
 ```
 
 ## Local Setup
@@ -71,10 +77,10 @@ Run the SQL files in Supabase Dashboard → SQL Editor in this order:
 
 1. `supabase/schema.sql`
 2. `supabase/rls.sql`
-3. Every file in `supabase/migrations/` in numeric order (`001_fixes.sql` through `012_us_shipping_cleanup.sql`).
+3. Every file in `supabase/migrations/` in numeric order (`001_fixes.sql` through `026_import_keeps_variants.sql`).
 4. `supabase/seeds/002_mock_products.sql`
 
-That gives you the base schema, the RLS policies, the payment hardening layer, the US shipping methods, and the initial mock catalog.
+That gives you the base schema, the RLS policies, the payment hardening layer, the shipping methods, the catalogue, inventory, order and discount features, and the initial mock catalog.
 
 Full operational checklist: [supabase/SETUP_CHECKLIST.md](supabase/SETUP_CHECKLIST.md)
 
@@ -95,6 +101,10 @@ STRIPE_TAX_ENABLED=false
 # Email (optional)
 RESEND_API_KEY=re_...
 RESEND_FROM_EMAIL=Your Store <support@yourstore.com>
+# Store emails (low stock, back in stock): the same value as the
+# store_worker_secret Vault entry — see supabase/SETUP_CHECKLIST.md
+STORE_WORKER_SECRET=<32+ random characters>
+SITE_URL=https://yourstore.com
 ```
 
 The Supabase runtime injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` automatically for Edge Functions.
@@ -120,6 +130,14 @@ The Supabase runtime injects `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` auto
 - `SUPABASE_URL` (runtime injected)
 - `SUPABASE_SERVICE_ROLE_KEY` (runtime injected)
 
+`store-worker` requires:
+
+- `STORE_WORKER_SECRET` (and the `store_worker_url` / `store_worker_secret` Vault entries that pg_cron uses to call it)
+- `RESEND_API_KEY`
+- `SUPABASE_ANON_KEY` (for the admin's "Send now" from the app)
+- `SUPABASE_URL` (runtime injected)
+- `SUPABASE_SERVICE_ROLE_KEY` (runtime injected)
+
 ## Deploy Backend Functions
 
 Deploy the Edge Functions after linking the project:
@@ -131,6 +149,7 @@ npx supabase functions deploy create-checkout-session
 npx supabase functions deploy stripe-webhook
 npx supabase functions deploy update-tracking
 npx supabase functions deploy handle-order-action
+npx supabase functions deploy store-worker
 ```
 
 If you run the functions locally, use the Supabase CLI and an env file that contains the edge-function secrets.
@@ -142,6 +161,7 @@ Before testing checkout in production, verify that required migrations were appl
 - `supabase/migrations/001_fixes.sql` (adds `orders.stripe_session_id`)
 - `supabase/migrations/004_variants_reviews_shipping.sql` (adds `order_items.selected_size`, `orders.shipping_method_id`, `orders.shipping_method_name`)
 - `supabase/migrations/021_product_sizes.sql` (adds `products.has_sizes` / `size_label` and `order_items.variant_id` — the checkout function reads and writes them, so apply it **before** deploying the function)
+- `supabase/migrations/022_catalog_variants.sql` to `025_discount_codes.sql` (colours, variant prices, line colour/SKU/discount snapshots, refunds and discount codes — read and written by the checkout function, the webhook and the order actions, so they also go **before** the functions)
 
 Recommended verification queries:
 
@@ -202,8 +222,10 @@ US sales tax varies by state, so the template supports two modes via Edge Functi
 
 ## Transactional emails
 
-Shipping, refund, and delivery emails are sent from the Edge Functions (via Resend) and are
-**English by default, in USD/en-US**. Because Edge Functions can't read
+Order confirmation, shipping, refund, and delivery emails are sent from the Edge Functions (via Resend) and are
+**English by default, in USD/en-US**. The back-in-stock emails (`store-worker`) are written in
+the language the customer was browsing in (English, Italian, Spanish or French); the low-stock
+digest to the admins follows `STORE_LOCALE`. Because Edge Functions can't read
 [`storeConfig.ts`](src/config/storeConfig.ts) (it's frontend-only), their branding is set with
 Edge Function secrets, all with demo-safe defaults:
 `STORE_NAME`, `SUPPORT_EMAIL`, `RESEND_FROM_EMAIL`, `STORE_LOCALE`,
@@ -225,7 +247,9 @@ npm test
 ```
 
 `npm run build` runs the TypeScript check and the Vite production build. `npm test` runs
-the Vitest unit tests (pricing math).
+the Vitest unit tests: pricing, discounts, refunds, variants and stock, CSV import/export,
+the cart, the checkout and webhook logic shared with the Edge Functions, and a check that
+every text key the interface uses exists in all four languages.
 
 ## Testing checkout end-to-end (Stripe test mode)
 
@@ -238,7 +262,10 @@ Run a full payment in **test mode** before going live:
 4. Confirm: the order moves to `paid`, the amount charged in Stripe equals the order
    `total` shown in the app (with Stripe Tax on, tax appears and `tax_amount` is written),
    stock is decremented, and the order shows in Orders.
-5. Test a refund from the admin/order action flow and confirm the order becomes `refunded`.
+5. Test a refund from the admin/order action flow: refund one line first (the order stays
+   `paid`, the refund shows in Stripe and in the order timeline), then the rest (the order
+   becomes `refunded`).
+6. Repeat with a discount code and confirm the Stripe receipt shows the same discount.
 
 ## Deployment Notes
 
@@ -262,8 +289,10 @@ failed is terminal
 
 Behavioral rules:
 
-- Stock is deducted only when an order reaches `paid`.
+- Stock is deducted only when an order reaches `paid`, from the exact variant bought.
 - Cancelling a paid order restores stock.
+- Refunds can be partial, line by line; each line can go back in stock or not, and only a full
+  refund moves the order to `refunded`. Every stock change is logged in `inventory_movements`.
 - The checkout page keeps the cart intact until payment confirmation is received.
 - The success page waits for the webhook-backed order row before clearing the cart.
 

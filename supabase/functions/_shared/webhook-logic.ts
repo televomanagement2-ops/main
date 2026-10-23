@@ -5,7 +5,11 @@
 //
 // Invariants encoded here:
 //   • A paid order is NEVER downgraded by late failure/expiry events (M2).
-//   • Partial refunds record refund fields but keep the order 'paid' (M3).
+//   • Refund events are not applied from their own payload: one event carries
+//     one refund (or a running total) and an order can now have several. They
+//     ask the webhook to mirror every refund of the payment from Stripe into
+//     order_refunds (sync_order_refunds, migration 024), which keeps partial
+//     refunds on a 'paid' order and moves a full one to 'refunded' (M3).
 //   • checkout.session.completed / payment_intent.succeeded adopt Stripe's
 //     charged amount as the authoritative total — but ONLY after it reconciles
 //     against the total we recorded when the session was created (M4). An
@@ -57,6 +61,7 @@ export type WebhookEventInfo =
 export type Decision =
   | { action: 'skip'; reason: string }
   | { action: 'update'; updates: Record<string, unknown>; sendConfirmationEmail?: boolean }
+  | { action: 'sync_refunds'; paymentIntentId: string }
   | { action: 'invalid'; reason: string };
 
 export interface DecideOptions {
@@ -240,37 +245,16 @@ export function decide(
       if (!info.paymentIntentId) {
         return { action: 'invalid', reason: 'charge.refunded missing payment_intent' };
       }
-      const updates: Record<string, unknown> = {
-        refund_amount: dollars(info.amountRefunded),
-        refunded_at: new Date().toISOString(),
-      };
-      // Only a FULL refund moves the order to 'refunded' (and restores stock);
-      // a partial refund keeps the order fulfillable.
-      if (info.amountRefunded >= info.amountCharged) {
-        updates.status = 'refunded';
-      }
-      return { action: 'update', updates };
+      return { action: 'sync_refunds', paymentIntentId: info.paymentIntentId };
     }
 
     case 'refund.updated': {
-      if (info.refundStatus !== 'succeeded') {
-        return { action: 'skip', reason: `refund status ${info.refundStatus}` };
-      }
       if (!info.paymentIntentId) {
         return { action: 'invalid', reason: 'refund.updated missing payment_intent' };
       }
-      const refundAmount = dollars(info.amount);
-      const updates: Record<string, unknown> = {
-        refund_id: info.refundId,
-        refund_amount: refundAmount,
-        refunded_at: info.createdAt ?? new Date().toISOString(),
-      };
-      // This event carries a single refund's amount (not the cumulative
-      // refunded total), so only mark 'refunded' when it covers the order.
-      if (order?.total != null && refundAmount >= order.total - 0.005) {
-        updates.status = 'refunded';
-      }
-      return { action: 'update', updates };
+      // Every status matters here, not just 'succeeded': a refund that FAILS
+      // after being accepted flags the order for review.
+      return { action: 'sync_refunds', paymentIntentId: info.paymentIntentId };
     }
   }
 }

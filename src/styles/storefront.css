@@ -612,6 +612,7 @@
 .pcard--lead .pcard__name { font-size: var(--fs-body-lg); }
 .pcard--lead .pcard__price { font-size: var(--fs-body-lg); }
 .pcard__note { font-size: var(--fs-xs); color: var(--caution); margin-top: var(--s-1); }
+.pcard__swatches { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
 
 /* ══ BRAND STATEMENT ═════════════════════════════════════════════════════ */
 .statement { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gutter); }
@@ -937,6 +938,84 @@
 .size-btn:hover:not(:disabled) { border-color: var(--ink); }
 .size-btn.is-active { background: var(--action); border-color: var(--action); color: var(--on-action); }
 .size-btn:disabled { opacity: 0.34; cursor: not-allowed; text-decoration: line-through; }
+/* Sold out but still selectable, so the shopper can ask for a restock email. */
+.size-btn.is-out { color: var(--ink-3); border-style: dashed; text-decoration: line-through; }
+.size-btn.is-out.is-active { color: var(--on-action); border-style: solid; }
+.size-btn:has(.size-btn__price) { height: auto; min-height: 42px; padding-block: 4px; gap: 1px; }
+.size-btn__price { font-size: 10px; line-height: 1.2; color: var(--ink-3); font-variant-numeric: tabular-nums; text-decoration: none; }
+.size-btn.is-active .size-btn__price { color: inherit; opacity: 0.8; }
+
+.pdp__size-label { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.pdp__guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
+}
+
+/* Colours: round swatches, or the name when a colour has no swatch. */
+.swatch-grid { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.swatch-btn {
+  position: relative;
+  width: 40px; height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.swatch-btn .swatch { width: 28px; height: 28px; }
+.swatch-btn:hover { border-color: var(--ink); }
+.swatch-btn.is-active { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.swatch-btn.is-out::after {
+  content: '';
+  position: absolute;
+  left: 5px; right: 5px; top: 50%;
+  height: 1px;
+  background: var(--ink-2);
+  transform: rotate(-45deg);
+}
+.swatch-btn--text {
+  width: auto;
+  min-width: 48px;
+  height: 42px;
+  padding-inline: var(--s-3);
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+.swatch-btn--text.is-active { background: var(--action); border-color: var(--action); color: var(--on-action); box-shadow: none; }
+.swatch-btn--text.is-out { color: var(--ink-3); border-style: dashed; text-decoration: line-through; }
+.swatch-btn--text.is-out.is-active { color: var(--on-action); border-style: solid; }
+.swatch-btn--text.is-out::after { display: none; }
+
+/* Back-in-stock request, under a sold-out choice. */
+.notify-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--surface);
+}
+.notify-form > p:first-child { display: flex; align-items: center; gap: var(--s-2); color: var(--ink); }
+.notify-form .input { flex: 1; min-width: 0; }
+.notify-done {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-left: 2px solid var(--positive);
+  background: var(--positive-soft);
+  color: var(--positive);
+  font-size: var(--fs-sm);
+}
 
 .pdp__sections {
   display: grid;
@@ -1036,6 +1115,12 @@
 }
 .summary__row--total span:last-child { font-size: var(--fs-h3); }
 .summary__free { color: var(--positive); }
+.summary__row--discount span:last-child { color: var(--positive); }
+
+/* Discount code, above the order summary. */
+.discount-field { display: flex; flex-direction: column; gap: var(--s-2); margin-bottom: var(--s-5); }
+.discount-field .input { flex: 1; min-width: 0; }
+.discount-applied { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
 
 /* Cart drawer line, tighter than the page row */
 .drawer-line {

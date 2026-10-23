@@ -177,6 +177,39 @@ export function AdminDashboardPage() {
         </div>
       </section>
 
+      {/* ── Stock and promotions ── */}
+      <section className="admin-section" style={{ marginTop: 'clamp(32px, 4vw, 56px)' }}>
+        <div className="admin-section__head">
+          <h2 className="admin-section__title">{t('admin.dashboard.stockTitle')}</h2>
+          <Link to="/admin/inventory" className="link-arrow link-arrow--bare">
+            {t('admin.dashboard.openInventory')}
+            <IconArrowUpRight size={13} />
+          </Link>
+        </div>
+        <div className="kpi-strip">
+          <div className="kpi">
+            <p className="t-label">{t('admin.dashboard.outOfStock')}</p>
+            <p className="kpi__value" style={data.outOfStock > 0 ? { color: 'var(--critical)' } : undefined}>{data.outOfStock}</p>
+            <p className="kpi__meta">{t('admin.dashboard.outOfStockMeta')}</p>
+          </div>
+          <div className="kpi">
+            <p className="t-label">{t('admin.dashboard.lowStock')}</p>
+            <p className="kpi__value" style={data.lowStock > 0 ? { color: 'var(--caution)' } : undefined}>{data.lowStock}</p>
+            <p className="kpi__meta">{t('admin.dashboard.lowStockMeta')}</p>
+          </div>
+          <div className="kpi">
+            <p className="t-label">{t('admin.dashboard.waiting')}</p>
+            <p className="kpi__value">{data.stockRequests}</p>
+            <p className="kpi__meta">{t('admin.dashboard.waitingMeta')}</p>
+          </div>
+          <div className="kpi">
+            <p className="t-label">{t('admin.dashboard.discounts')}</p>
+            <p className="kpi__value">{formatCurrency(data.discounts30d)}</p>
+            <p className="kpi__meta">{t('admin.dashboard.discountsMeta')}</p>
+          </div>
+        </div>
+      </section>
+
       {/* ── Recent orders + distribution ── */}
       <section className="admin-section" style={{ marginTop: 'clamp(32px, 4vw, 56px)' }}>
         <div className="admin-split">

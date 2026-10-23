@@ -45,15 +45,21 @@
 <body>
 
 <h1>CommerceJet — Products Setup</h1>
+
 <p class="subtitle">Remove the demo catalog &amp; add your real products.</p>
 
 <h2>Contents</h2>
+
 <ol>
   <li>Understand the data model</li>
   <li>Remove the demo (mock) products</li>
   <li>Set up your categories</li>
   <li>Add real products (three methods)</li>
   <li>Products sold by size or measurement</li>
+  <li>Colours, materials and prices per variant</li>
+  <li>Size guides</li>
+  <li>Import, export and duplicate products</li>
+  <li>Stock day to day</li>
   <li>Add product images</li>
   <li>Verify on the storefront</li>
 </ol>
@@ -65,15 +71,17 @@ immediately. Before going live, replace it with your own.</p></blockquote>
 
 <h2>1. Understand the data model</h2>
 
-<p>Products live in four database tables in Supabase:</p>
+<p>Products live in these database tables in Supabase:</p>
 
 <table>
   <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
   <tbody>
     <tr><td><code>categories</code></td><td>Product categories (e.g. Ready-to-Wear, Accessories).</td></tr>
     <tr><td><code>products</code></td><td>The products themselves.</td></tr>
-    <tr><td><code>product_images</code></td><td>One or more images per product.</td></tr>
-    <tr><td><code>product_variants</code></td><td>The sizes (or measurements) of a product sold by size, each with its own stock.</td></tr>
+    <tr><td><code>product_images</code></td><td>One or more images per product (optionally tied to one colour).</td></tr>
+    <tr><td><code>product_colors</code></td><td>The colours (or materials, finishes…) of a product sold by colour.</td></tr>
+    <tr><td><code>product_variants</code></td><td>One row per size, per colour, or per colour × size — each with its own stock, and optionally its own SKU and price.</td></tr>
+    <tr><td><code>size_guides</code></td><td>Measurement tables shown on the product page, attached to a category or a product.</td></tr>
   </tbody>
 </table>
 
@@ -97,6 +105,9 @@ products):</p>
 <pre><code>DELETE FROM public.product_images;
 DELETE FROM public.products;</code></pre>
 
+<p>Colours and variants go with their products. The demo also adds a size guide to
+Ready-to-Wear: delete it in <strong>Admin → Size guides</strong> if you don't want it.</p>
+
 <blockquote><p><strong>Tip —</strong> To start categories from scratch too, also run
 <code>DELETE FROM public.categories;</code> — but then insert your own categories <strong>before</strong> inserting
 products (products reference a category).</p></blockquote>
@@ -119,7 +130,7 @@ hyphens (e.g. <code>bags-leather-goods</code>).</p></blockquote>
 <h2>4. Add real products</h2>
 
 <p><strong>Method A — Admin UI (easiest, no SQL).</strong> Log in as admin and go to <code>/admin/catalog</code>.
-Click <strong>"New Product"</strong> (top right). A modal opens with all the fields you need:</p>
+Click <strong>"New Product"</strong> (top right). A panel opens with all the fields you need:</p>
 
 <table>
   <thead><tr><th>Field</th><th>Notes</th></tr></thead>
@@ -127,8 +138,11 @@ Click <strong>"New Product"</strong> (top right). A modal opens with all the fie
     <tr><td>Name</td><td>Required. The slug is generated automatically.</td></tr>
     <tr><td>Category</td><td>Required. You can create a new category on the spot.</td></tr>
     <tr><td>Price</td><td>Required.</td></tr>
-    <tr><td>Stock Quantity</td><td>Defaults to 0. For a product sold by size you set the stock of each size instead — see section 5.</td></tr>
-    <tr><td>Sold by size</td><td>Optional switch (Inventory) — sizes or measurements, each with its own stock.</td></tr>
+    <tr><td>Compare-at price</td><td>Optional — the original price, shown struck through with the "−20%" when it is higher than the price.</td></tr>
+    <tr><td>Cost per item</td><td>Optional and private (only admins see it) — shows the margin, and feeds the margin figure in Admin → Finance.</td></tr>
+    <tr><td>Stock Quantity</td><td>Defaults to 0. For a product sold by size or colour you set the stock of each variant instead — see sections 5 and 6.</td></tr>
+    <tr><td>Sold by size / Sold by colour</td><td>Optional switches (Inventory) — each size, colour or colour × size gets its own stock.</td></tr>
+    <tr><td>Size guide</td><td>Optional — the category's guide is used by default (section 7).</td></tr>
     <tr><td>SKU</td><td>Optional — unique identifier.</td></tr>
     <tr><td>Description</td><td>Optional.</td></tr>
     <tr><td>Active / Featured</td><td>Checkboxes. "Featured" shows the product on the home page.</td></tr>
@@ -157,8 +171,8 @@ VALUES
   );</code></pre>
 
 <blockquote><p><strong>Tip —</strong> Using <code>(SELECT id FROM categories WHERE slug = '…')</code> means you don't have to copy
-category UUIDs by hand. Use Method C when importing many products at once; for a handful,
-Method A is faster.</p></blockquote>
+category UUIDs by hand. For many products at once, a spreadsheet is easier still — see
+section 8 (CSV import).</p></blockquote>
 
 <hr>
 
@@ -174,16 +188,17 @@ the customer must pick one, and every size has its own stock.</p>
   <li>Click a <strong>Quick start</strong> preset — Clothing XS–XL, Clothing XXS–3XL, Numeric 38–54, Shoes EU
     35–46, Rings 5–9, Waist 26–38, S · M · L — or type your own sizes: <code>S, M, L</code> adds three at
     once, and any text up to 40 characters works (<code>42</code>, <code>50 cm</code>, <code>120x180</code>).</li>
-  <li>Set the <strong>stock</strong> of each size. The product's total stock becomes the sum of its sizes on
-    sale — it is calculated for you and can't be typed.</li>
+  <li>Set the <strong>stock</strong> of each size in the <strong>Stock by variant</strong> table. The product's total
+    stock becomes the sum of its sizes on sale — it is calculated for you and can't be typed.</li>
   <li>Optional: a <strong>SKU</strong> per size (<strong>Fill empty SKUs</strong> builds them from the product SKU, e.g.
     <code>AUR-RW-104-M</code>), the order the sizes appear in (arrows), and <strong>Shown to customers as</strong>
     (Size, Measurement, Length, Shoe size, Ring size, Waist).</li>
   <li>Untick <strong>On sale</strong> to hide a size without deleting it.</li>
 </ol>
 
-<p>Day-to-day restocking doesn't need the editor: in <strong>Admin → Catalog</strong> every sized product
-shows its stock per size, and <strong>Restock sizes</strong> opens one field per size.</p>
+<p>Day-to-day restocking doesn't need the editor: in <strong>Admin → Catalog</strong> every product with
+variants shows its stock per size (grouped by colour), and <strong>Restock</strong> opens one field per
+variant — see section 9.</p>
 
 <blockquote>
   <p><strong>Good to know —</strong></p>
@@ -215,7 +230,151 @@ SELECT p.id, s.size, 'RSP-001-' || s.size, s.qty, s.ord
 
 <hr>
 
-<h2>6. Add product images</h2>
+<h2>6. Colours, materials and prices per variant</h2>
+
+<p>A product <strong>sold by colour</strong> shows round swatches (or the colour's name) on its page; the
+customer picks one, and each colour has its own stock. With <strong>Sold by size</strong> on as well, stock
+is kept per colour × size — a red M and a blue M are counted separately.</p>
+
+<p><strong>In the admin.</strong> Open the product → <strong>Inventory</strong> → turn on <strong>Sold by colour</strong>:</p>
+
+<ol>
+  <li><strong>Shown to customers as</strong> — Colour, Material, Finish, Pattern, Style, Scent or Variant
+    (a candle sold by scent, a table by wood, a print by finish).</li>
+  <li>Add colours: click one of the <strong>Common colours</strong>, or type a name and pick its swatch. A
+    colour can also be shown <strong>by name only</strong> (no swatch) — useful for materials such as
+    "Oak" or "Linen".</li>
+  <li>With sizes too, the <strong>Stock by variant</strong> table lists every colour with its sizes. Untick
+    <strong>On sale</strong> for a combination you don't make; <strong>All sizes on sale</strong> switches a whole colour.</li>
+  <li><strong>Price and cost per variant</strong> (tick box above the table) gives each row its own price and
+    private cost. An empty price uses the product price. The storefront then shows
+    "From $79.00" on the product card and page until a variant is chosen.</li>
+  <li><strong>Photos per colour</strong> — in <strong>Media</strong>, each photo has a colour menu (<em>All colours</em> by
+    default). Choosing a colour on the product page shows that colour's photos plus the
+    untagged ones. Before uploading, <strong>New photos are for</strong> tags a batch in one go.</li>
+</ol>
+
+<blockquote>
+  <p><strong>Good to know —</strong></p>
+  <ul>
+    <li>Like sizes, a colour or combination that has orders is switched off instead of deleted.</li>
+    <li>Renaming a colour keeps its stock, photos and history.</li>
+    <li>Changing how a product is sold (adding colours to a sized product, or the reverse) keeps
+      the old variants that have orders, switched off, so those orders stay intact.</li>
+    <li>Orders, emails, invoices and exports show the colour and size bought, and the SKU.</li>
+  </ul>
+</blockquote>
+
+<p><strong>With SQL.</strong> Colours first, then one variant per colour (or per colour × size):</p>
+
+<pre><code>UPDATE public.products SET has_colors = TRUE, color_label = 'color'
+ WHERE slug = 'canvas-tote';
+
+INSERT INTO public.product_colors (product_id, name, swatch, sort_order)
+SELECT id, c.name, c.swatch, c.ord
+  FROM public.products,
+       (VALUES ('Natural', '#E8DFC9', 0), ('Black', '#161412', 1)) AS c(name, swatch, ord)
+ WHERE slug = 'canvas-tote';
+
+INSERT INTO public.product_variants (product_id, color_id, sku, stock_qty, price, sort_order)
+SELECT c.product_id, c.id, 'TOTE-' || upper(c.name), 25, NULL, c.sort_order
+  FROM public.product_colors c
+  JOIN public.products p ON p.id = c.product_id
+ WHERE p.slug = 'canvas-tote';</code></pre>
+
+<p><code>color_label</code> is one of <code>color</code>, <code>material</code>, <code>finish</code>, <code>pattern</code>, <code>style</code>, <code>scent</code>,
+<code>variant</code>. The admin editor (or the CSV import) is the safer way to change variants later: it
+checks every rule in one step.</p>
+
+<hr>
+
+<h2>7. Size guides</h2>
+
+<p>A size guide is a measurement table the customer opens from the product page (<strong>Size guide</strong>,
+next to the sizes).</p>
+
+<ol>
+  <li><strong>Admin → Size guides → New guide.</strong> Start from a template (Tops and dresses, Shoes,
+    Trousers, Rings) or from scratch; edit headings and values freely (up to 12 columns and 60
+    rows) and add notes such as how to measure. The preview shows it as customers will.</li>
+  <li><strong>Categories</strong> — tick the categories that use it: every product in them shows the guide.</li>
+  <li>To override it for one product, pick another guide (or <strong>None</strong>) in that product's
+    <strong>Size guide</strong> field.</li>
+</ol>
+
+<hr>
+
+<h2>8. Import, export and duplicate products</h2>
+
+<p><strong>Export.</strong> Admin → Catalog → <strong>Export CSV</strong> downloads the whole catalogue, one row per
+variant, ready for Excel, Numbers or Google Sheets. It uses commas, or semicolons with decimal
+commas when the admin is in Italian, Spanish or French — the import reads either.</p>
+
+<p><strong>Import.</strong> Admin → Catalog → <strong>Import CSV</strong> → choose the file. It is checked line by line
+before anything is saved, and then saved all at once — or not at all, if any row fails.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>handle</code></td><td>Required. The product's URL name (lowercase letters, digits, dashes). An existing handle updates that product; a new one creates it.</td></tr>
+    <tr><td><code>name</code>, <code>description</code>, <code>category</code></td><td><code>category</code> is a category slug or name; tick <strong>Create categories that do not exist yet</strong> to add new ones.</td></tr>
+    <tr><td><code>price</code>, <code>compare_at_price</code>, <code>cost_price</code></td><td>Amounts. A new product needs a name, a category and a price.</td></tr>
+    <tr><td><code>product_sku</code>, <code>active</code>, <code>featured</code>, <code>weight_grams</code>, <code>low_stock_threshold</code></td><td><code>active</code> / <code>featured</code> take yes / no.</td></tr>
+    <tr><td><code>size_label</code>, <code>color_label</code></td><td>As in sections 5 and 6 (<code>size</code>, <code>shoe_size</code>…, <code>color</code>, <code>material</code>…).</td></tr>
+    <tr><td><code>color</code>, <code>color_swatch</code>, <code>size</code></td><td>The variant of this row.</td></tr>
+    <tr><td><code>variant_sku</code>, <code>variant_price</code>, <code>variant_cost</code>, <code>variant_active</code></td><td>Per variant.</td></tr>
+    <tr><td><code>stock</code></td><td>The stock of the variant (or of the product, without variants).</td></tr>
+    <tr><td><code>images</code></td><td><code>https://</code> addresses separated by <code> | </code>; new ones are added to the product.</td></tr>
+  </tbody>
+</table>
+
+<p>Rules worth knowing:</p>
+
+<ul>
+  <li>A column you leave out of the file leaves that field unchanged; an empty cell clears an
+    optional field.</li>
+  <li>One row per variant; the product's own fields are read from its first row.</li>
+  <li><strong>With a <code>size</code> or <code>color</code> column</strong>, a product's rows are its complete list of variants:
+    variants not in the file are removed (or switched off, if they have orders). <strong>Without
+    those columns</strong>, variants stay exactly as they are — handy for a price-only update.</li>
+  <li>A negative stock figure (backorder, as the export writes it) leaves the stock unchanged.</li>
+  <li><strong>Download the template</strong> in the import panel for a filled-in example.</li>
+</ul>
+
+<p><strong>Duplicate.</strong> The copy icon on a catalogue row creates "Name (copy)" with the same details,
+colours, sizes, prices and photos — hidden, without SKUs and with zero stock, so nothing is
+sold by mistake. Edit it, then switch it to Active.</p>
+
+<hr>
+
+<h2>9. Stock day to day</h2>
+
+<ul>
+  <li><strong>Admin → Catalog</strong> — each product shows its stock (per variant, with colour and size);
+    <strong>Restock</strong> opens one field per variant, with an optional note (e.g. "supplier delivery").</li>
+  <li><strong>Admin → Inventory</strong>
+    <ul>
+      <li><strong>Running low</strong> — everything on sale at or below its low-stock threshold, with how many
+        customers are waiting for it.</li>
+      <li><strong>Movements</strong> — every stock change with its reason (sale, cancellation, refund, return,
+        exchange, manual change, import), who made it and when; filter by product, reason and
+        dates, and export to CSV. The product editor shows the same history for one product.</li>
+      <li><strong>Restock requests</strong> — customers who asked to be emailed when a sold-out item is back.
+        They are emailed automatically within 10 minutes of the restock.</li>
+      <li><strong>Alerts</strong> — the hourly low-stock email to the admins (on/off and recipients) and the
+        customer "email me when it is back" option.</li>
+    </ul>
+  </li>
+  <li><strong>Admin → Dashboard</strong> shows out-of-stock, running-low and waiting counts at a glance.</li>
+</ul>
+
+<blockquote><p><strong>Note —</strong> The two emails need a one-time setup in Supabase (<code>docs/03_supabase_setup.md</code>,
+step 6). Each item is reported once when it drops to its threshold, and again only after it
+has been restocked.</p></blockquote>
+
+<hr>
+
+<h2>10. Add product images</h2>
 
 <blockquote><p><strong>Note —</strong> If you used <strong>Method A</strong> (Admin UI), images were already uploaded via the modal
 and stored in Supabase Storage. Skip this section. The SQL below is for Method B/C bulk imports
@@ -229,11 +388,12 @@ VALUES
    'https://your-cdn.com/shoes-side.jpg', 'Running shoes side view', 1, FALSE);</code></pre>
 
 <p>Host images anywhere public (your CDN or Supabase Storage). Only one row per product gets
-<code>is_primary = TRUE</code>.</p>
+<code>is_primary = TRUE</code>. To tie a photo to one colour, set its <code>color_id</code> to that colour's id in
+<code>product_colors</code> (or use the colour menu under each photo in the admin).</p>
 
 <hr>
 
-<h2>7. Verify on the storefront</h2>
+<h2>11. Verify on the storefront</h2>
 
 <ul>
   <li>Home page — featured products (<code>is_featured = TRUE</code>) appear.</li>
@@ -242,6 +402,9 @@ VALUES
   <li>Add to cart — quantity respects <code>stock_quantity</code>.</li>
   <li>Product sold by size — the size buttons appear in your order, a sold-out size is crossed out,
     and the cart only accepts what that size has in stock.</li>
+  <li>Product sold by colour — the swatches appear, choosing one changes the photos (if tagged) and
+    the sizes on offer; a sold-out choice offers "Notify me" instead of "Add to cart".</li>
+  <li>Size guide — the <strong>Size guide</strong> link opens the table for products in its categories.</li>
 </ul>
 
 <blockquote><p><strong>Note —</strong> If you changed category slugs, also review the home-page category icons in

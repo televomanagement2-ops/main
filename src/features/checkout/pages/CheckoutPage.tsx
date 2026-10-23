@@ -6,11 +6,20 @@ import { useCartSync } from '../../../hooks/useCartSync';
 import { useAuth } from '../../../hooks/useAuth';
 import { useAddresses, addressKeys } from '../../../hooks/useAddresses';
 import { useShippingMethods } from '../../../hooks/useShippingMethods';
+import { useCategories } from '../../../hooks/useCategories';
 import { supabase } from '../../../lib/supabaseClient';
-import { createAddress } from '../../../lib/api';
+import { createAddress, previewDiscountCode, type DiscountPreview } from '../../../lib/api';
 import { useI18n } from '../../../lib/i18n';
-import { computeOrderTotals } from '../../../lib/pricing';
-import { sizeLabelKey } from '../../../lib/sizes';
+import { cartSubtotal, computeOrderTotals, lineTotal, unitPrice } from '../../../lib/pricing';
+import { cartLineKey } from '../../../store/cartStore';
+import { lineVariant } from '../../../lib/stock';
+import { CartLineOptions } from '../../cart/components/CartLineOptions';
+import { cartLineImage } from '../../../lib/cartLines';
+import {
+  computeDiscount,
+  normalizeDiscountCode,
+  type DiscountOutcome,
+} from '../../../../supabase/functions/_shared/discounts.ts';
 import {
   SHIPPING_COUNTRIES,
   isValidPostalCode,
@@ -28,8 +37,11 @@ type CheckoutBody = {
   items: Array<{
     product_id: string;
     quantity: number;
+    /** The size/colour combination; a line saved before ids existed sends its size. */
+    variant_id?: string | null;
     selected_size?: string | null;
   }>;
+  discount_code?: string | null;
   shipping_address: {
     full_name: string;
     line1: string;
@@ -397,6 +409,14 @@ export function CheckoutPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { data: categories = [] } = useCategories();
+
+  // Discount code: previewed here with the same rules the checkout function
+  // charges with (supabase/functions/_shared/discounts.ts).
+  const [codeInput, setCodeInput] = useState('');
+  const [discountRule, setDiscountRule] = useState<Extract<DiscountPreview, { ok: true }> | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | 'new' | null>(null);
   const [newAddress, setNewAddress] = useState<NewAddressValue | null>(null);
@@ -441,10 +461,61 @@ export function CheckoutPage() {
   const noShippingAvailable = activeCountry !== null && availableMethods.length === 0;
   const showDutiesNotice = activeCountry !== null && activeCountry !== storeConfig.countryCode;
 
-  const subtotal = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const subtotal = cartSubtotal(items);
   const shippingCost = selectedMethod?.price ?? 0;
-  const { tax, total } = computeOrderTotals(subtotal, shippingCost);
+
+  const parentOf = useMemo(() => new Map(categories.map((c) => [c.id, c.parent_id])), [categories]);
+  const discount: DiscountOutcome | null = useMemo(() => {
+    if (!discountRule) return null;
+    return computeDiscount(
+      discountRule,
+      items.map((item) => {
+        const price = unitPrice(item.product, item.variantId, item.selectedSize);
+        return {
+          key: cartLineKey(item),
+          product_id: item.product.id,
+          category_id: item.product.category_id,
+          unit_price: price,
+          quantity: item.quantity,
+          on_sale: item.product.compare_at_price != null && item.product.compare_at_price > price,
+        };
+      }),
+      shippingCost,
+      (id) => {
+        const chain: string[] = [];
+        for (let cur: string | null | undefined = id; cur && !chain.includes(cur); cur = parentOf.get(cur)) chain.push(cur);
+        return chain;
+      },
+    );
+  }, [discountRule, items, shippingCost, parentOf]);
+  const discountApplied = discount?.ok ? discount : null;
+
+  const { tax, total } = computeOrderTotals(subtotal, shippingCost, undefined, {
+    items: discountApplied?.items ?? 0,
+    shipping: discountApplied?.shipping ?? 0,
+  });
   const itemCount = items.reduce((n, i) => n + i.quantity, 0);
+
+  const applyCode = async () => {
+    const code = normalizeDiscountCode(codeInput);
+    if (!code) return;
+    setCheckingCode(true);
+    setCodeError(null);
+    try {
+      const preview = await previewDiscountCode(code);
+      if (preview.ok) {
+        setDiscountRule(preview);
+        setCodeInput('');
+      } else {
+        setDiscountRule(null);
+        setCodeError(t(`checkout.discount.errors.${preview.reason}`));
+      }
+    } catch (err) {
+      setCodeError(err instanceof Error ? err.message : t('common.error'));
+    } finally {
+      setCheckingCode(false);
+    }
+  };
 
   const formatDays = (min: number | null, max: number | null) => {
     if (min == null || max == null) return null;
@@ -533,11 +604,12 @@ export function CheckoutPage() {
       // Prices, names, images and redirect URLs are all resolved server-side —
       // the client only identifies what to buy and where to ship it.
       const body: CheckoutBody = {
-        items: items.map((i) => ({
-          product_id: i.product.id,
-          quantity: i.quantity,
-          selected_size: i.selectedSize ?? null,
-        })),
+        items: items.map((i) =>
+          i.variantId
+            ? { product_id: i.product.id, quantity: i.quantity, variant_id: i.variantId }
+            : { product_id: i.product.id, quantity: i.quantity, selected_size: i.selectedSize ?? null },
+        ),
+        discount_code: discountApplied && discountRule ? discountRule.code : null,
         shipping_address: {
           full_name: shippingAddr.full_name,
           line1: shippingAddr.line1,
@@ -680,34 +752,27 @@ export function CheckoutPage() {
             </div>
 
             <div>
-              {items.map((item) => {
-                const image =
-                  item.product.product_images?.find((i) => i.is_primary)?.url ??
-                  item.product.product_images?.[0]?.url ??
-                  null;
-                return (
-                  <div key={`${item.product.id}-${item.selectedSize ?? ''}`} className="mini-line">
-                    <div className="mini-line__media">
-                      <Media src={image} alt="" ratio="square" />
-                      <span className="mini-line__qty">{item.quantity}</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p className="t-sm" style={{ color: 'var(--ink)' }}>{item.product.name}</p>
-                      {item.selectedSize && (
-                        <p className="t-xs t-faint">
-                          {t(sizeLabelKey(item.product.size_label))}: {item.selectedSize}
-                        </p>
+              {items.map((item) => (
+                <div key={cartLineKey(item)} className="mini-line">
+                  <div className="mini-line__media">
+                    <Media src={cartLineImage(item)} alt="" ratio="square" />
+                    <span className="mini-line__qty">{item.quantity}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="t-sm" style={{ color: 'var(--ink)' }}>{item.product.name}</p>
+                    <CartLineOptions item={item} />
+                    <p className="t-xs t-faint">
+                      {formatCurrency(unitPrice(item.product, item.variantId, item.selectedSize))} {t('cart.each')}
+                      {lineVariant(item.product, item.variantId, item.selectedSize)?.sku && (
+                        <span className="t-mono"> · {lineVariant(item.product, item.variantId, item.selectedSize)?.sku}</span>
                       )}
-                      <p className="t-xs t-faint">
-                        {formatCurrency(item.product.price)} {t('cart.each')}
-                      </p>
-                    </div>
-                    <p className="t-sm t-num" style={{ color: 'var(--ink)' }}>
-                      {formatCurrency(item.product.price * item.quantity)}
                     </p>
                   </div>
-                );
-              })}
+                  <p className="t-sm t-num" style={{ color: 'var(--ink)' }}>
+                    {formatCurrency(lineTotal(item))}
+                  </p>
+                </div>
+              ))}
             </div>
           </section>
         </div>
@@ -715,11 +780,71 @@ export function CheckoutPage() {
         <aside className="checkout-layout__aside" aria-label={t('checkout.orderSummary')}>
           <p className="t-label" style={{ marginBottom: 'var(--s-5)' }}>{t('checkout.orderSummary')}</p>
 
+          <div className="discount-field">
+            {discountRule ? (
+              <div className="discount-applied">
+                <span>
+                  <span className="code-chip">{discountRule.code}</span>
+                  {discountRule.description && <span className="t-xs t-faint"> {discountRule.description}</span>}
+                </span>
+                <button
+                  type="button"
+                  className="link t-xs"
+                  onClick={() => {
+                    setDiscountRule(null);
+                    setCodeError(null);
+                  }}
+                >
+                  {t('checkout.discount.remove')}
+                </button>
+              </div>
+            ) : (
+              <div className="row gap-2">
+                <input
+                  className="input input--sm t-mono"
+                  value={codeInput}
+                  maxLength={40}
+                  onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void applyCode();
+                    }
+                  }}
+                  placeholder={t('checkout.discount.placeholder')}
+                  aria-label={t('checkout.discount.label')}
+                />
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm"
+                  onClick={() => void applyCode()}
+                  disabled={!codeInput.trim() || checkingCode}
+                >
+                  {t('checkout.discount.apply')}
+                </button>
+              </div>
+            )}
+            {discountRule && discount && !discount.ok && (
+              <p className="field__error">
+                {t(`checkout.discount.errors.${discount.reason}`, {
+                  amount: formatCurrency(discount.minSubtotal),
+                })}
+              </p>
+            )}
+            {codeError && <p className="field__error">{codeError}</p>}
+          </div>
+
           <div className="summary">
             <div className="summary__row">
               <span>{t('cart.subtotal')}</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
+            {discountApplied && discountApplied.items > 0 && (
+              <div className="summary__row summary__row--discount">
+                <span>{t('checkout.discount.lineWithCode', { code: discountRule?.code ?? '' })}</span>
+                <span>−{formatCurrency(discountApplied.items)}</span>
+              </div>
+            )}
             <div className="summary__row">
               <span>
                 {t('checkout.shippingWithMethod', { method: selectedMethod?.name ?? t('checkout.standard') })}
@@ -728,6 +853,12 @@ export function CheckoutPage() {
                 {shippingCost === 0 ? t('common.free') : formatCurrency(shippingCost)}
               </span>
             </div>
+            {discountApplied && discountApplied.shipping > 0 && (
+              <div className="summary__row summary__row--discount">
+                <span>{t('checkout.discount.freeShipping', { code: discountRule?.code ?? '' })}</span>
+                <span>−{formatCurrency(discountApplied.shipping)}</span>
+              </div>
+            )}
             {tax > 0 && (
               <div className="summary__row">
                 <span>{t('cart.tax')}</span>

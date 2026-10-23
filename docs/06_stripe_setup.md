@@ -55,8 +55,8 @@ Select these events:
 | `checkout.session.expired` | Checkout abandoned → cancel order. |
 | `payment_intent.succeeded` | Payment confirmed. |
 | `payment_intent.payment_failed` | Payment failed → mark failed. |
-| `charge.refunded` | Refund issued → update order. |
-| `refund.updated` | Refund status changed. |
+| `charge.refunded` | Refund issued (from the admin or the Stripe dashboard) → record it on the order. |
+| `refund.updated` | Refund status changed (e.g. failed) → update the record and flag the order. |
 
 ---
 
@@ -129,8 +129,19 @@ Good to know about the payment flow:
 - **Paid orders are always honored.** If stock runs out between two concurrent checkouts,
   both orders are marked paid, stock goes negative, and the later order is flagged
   **needs_review** in Admin → Orders (badge + filter). See `supabase/SETUP_CHECKLIST.md`.
-- **Partial refunds** issued from the Stripe dashboard keep the order `paid` and record
-  `refund_amount`; only a full refund moves it to `refunded` (and restores stock).
+- **Refunds.** Refund from Admin → Orders → the order → **Refunds**: choose the lines and
+  quantities (and whether each goes back in stock) and the shipping; the amount is suggested
+  and can be changed, and you can refund again later until nothing is left. Refunds made in
+  the Stripe dashboard are recorded too, one by one. A partial refund keeps the order `paid`;
+  only a full one moves it to `refunded` — and, if it had not shipped yet, puts its goods back
+  in stock. A refund that fails flags the order **needs_review**.
+- **Waiting payments.** An order still waiting for payment has **Check with Stripe** (applies
+  what Stripe says, if the webhook was missed) and **Cancel order**, which closes the Stripe
+  checkout first so it can no longer be paid. An order held for review after an amount
+  mismatch has **Confirm payment**, once Stripe shows it as paid.
+- **Discount codes** (Admin → Discounts) need nothing in Stripe: each checkout gets a one-off
+  coupon for exactly the discount the store computed, so the Stripe receipt shows it and the
+  amount charged matches the order.
 
 ---
 

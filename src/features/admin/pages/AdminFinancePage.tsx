@@ -11,6 +11,7 @@ import { buildRevenueSeries, sumWindow, useChartTokens } from '../components/cha
 import { toast } from '../../../store/toastStore';
 import { useI18n } from '../../../lib/i18n';
 import { IconAlert, IconArrowLeft, IconArrowRight } from '../../../components/ui/icons';
+import { refundRemaining } from '../../../../supabase/functions/_shared/refunds.ts';
 import type { Order, OrderStatus } from '../../../types';
 
 const REFUNDABLE_STATUSES: OrderStatus[] = ['paid', 'shipped', 'delivered'];
@@ -66,7 +67,8 @@ export function AdminFinancePage() {
   }, [analytics, t]);
 
   const refundableOrders = useMemo(() => {
-    const orders = (ordersPage?.data ?? []).filter((order) => !order.refund_id);
+    // Partly refunded orders stay here until nothing is left to refund.
+    const orders = (ordersPage?.data ?? []).filter((order) => refundRemaining(order) > 0);
     const term = search.trim().toLowerCase();
     if (!term) return orders;
     return orders.filter((order) => {
@@ -179,6 +181,53 @@ export function AdminFinancePage() {
               <p className="metric-row__meta">{t('admin.finance.refundedOrdersMeta')}</p>
             </div>
             <p className="metric-row__value">{analytics?.statusCounts.refunded ?? 0}</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Net figures: refunds, discounts, margin ── */}
+      <section className="admin-section" style={{ marginTop: 'clamp(32px, 4vw, 56px)' }}>
+        <div className="kpi-strip">
+          <div className="kpi">
+            <p className="t-label">{t('admin.finance.net')}</p>
+            <p className="kpi__value">
+              {formatCurrency((analytics?.grossRevenue ?? 0) - (analytics?.partialRefunds ?? 0))}
+            </p>
+            <p className="kpi__meta">{t('admin.finance.netMeta', { amount: formatCurrency(analytics?.partialRefunds ?? 0) })}</p>
+          </div>
+          <div className="kpi">
+            <p className="t-label">{t('admin.finance.refundsTotal')}</p>
+            <p className="kpi__value">{formatCurrency(analytics?.refundedTotal ?? 0)}</p>
+            <p className="kpi__meta">{t('admin.finance.refundsTotalMeta')}</p>
+          </div>
+          <div className="kpi">
+            <p className="t-label">{t('admin.finance.discounts')}</p>
+            <p className="kpi__value">{formatCurrency(analytics?.discounts30d ?? 0)}</p>
+            <p className="kpi__meta">{t('admin.finance.discountsMeta')}</p>
+          </div>
+          <div className="kpi">
+            <p className="t-label">{t('admin.finance.margin')}</p>
+            {analytics && analytics.margin30d.coveredUnits > 0 ? (
+              <>
+                <p className="kpi__value">
+                  {formatCurrency(analytics.margin30d.revenue - analytics.margin30d.cost)}
+                </p>
+                <p className="kpi__meta">
+                  {t('admin.finance.marginMeta', {
+                    percent: analytics.margin30d.revenue > 0
+                      ? (((analytics.margin30d.revenue - analytics.margin30d.cost) / analytics.margin30d.revenue) * 100).toFixed(1)
+                      : '0',
+                    covered: analytics.margin30d.coveredUnits,
+                    total: analytics.margin30d.totalUnits,
+                  })}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="kpi__value">—</p>
+                <p className="kpi__meta">{t('admin.finance.marginEmpty')}</p>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -406,7 +455,7 @@ export function AdminFinancePage() {
 
             <p className="t-sm t-muted">
               {t('admin.finance.confirmRefundBody', {
-                amount: formatCurrency(confirmOrder.total),
+                amount: formatCurrency(refundRemaining(confirmOrder)),
                 customer:
                   confirmOrder.profiles?.full_name
                   || confirmOrder.shipping_address?.full_name
